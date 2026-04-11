@@ -25,11 +25,11 @@ class SkillAgent:
 
     def _load_builtins(self) -> None:
         from synthadoc.skills.pdf.scripts.main import PdfSkill
-        from synthadoc.skills.url import UrlSkill
-        from synthadoc.skills.markdown import MarkdownSkill
-        from synthadoc.skills.docx import DocxSkill
-        from synthadoc.skills.xlsx import XlsxSkill
-        from synthadoc.skills.image import ImageSkill
+        from synthadoc.skills.url.scripts.main import UrlSkill
+        from synthadoc.skills.markdown.scripts.main import MarkdownSkill
+        from synthadoc.skills.docx.scripts.main import DocxSkill
+        from synthadoc.skills.xlsx.scripts.main import XlsxSkill
+        from synthadoc.skills.image.scripts.main import ImageSkill
         for cls in (PdfSkill, UrlSkill, MarkdownSkill, DocxSkill, XlsxSkill, ImageSkill):
             self._registry[cls.meta.name] = cls
 

@@ -46,7 +46,7 @@ def test_tier1_metadata_always_available():
 
 @pytest.mark.asyncio
 async def test_markdown_skill_extracts(tmp_path):
-    from synthadoc.skills.markdown import MarkdownSkill
+    from synthadoc.skills.markdown.scripts.main import MarkdownSkill
     f = tmp_path / "note.md"
     f.write_text("# Hello\n\nWorld content here.", encoding="utf-8")
     result = await MarkdownSkill().extract(str(f))
@@ -56,7 +56,7 @@ async def test_markdown_skill_extracts(tmp_path):
 @pytest.mark.asyncio
 async def test_url_skill_fetches(tmp_path):
     import respx, httpx
-    from synthadoc.skills.url import UrlSkill
+    from synthadoc.skills.url.scripts.main import UrlSkill
     with respx.mock:
         respx.get("https://example.com/").mock(
             return_value=httpx.Response(200,
@@ -69,7 +69,7 @@ async def test_url_skill_fetches(tmp_path):
 @pytest.mark.asyncio
 async def test_url_skill_raises_on_404():
     import respx, httpx
-    from synthadoc.skills.url import UrlSkill
+    from synthadoc.skills.url.scripts.main import UrlSkill
     with respx.mock:
         respx.get("https://example.com/missing").mock(return_value=httpx.Response(404))
         with pytest.raises(Exception, match="404"):
@@ -79,7 +79,7 @@ async def test_url_skill_raises_on_404():
 @pytest.mark.asyncio
 async def test_url_skill_raises_on_connection_error():
     import respx, httpx
-    from synthadoc.skills.url import UrlSkill
+    from synthadoc.skills.url.scripts.main import UrlSkill
     with respx.mock:
         respx.get("https://unreachable.example/").mock(side_effect=httpx.ConnectError("refused"))
         with pytest.raises(httpx.ConnectError):
