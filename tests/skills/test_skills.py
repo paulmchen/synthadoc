@@ -46,7 +46,7 @@ def test_tier1_metadata_always_available():
 
 @pytest.mark.asyncio
 async def test_markdown_skill_extracts(tmp_path):
-    from synthadoc.skills.markdown import MarkdownSkill
+    from synthadoc.skills.markdown.scripts.main import MarkdownSkill
     f = tmp_path / "note.md"
     f.write_text("# Hello\n\nWorld content here.", encoding="utf-8")
     result = await MarkdownSkill().extract(str(f))
@@ -56,7 +56,7 @@ async def test_markdown_skill_extracts(tmp_path):
 @pytest.mark.asyncio
 async def test_url_skill_fetches(tmp_path):
     import respx, httpx
-    from synthadoc.skills.url import UrlSkill
+    from synthadoc.skills.url.scripts.main import UrlSkill
     with respx.mock:
         respx.get("https://example.com/").mock(
             return_value=httpx.Response(200,
@@ -69,7 +69,7 @@ async def test_url_skill_fetches(tmp_path):
 @pytest.mark.asyncio
 async def test_url_skill_raises_on_404():
     import respx, httpx
-    from synthadoc.skills.url import UrlSkill
+    from synthadoc.skills.url.scripts.main import UrlSkill
     with respx.mock:
         respx.get("https://example.com/missing").mock(return_value=httpx.Response(404))
         with pytest.raises(Exception, match="404"):
@@ -79,93 +79,125 @@ async def test_url_skill_raises_on_404():
 @pytest.mark.asyncio
 async def test_url_skill_raises_on_connection_error():
     import respx, httpx
-    from synthadoc.skills.url import UrlSkill
+    from synthadoc.skills.url.scripts.main import UrlSkill
     with respx.mock:
         respx.get("https://unreachable.example/").mock(side_effect=httpx.ConnectError("refused"))
         with pytest.raises(httpx.ConnectError):
             await UrlSkill().extract("https://unreachable.example/")
 
 
-def test_pip_skills_loaded_from_entry_points():
+def test_pip_skills_loaded_from_entry_points(tmp_wiki):
     """Skills registered via entry_points('synthadoc.skills') are auto-discovered."""
-    from unittest.mock import MagicMock, patch
+    import yaml
+    from unittest.mock import patch
     from synthadoc.agents.skill_agent import SkillAgent
-    from synthadoc.skills.base import BaseSkill, ExtractedContent, SkillMeta
 
-    class FakeCustomSkill(BaseSkill):
-        meta = SkillMeta(name="custom_pip", description="pip skill", extensions=[".xyz"])
-        async def extract(self, source): return ExtractedContent("", source, {})
-
-    ep = MagicMock()
-    ep.load.return_value = FakeCustomSkill
-    with patch("importlib.metadata.entry_points", return_value=[ep]):
-        agent = SkillAgent()
+    skill_dir = tmp_wiki / "skills" / "custom_pip"
+    (skill_dir / "scripts").mkdir(parents=True)
+    fm = {
+        "name": "custom_pip", "version": "1.0", "description": "pip skill",
+        "entry": {"script": "scripts/main.py", "class": "CustomPipSkill"},
+        "triggers": {"extensions": [".xyz"], "intents": []}, "requires": [],
+    }
+    (skill_dir / "SKILL.md").write_text(f"---\n{yaml.dump(fm)}---\n", encoding="utf-8")
+    (skill_dir / "scripts" / "main.py").write_text(
+        "from synthadoc.skills.base import BaseSkill, ExtractedContent\n"
+        "class CustomPipSkill(BaseSkill):\n"
+        "    async def extract(self, s): return ExtractedContent('', s, {})\n",
+        encoding="utf-8",
+    )
+    with patch("synthadoc.agents.skill_agent._entry_point_skill_dirs",
+               return_value=[skill_dir]):
+        agent = SkillAgent(wiki_root=tmp_wiki)
     assert "custom_pip" in [s.name for s in agent.list_skills()]
 
 
 def test_local_skill_loaded_from_skills_folder(tmp_path):
-    """A .py file dropped in skills/ is discovered and registered without install."""
+    """A skill folder dropped in wiki/skills/ is discovered and registered."""
+    import yaml
     from synthadoc.agents.skill_agent import SkillAgent
 
-    skill_file = tmp_path / "custom_local.py"
-    skill_file.write_text(
-        "from synthadoc.skills.base import BaseSkill, ExtractedContent, SkillMeta\n"
-        "class LocalSkill(BaseSkill):\n"
-        "    meta = SkillMeta(name='local_csv', description='local', extensions=['.tsv'])\n"
-        "    async def extract(self, source): return ExtractedContent('', source, {})\n",
+    (tmp_path / "skills").mkdir()
+    (tmp_path / ".synthadoc").mkdir()
+    skill_dir = tmp_path / "skills" / "local_csv"
+    (skill_dir / "scripts").mkdir(parents=True)
+    fm = {
+        "name": "local_csv", "version": "1.0", "description": "local",
+        "entry": {"script": "scripts/main.py", "class": "LocalCsvSkill"},
+        "triggers": {"extensions": [".tsv"], "intents": []}, "requires": [],
+    }
+    (skill_dir / "SKILL.md").write_text(f"---\n{yaml.dump(fm)}---\n", encoding="utf-8")
+    (skill_dir / "scripts" / "main.py").write_text(
+        "from synthadoc.skills.base import BaseSkill, ExtractedContent\n"
+        "class LocalCsvSkill(BaseSkill):\n"
+        "    async def extract(self, s): return ExtractedContent('', s, {})\n",
         encoding="utf-8",
     )
-    agent = SkillAgent(extra_dirs=[tmp_path])
+    agent = SkillAgent(wiki_root=tmp_path)
     assert "local_csv" in [s.name for s in agent.list_skills()]
 
 
 def test_local_skill_overrides_builtin(tmp_path):
-    """A local skill with the same name as a built-in takes precedence."""
+    """A local skill folder with the same name as a built-in takes precedence."""
+    import yaml
     from synthadoc.agents.skill_agent import SkillAgent
 
-    skill_file = tmp_path / "override_pdf.py"
-    skill_file.write_text(
-        "from synthadoc.skills.base import BaseSkill, ExtractedContent, SkillMeta\n"
-        "class OverridePdf(BaseSkill):\n"
-        "    meta = SkillMeta(name='pdf', description='override', extensions=['.pdf'])\n"
-        "    async def extract(self, source): return ExtractedContent('custom', source, {})\n",
+    (tmp_path / "skills").mkdir()
+    (tmp_path / ".synthadoc").mkdir()
+    skill_dir = tmp_path / "skills" / "pdf"
+    (skill_dir / "scripts").mkdir(parents=True)
+    fm = {
+        "name": "pdf", "version": "1.0", "description": "override",
+        "entry": {"script": "scripts/main.py", "class": "OverridePdfSkill"},
+        "triggers": {"extensions": [".pdf"], "intents": []}, "requires": [],
+    }
+    (skill_dir / "SKILL.md").write_text(f"---\n{yaml.dump(fm)}---\n", encoding="utf-8")
+    (skill_dir / "scripts" / "main.py").write_text(
+        "from synthadoc.skills.base import BaseSkill, ExtractedContent\n"
+        "class OverridePdfSkill(BaseSkill):\n"
+        "    async def extract(self, s): return ExtractedContent('custom', s, {})\n",
         encoding="utf-8",
     )
-    agent = SkillAgent(extra_dirs=[tmp_path])
-    skill = agent.get_skill("pdf")
-    assert skill.meta.description == "override"
+    agent = SkillAgent(wiki_root=tmp_path)
+    assert agent.detect_skill("doc.pdf").description == "override"
 
 
 def test_local_skill_with_syntax_error_is_skipped(tmp_path, caplog):
-    """Broken local skill files log a warning and do not crash the agent."""
+    """A skill folder with a broken SKILL.md is logged and skipped."""
     import logging
     from synthadoc.agents.skill_agent import SkillAgent
 
-    bad_file = tmp_path / "broken.py"
-    bad_file.write_text("this is not valid python !!!", encoding="utf-8")
+    (tmp_path / "skills").mkdir()
+    (tmp_path / ".synthadoc").mkdir()
+    bad_dir = tmp_path / "skills" / "broken"
+    bad_dir.mkdir()
+    (bad_dir / "SKILL.md").write_text("this is not valid yaml: {{{", encoding="utf-8")
     with caplog.at_level(logging.WARNING):
-        agent = SkillAgent(extra_dirs=[tmp_path])
-    assert any("broken.py" in r.message for r in caplog.records)
+        agent = SkillAgent(wiki_root=tmp_path)
+    assert any("broken" in r.message for r in caplog.records)
     assert "pdf" in [s.name for s in agent.list_skills()]   # built-ins still registered
 
 
 def test_local_file_not_subclassing_baseskill_is_skipped(tmp_path, caplog):
-    """A .py file in skills/ that doesn't subclass BaseSkill is silently skipped."""
+    """A skill folder with no SKILL.md is silently ignored."""
     import logging
     from synthadoc.agents.skill_agent import SkillAgent
 
-    bad_file = tmp_path / "notaskill.py"
-    bad_file.write_text("class NotASkill:\n    pass\n", encoding="utf-8")
+    (tmp_path / "skills").mkdir()
+    (tmp_path / ".synthadoc").mkdir()
+    bad_dir = tmp_path / "skills" / "notaskill"
+    bad_dir.mkdir()
+    # no SKILL.md — not a skill folder
     with caplog.at_level(logging.WARNING):
-        agent = SkillAgent(extra_dirs=[tmp_path])
+        agent = SkillAgent(wiki_root=tmp_path)
     assert "notaskill" not in [s.name for s in agent.list_skills()]
 
 
 @pytest.mark.asyncio
 async def test_pdf_skill_cjk_fallback(tmp_path, monkeypatch):
     """PdfSkill falls back to pdfminer when pypdf yields too little text."""
-    from synthadoc.skills.pdf import PdfSkill
-    import synthadoc.skills.pdf as pdf_mod
+    from synthadoc.skills.pdf.scripts.main import PdfSkill
+    import synthadoc.skills.pdf.scripts.main as pdf_mod
 
     # Simulate pypdf returning nearly nothing (typical CJK font failure)
     def fake_pypdf(self, source):
@@ -188,7 +220,7 @@ async def test_pdf_skill_cjk_fallback(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_pdf_skill_no_fallback_when_pypdf_succeeds(tmp_path, monkeypatch):
     """PdfSkill does NOT call pdfminer when pypdf returns enough text."""
-    from synthadoc.skills.pdf import PdfSkill
+    from synthadoc.skills.pdf.scripts.main import PdfSkill
 
     def fake_pypdf(self, source):
         return ("A" * 500, 3)  # well above threshold
@@ -237,3 +269,65 @@ def test_tier3_resource_loaded_lazily(tmp_path):
     # second call uses cache — file can be deleted
     (resources_dir / "prompt.md").unlink()
     assert skill.get_resource("prompt.md") == "# Vision prompt"
+
+
+def test_triggers_dataclass():
+    from synthadoc.skills.base import Triggers
+    t = Triggers(extensions=[".pdf"], intents=["research paper"])
+    assert ".pdf" in t.extensions
+    assert "research paper" in t.intents
+
+
+def test_skillmeta_with_triggers():
+    from synthadoc.skills.base import SkillMeta, Triggers
+    m = SkillMeta(
+        name="pdf", version="1.0", description="PDF skill",
+        entry_script="scripts/main.py", entry_class="PdfSkill",
+        triggers=Triggers(extensions=[".pdf"], intents=["document"]),
+        requires=["pypdf"],
+    )
+    assert m.triggers.extensions == [".pdf"]
+    assert m.version == "1.0"
+
+
+def test_skillmeta_backwards_compat_extensions():
+    """Old-style SkillMeta(extensions=[...]) still works without triggers."""
+    from synthadoc.skills.base import SkillMeta
+    m = SkillMeta(name="old", description="old skill", extensions=[".old"])
+    assert ".old" in m.triggers.extensions
+
+
+def test_get_resource_searches_assets_then_references(tmp_path):
+    from synthadoc.skills.base import BaseSkill, ExtractedContent, SkillMeta
+
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "config.json").write_text('{"key": "val"}', encoding="utf-8")
+    (tmp_path / "references").mkdir()
+    (tmp_path / "references" / "notes.md").write_text("# Notes", encoding="utf-8")
+
+    class TestSkill(BaseSkill):
+        meta = SkillMeta(name="t", description="t", extensions=[".t"])
+        async def extract(self, source): return ExtractedContent("", source, {})
+
+    skill = TestSkill()
+    skill.skill_dir = tmp_path
+    assert '{"key": "val"}' in skill.get_resource("config.json")
+    assert "# Notes" in skill.get_resource("notes.md")
+
+
+def test_get_resource_cache_avoids_second_read(tmp_path):
+    from synthadoc.skills.base import BaseSkill, ExtractedContent, SkillMeta
+
+    (tmp_path / "assets").mkdir()
+    f = tmp_path / "assets" / "data.txt"
+    f.write_text("original", encoding="utf-8")
+
+    class TestSkill(BaseSkill):
+        meta = SkillMeta(name="t2", description="t2", extensions=[".t2"])
+        async def extract(self, source): return ExtractedContent("", source, {})
+
+    skill = TestSkill()
+    skill.skill_dir = tmp_path
+    skill.get_resource("data.txt")
+    f.write_text("modified", encoding="utf-8")
+    assert skill.get_resource("data.txt") == "original"  # served from cache
