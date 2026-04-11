@@ -1,6 +1,6 @@
 # Synthadoc — Design Document
 
-**Version:** 1.0  
+**Version:** 0.1  
 **Audience:** Product users who want to understand how the system works; developers adding features, skills, and plugins.
 
 ---
@@ -15,16 +15,17 @@
 6. [Storage](#6-storage)
 7. [HTTP API](#7-http-api)
 8. [MCP Server](#8-mcp-server)
-9. [CLI](#9-cli)
-10. [Configuration](#10-configuration)
-11. [Hook System](#11-hook-system)
-12. [Cache System](#12-cache-system)
-13. [Cost Guard](#13-cost-guard)
-14. [Job Queue](#14-job-queue)
-15. [Observability and Logging](#15-observability-and-logging)
-16. [Security](#16-security)
-17. [Plugin Development Guide](#17-plugin-development-guide)
-18. [v2 Roadmap](#18-v2-roadmap)
+9. [Obsidian Plugin](#9-obsidian-plugin)
+10. [CLI](#10-cli)
+11. [Configuration](#11-configuration)
+12. [Hook System](#12-hook-system)
+13. [Cache System](#13-cache-system)
+14. [Cost Guard](#14-cost-guard)
+15. [Job Queue](#15-job-queue)
+16. [Observability and Logging](#16-observability-and-logging)
+17. [Security](#17-security)
+18. [Plugin Development Guide](#18-plugin-development-guide)
+19. [v0.2 Roadmap](#19-v02-roadmap)
 
 ---
 
@@ -258,7 +259,9 @@ Runs against the entire wiki or a scoped subset:
 
 **File:** `synthadoc/agents/skill_agent.py`
 
-Dispatches to the correct skill based on file extension or URL scheme. Manages 3-tier lazy loading. Returns `ExtractedContent(title, body)` to IngestAgent.
+Dispatches to the correct skill based on file extension, URL prefix, or intent keyword match. Manages 3-tier lazy loading. Returns `ExtractedContent` to IngestAgent.
+
+URL and intent-based sources (e.g. `search for: Dennis Ritchie…`) bypass all file-system existence checks in IngestAgent. Only local-file sources are checked for path validity and hashed for dedup.
 
 ---
 
@@ -266,65 +269,114 @@ Dispatches to the correct skill based on file extension or URL scheme. Manages 3
 
 Skills extract text from source documents. They are Python classes that subclass `BaseSkill` (`synthadoc/skills/base.py`, Apache-2.0).
 
+### Folder-based skill structure
+
+Each skill is a self-contained directory:
+
+```
+pdf/
+  SKILL.md          ← YAML frontmatter (parsed by engine) + Markdown body (for humans/LLMs)
+  scripts/
+    main.py         ← BaseSkill subclass; entry point declared in SKILL.md
+  assets/           ← data files bundled with the skill (optional)
+  references/       ← reference documents loaded via get_resource() (optional)
+```
+
+**`SKILL.md` frontmatter schema:**
+
+```yaml
+name: pdf
+version: "1.0"
+description: Extract text from PDF documents
+entry:
+  script: scripts/main.py
+  class: PdfSkill
+triggers:
+  extensions: [".pdf"]
+  intents: ["pdf", "research paper", "document"]
+requires: [pypdf, pdfminer.six]
+```
+
+The Markdown body is for human readers and LLMs — never engine-parsed. Use it to document usage, edge cases, and references.
+
 ### 3-Tier Lazy Loading
 
 | Tier | What loads | When |
 |------|-----------|------|
-| 1 — Metadata | `SkillMeta` (name, description, extensions) | Always; startup |
-| 2 — Body | Full skill class | When a matching source is encountered |
-| 3 — Resources | Data files (prompts, tables) from `skill/resources/` | When skill body calls `get_resource()` |
+| 1 — Metadata | `SkillMeta` parsed from `SKILL.md` frontmatter | Always; startup |
+| 2 — Body | Full skill class via `importlib.util` | When a matching source is encountered |
+| 3 — Resources | Files from `assets/` or `references/` via `get_resource()` | On first access within the skill |
 
 This means importing 20 skills costs essentially zero memory until they are needed.
 
+### Registry cache
+
+`SkillAgent` writes `skill_registry.json` to `<wiki-root>/.synthadoc/` on init. Each entry stores the `SKILL.md` mtime; on subsequent startups, unchanged entries are deserialised without re-parsing YAML (warm start). New, changed, or deleted skill folders are detected automatically.
+
+### Intent-based dispatch
+
+`detect_skill(source)` matches against `triggers.extensions` (file suffix or URL prefix) **and** `triggers.intents` (substring match on lowercased source string). This enables purely intent-driven skills with no file extension — e.g., `web_search` triggers on `"search for"`, `"look up"`, `"find on the web"`, etc.
+
 ### Built-in Skills
 
-| Skill | File | Formats | Notes |
-|-------|------|---------|-------|
-| `pdf` | `skills/pdf.py` | `.pdf` | Pypdf primary; pdfminer.six fallback if yield < 50 chars/page |
-| `url` | `skills/url.py` | `http://`, `https://` | httpx fetch + BeautifulSoup clean |
-| `markdown` | `skills/markdown.py` | `.md`, `.txt` | Direct read |
-| `docx` | `skills/docx.py` | `.docx` | python-docx |
-| `xlsx` | `skills/xlsx.py` | `.xlsx`, `.csv` | openpyxl |
-| `image` | `skills/image.py` | `.png`, `.jpg`, `.webp`, `.gif`, `.tiff` | Vision LLM; clear error if model lacks vision support |
+| Skill | Extensions | Intent phrases | Notes |
+|-------|-----------|---------------|-------|
+| `pdf` | `.pdf` | `pdf`, `research paper`, `document` | pypdf primary; pdfminer.six fallback if yield < 50 chars/page |
+| `url` | `http://`, `https://` | `fetch url`, `web page`, `website` | httpx fetch + BeautifulSoup clean |
+| `markdown` | `.md`, `.txt` | `markdown`, `text file`, `notes` | Direct read |
+| `docx` | `.docx` | `word document`, `docx` | python-docx |
+| `xlsx` | `.xlsx`, `.csv` | `spreadsheet`, `excel`, `csv` | openpyxl |
+| `image` | `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.tiff` | `image`, `screenshot`, `diagram`, `photo` | Base64 + vision LLM |
+| `web_search` | _(none)_ | `search for`, `find on the web`, `look up`, `web search`, `browse` | **v0.2 stub** — job set to `failed` immediately, no retry |
 
 ### Custom Skill Locations
 
-Skills are discovered from three locations in priority order:
+Skills are discovered from five locations in priority order:
 
-1. `<wiki-root>/skills/` — wiki-specific, git-tracked with the wiki
-2. `~/.synthadoc/skills/` — user-global, applies to all wikis
-3. `synthadoc/skills/` — built-ins (package-installed)
+| Source | Path | Override priority |
+|--------|------|------------------|
+| `extra_dirs` (programmatic) | Passed at `SkillAgent()` init | Highest |
+| Local wiki | `<wiki-root>/skills/` | High |
+| Global user | `~/.synthadoc/skills/` | Medium |
+| pip entry points | `entry_points('synthadoc.skills')` | Low |
+| Built-in | Ships with package (`synthadoc/skills/`) | Lowest |
 
-Hot-loaded: no server restart needed.
+No server restart needed — registry cache detects changes automatically on next startup.
 
 ### BaseSkill Interface
 
 ```python
 # synthadoc/skills/base.py  (Apache-2.0)
-class BaseSkill(ABC):
-
-    @classmethod
-    @abstractmethod
-    def meta(cls) -> SkillMeta: ...
-
-    @abstractmethod
-    def extract(self, source: str) -> ExtractedContent: ...
-
-    def get_resource(self, filename: str) -> str:
-        """Load a file from the skill's resources/ subdirectory."""
-        ...
+@dataclass
+class Triggers:
+    extensions: list[str]   # e.g. [".pdf"] or ["http://", "https://"]
+    intents:    list[str]   # e.g. ["search for", "look up"]
 
 @dataclass
 class SkillMeta:
     name: str
     description: str
-    extensions: list[str]        # e.g. [".pdf"] or ["http://", "https://"]
+    version: str
+    entry_script: str       # relative path within skill_dir
+    entry_class: str        # class name in that script
+    triggers: Triggers
+    requires: list[str]     # pip distribution names
+    skill_dir: Path = None  # set by SkillAgent after loading
 
 @dataclass
 class ExtractedContent:
-    title: str
-    body: str
+    text: str
+    source_path: str
     metadata: dict = field(default_factory=dict)
+
+class BaseSkill(ABC):
+
+    @abstractmethod
+    async def extract(self, source: str) -> ExtractedContent: ...
+
+    def get_resource(self, filename: str) -> str:
+        """Load a file from assets/ or references/ within the skill folder."""
+        ...
 ```
 
 ---
@@ -493,7 +545,51 @@ Register one entry per wiki. Each runs as an isolated MCP server on its own stdi
 
 ---
 
-## 9. CLI
+## 9. Obsidian Plugin
+
+**Package:** `synthadoc-obsidian` (TypeScript)  
+**Location:** `obsidian-plugin/` in the repo  
+**Version:** 0.1.0
+
+Each vault configures its server URL in plugin settings (default `http://127.0.0.1:7070`).
+
+**Installation:** Build with `npm run build` in `obsidian-plugin/`, then copy `main.js` and
+`manifest.json` to `<vault>/.obsidian/plugins/synthadoc/`. Enable in Settings → Community Plugins.
+Reload the plugin (toggle off/on) after copying — a full Obsidian restart is not required.
+
+### Command palette
+
+| Command | Behaviour |
+|---------|-----------|
+| `Synthadoc: Ingest current file as source` | Queues the active file. When no file is active, opens a fuzzy-search file picker (SuggestModal) scoped to `raw_sources/` |
+| `Synthadoc: Ingest all sources` | Queues every supported file under the configured raw sources folder |
+| `Synthadoc: Ingest from URL...` | Modal with URL input; queues a web URL for ingest |
+| `Synthadoc: Query wiki...` | Responsive modal (min 520px, 60vw, max 860px); markdown-rendered answer with citation footer; stays open when clicking elsewhere — must be closed explicitly via ✕ or Escape |
+| `Synthadoc: Lint report` | Modal showing contradicted pages and orphans with remediation hints |
+| `Synthadoc: Run lint` | Queues a lint job; shows a notice with contradiction + orphan counts when complete |
+| `Synthadoc: List jobs...` | Modal with status-filter dropdown, results table, error details |
+| `Synthadoc: Web search (coming in v0.2)...` | Shows a notice — functionality lands in v0.2 |
+
+### Ribbon icon
+
+Shows engine health and live page count: `✅ online · 12 pages` or `❌ offline — run 'synthadoc serve'`.
+Calls `GET /health` and `GET /status` in parallel (`Promise.allSettled`).
+
+### Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Server URL | `http://127.0.0.1:7070` | HTTP server for this vault |
+| Raw sources folder | `raw_sources` | Folder scanned by "Ingest all sources" |
+
+### Supported ingest formats
+
+`.md`, `.txt`, `.pdf`, `.docx`, `.xlsx`, `.csv`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.tiff`
+
+---
+
+## 10. CLI
+
 
 The CLI is a thin HTTP client — it posts jobs to the running server and polls for results. No LLM agents run in the CLI process.
 
@@ -543,7 +639,7 @@ Registry stored at `~/.synthadoc/wikis.json`:
 
 ---
 
-## 10. Configuration
+## 11. Configuration
 
 ### Resolution order
 
@@ -634,7 +730,7 @@ cron = "0 3 * * 0"
 
 ---
 
-## 11. Hook System
+## 12. Hook System
 
 Hooks are shell commands executed when lifecycle events fire. They receive a JSON context on stdin.
 
@@ -686,7 +782,7 @@ Blocking: must exit 0 for the operation to complete; non-zero causes operation f
 
 ---
 
-## 12. Cache System
+## 13. Cache System
 
 Three independent cache layers:
 
@@ -728,7 +824,7 @@ Anthropic, OpenAI, and compatible providers cache stable prompt segments server-
 
 ---
 
-## 13. Cost Guard
+## 14. Cost Guard
 
 **File:** `synthadoc/core/cost_guard.py`
 
@@ -762,7 +858,7 @@ The HTTP server always passes `auto_confirm=True` (no interactive terminal avail
 
 ---
 
-## 14. Job Queue
+## 15. Job Queue
 
 **File:** `synthadoc/core/queue.py`  
 **Storage:** `<wiki-root>/.synthadoc/jobs.db` (SQLite)
@@ -778,8 +874,7 @@ CREATE TABLE jobs (
     result      TEXT,               -- JSON: operation-specific output
     error       TEXT,               -- error message + traceback on failure
     retries     INTEGER DEFAULT 0,
-    created_at  TEXT NOT NULL,      -- UTC ISO-8601
-    updated_at  TEXT NOT NULL
+    created_at  TEXT NOT NULL       -- UTC ISO-8601
 );
 ```
 
@@ -787,18 +882,24 @@ CREATE TABLE jobs (
 
 ```
 pending → in_progress → completed
-                      → failed  (retries < max_retries → back to pending after backoff)
-                      → dead    (retries == max_retries)
+                      → failed    (non-retryable error; permanent, no retry)
+                      → pending   (retryable error; retries < max_retries, after backoff)
+                      → dead      (retryable error; retries == max_retries)
 ```
 
+| Status | Meaning | Action |
+|--------|---------|--------|
+| `failed` | Non-retryable error (e.g. stub skill, bad source) | Inspect error; fix source; enqueue again |
+| `dead` | Retryable error exhausted max retries | `synthadoc jobs retry <id>` to reset to pending |
+
 **Backoff formula:** `backoff_base_seconds × 2^(retry_count) × jitter`  
-where `jitter ∈ [0.8, 1.2]` (±20% random).
+where `jitter ∈ [0.8, 1.2]` (±20% random). Applied only to retryable errors (LLM API timeouts, 5xx responses).
 
 **Persistence:** Jobs survive server restarts. `in_progress` jobs at shutdown are reset to `pending` on startup.
 
 ---
 
-## 15. Observability and Logging
+## 16. Observability and Logging
 
 **Files:** `synthadoc/core/logging_config.py`, `synthadoc/observability/telemetry.py`
 
@@ -877,7 +978,7 @@ Spans cover: full operation tree (orchestrator → agent → LLM calls → stora
 
 ---
 
-## 16. Security
+## 17. Security
 
 ### Path traversal
 
@@ -909,31 +1010,53 @@ Skills in `<wiki-root>/skills/` or `~/.synthadoc/skills/` run in the same Python
 
 ---
 
-## 17. Plugin Development Guide
+## 18. Plugin Development Guide
 
 This section is for developers building custom skills or LLM providers.
 
 ### Writing a skill
 
-1. Create a Python file in `<wiki-root>/skills/` or `~/.synthadoc/skills/`.
-2. Subclass `BaseSkill` from `synthadoc.skills.base` (Apache-2.0 — no AGPL obligation).
-3. Implement `meta()` and `extract()`.
+1. Create a skill folder in `<wiki-root>/skills/` or `~/.synthadoc/skills/`.
+2. Add a `SKILL.md` with YAML frontmatter (name, version, entry, triggers, requires).
+3. Create `scripts/main.py` and subclass `BaseSkill` from `synthadoc.skills.base` (Apache-2.0 — no AGPL obligation).
+4. Implement `extract(source: str) -> ExtractedContent`.
 
+**Folder layout:**
+```
+slack_export/
+  SKILL.md
+  scripts/
+    main.py
+  references/
+    format-notes.md   ← optional; load with self.get_resource("format-notes.md")
+```
+
+**`SKILL.md`:**
+```yaml
+---
+name: slack_export
+version: "1.0"
+description: Extract messages from a Slack export ZIP
+entry:
+  script: scripts/main.py
+  class: SlackExportSkill
+triggers:
+  extensions: [".slack.zip"]
+  intents: ["slack export", "slack archive"]
+requires: []
+---
+
+Loads all JSON channel files from a Slack export ZIP and returns the message text.
+```
+
+**`scripts/main.py`:**
 ```python
 # SPDX-License-Identifier: MIT
-from synthadoc.skills.base import BaseSkill, ExtractedContent, SkillMeta
+from synthadoc.skills.base import BaseSkill, ExtractedContent
 
 class SlackExportSkill(BaseSkill):
 
-    @classmethod
-    def meta(cls) -> SkillMeta:
-        return SkillMeta(
-            name="slack_export",
-            description="Extracts messages from a Slack export ZIP",
-            extensions=[".slack.zip"],
-        )
-
-    def extract(self, source: str) -> ExtractedContent:
+    async def extract(self, source: str) -> ExtractedContent:
         import zipfile, json
         messages = []
         with zipfile.ZipFile(source) as zf:
@@ -944,12 +1067,11 @@ class SlackExportSkill(BaseSkill):
                         if "text" in msg:
                             messages.append(msg["text"])
         return ExtractedContent(
-            title="Slack Export",
-            body="\n".join(messages),
+            text="\n".join(messages),
+            source_path=source,
+            metadata={},
         )
 ```
-
-**Resource files:** Create `skills/slack_export/resources/prompt.md` alongside your skill and load it with `self.get_resource("prompt.md")`.
 
 **Error handling:** Raise `ValueError` with a clear message if the source cannot be processed. Raise `ImportError` if an optional dependency is missing (the agent will surface a helpful message to the user).
 
@@ -997,10 +1119,13 @@ echo "Event $event fired on wiki $wiki" | mail -s "Synthadoc notification" you@e
 
 ---
 
-## 18. v2 Roadmap
+## 19. v0.2 Roadmap
+
+Planned for release the week of 2026-04-25.
 
 | Feature | Motivation |
 |---------|-----------|
+| **Web search ingest** | `web_search` skill fully implemented — `synthadoc ingest "search for: <query>"` fetches top results and compiles them into wiki pages |
 | **Web UI** | Browser-based dashboard — pages, jobs, contradictions, orphans — without requiring Obsidian |
 | **Vector search + re-ranking** | Hybrid BM25 + `fastembed` local vectors; better recall on semantically related queries; `fastembed` already an optional dependency |
 | **Graph-aware retrieval** | Traverse wikilink adjacency for multi-hop queries (e.g. "What connects Turing to von Neumann?") |

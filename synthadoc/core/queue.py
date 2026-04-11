@@ -106,6 +106,15 @@ class JobQueue:
             )
             await db.commit()
 
+    async def fail_permanent(self, job_id: str, error: str) -> None:
+        """Fail a job immediately with no retry — for non-transient errors."""
+        async with aiosqlite.connect(self._path) as db:
+            await db.execute(
+                "UPDATE jobs SET status='failed',error=? WHERE id=?",
+                (error, job_id),
+            )
+            await db.commit()
+
     async def delete(self, job_id: str, audit_db=None) -> None:
         if audit_db:
             await audit_db.record_audit_event(job_id, "job_deleted", {"deleted_by": "user"})

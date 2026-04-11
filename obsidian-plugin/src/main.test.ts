@@ -26,6 +26,8 @@ vi.mock("obsidian", () => ({
     },
     Modal: class {
         app: any;
+        modalEl = { style: {} as CSSStyleDeclaration };
+        containerEl = { querySelector: vi.fn().mockReturnValue({ addEventListener: vi.fn() }) };
         contentEl = {
             createEl: vi.fn().mockReturnValue({
                 style: {}, onclick: null, disabled: false, setText: vi.fn(), value: "",
@@ -35,9 +37,16 @@ vi.mock("obsidian", () => ({
         open = vi.fn(); close = vi.fn();
         constructor(app: any) { this.app = app; }
     },
+    SuggestModal: class {
+        app: any;
+        open = vi.fn();
+        setPlaceholder = vi.fn();
+        constructor(app: any) { this.app = app; }
+    },
     Notice: vi.fn(),
     TFile: class {},
     App: class {},
+    MarkdownRenderer: { render: vi.fn().mockResolvedValue(undefined) },
 }));
 
 vi.mock("./api", () => ({
@@ -69,6 +78,79 @@ describe("SynthadocPlugin.onload", () => {
     });
 });
 
+describe("SynthadocPlugin ribbon icon", () => {
+    it("shows online status and page count when server is running", async () => {
+        const { api } = await import("./api");
+        const { Notice } = await import("obsidian");
+        (api.health as any).mockResolvedValueOnce({ status: "ok" });
+        (api.status as any).mockResolvedValueOnce({ pages: 12 });
+
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+
+        const ribbonCallback = (plugin.addRibbonIcon as any).mock.calls[0][2];
+        await ribbonCallback();
+
+        expect(Notice).toHaveBeenCalledWith(expect.stringMatching(/✅ online/));
+        expect(Notice).toHaveBeenCalledWith(expect.stringMatching(/12 pages/));
+    });
+
+    it("shows offline status when server is not running", async () => {
+        const { api } = await import("./api");
+        const { Notice } = await import("obsidian");
+        (api.health as any).mockRejectedValueOnce(new Error("refused"));
+        (api.status as any).mockRejectedValueOnce(new Error("refused"));
+
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+
+        const ribbonCallback = (plugin.addRibbonIcon as any).mock.calls[0][2];
+        await ribbonCallback();
+
+        expect(Notice).toHaveBeenCalledWith(expect.stringMatching(/❌ offline/));
+    });
+});
+
+describe("SynthadocPlugin ingest-current command", () => {
+    it("opens IngestPickerModal when no file is active (does not ingest directly)", async () => {
+        const { api } = await import("./api");
+        const { Notice } = await import("obsidian");
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        plugin.app = { workspace: { getActiveFile: () => null }, vault: { getFiles: () => [] } } as any;
+        await plugin.onload();
+
+        const cmd = (plugin.addCommand as any).mock.calls.find(
+            (c: any) => c[0].id === "synthadoc-ingest-current"
+        )?.[0];
+        cmd?.callback();
+
+        // Picker opened — no direct ingest call and no error notice
+        expect(api.ingest).not.toHaveBeenCalled();
+        expect(Notice).not.toHaveBeenCalled();
+    });
+
+    it("calls ingestFile directly when a file is active", async () => {
+        const { api } = await import("./api");
+        (api.ingest as any).mockResolvedValueOnce({ job_id: "job-abc" });
+
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        const fakeFile = { path: "raw_sources/paper.pdf" };
+        plugin.app = { workspace: { getActiveFile: () => fakeFile } } as any;
+        await plugin.onload();
+
+        const cmd = (plugin.addCommand as any).mock.calls.find(
+            (c: any) => c[0].id === "synthadoc-ingest-current"
+        )?.[0];
+        await cmd?.callback();
+
+        expect(api.ingest).toHaveBeenCalledWith("raw_sources/paper.pdf");
+    });
+});
+
 describe("SynthadocPlugin.ingestFile", () => {
     it("calls api.ingest with file path and shows Notice with job_id", async () => {
         const { api } = await import("./api");
@@ -93,6 +175,34 @@ describe("SynthadocPlugin.ingestFile", () => {
         await plugin.ingestFile({ path: "notes/paper.md" } as any);
 
         expect(Notice).toHaveBeenCalledWith(expect.stringContaining("failed"));
+    });
+});
+
+describe("SynthadocPlugin web search command", () => {
+    it("shows coming-in-v2 notice and does not call api.ingest", async () => {
+        const { api } = await import("./api");
+        const { Notice } = await import("obsidian");
+
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+
+        const cmd = (plugin.addCommand as any).mock.calls.find(
+            (c: any) => c[0].id === "synthadoc-web-search"
+        )?.[0];
+        cmd?.callback();
+
+        expect(Notice).toHaveBeenCalledWith(expect.stringContaining("coming in v2"));
+        expect(api.ingest).not.toHaveBeenCalled();
+    });
+
+    it("web-search command is registered on onload", async () => {
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+
+        const ids = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].id);
+        expect(ids).toContain("synthadoc-web-search");
     });
 });
 

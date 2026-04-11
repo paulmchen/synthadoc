@@ -44,6 +44,30 @@ synthadoc wiki page is a valid Obsidian note.
 
 ---
 
+### Supported source types & skills
+
+Synthadoc routes every source to the right **skill** — a self-contained folder that knows
+how to read one kind of content. Skills are selected by **file extension** or by
+**intent phrase** in the source string. No `--skill` flag needed; the engine detects it
+automatically.
+
+| Skill | Triggered by | Notes |
+|-------|-------------|-------|
+| `pdf` | `.pdf` extension · phrases: `pdf`, `research paper`, `document` | Primary: pypdf. CJK fallback: pdfminer.six |
+| `url` | `https://` / `http://` prefix · phrases: `fetch url`, `web page`, `website` | httpx + BeautifulSoup HTML cleaning |
+| `markdown` | `.md` / `.txt` extension · phrases: `markdown`, `text file`, `notes` | Direct read, no transformation |
+| `docx` | `.docx` extension · phrases: `word document`, `docx` | python-docx paragraph extraction |
+| `xlsx` | `.xlsx` / `.csv` extension · phrases: `spreadsheet`, `excel`, `csv` | openpyxl + stdlib csv |
+| `image` | `.png` `.jpg` `.jpeg` `.webp` `.gif` `.tiff` · phrases: `image`, `screenshot`, `diagram`, `photo` | Base64 → vision LLM |
+| `web_search` *(v2)* | Intent phrases only: `search for`, `find on the web`, `look up`, `web search`, `browse` | No file extension — purely intent-driven. Calls a search API and fetches top results. **v1 stub — full implementation in v2.** |
+
+**Custom skills:** drop a folder containing `SKILL.md` + `scripts/main.py` into
+`<wiki-root>/skills/` and the engine picks it up on next start — no install or restart
+required. A `SKILL.md` carries YAML frontmatter (name, triggers, entry point, dependencies)
+plus a human-readable Markdown body for documentation.
+
+---
+
 ### Set up the demo vault
 
 This section walks you from a fresh install of synthadoc to a fully configured Obsidian
@@ -113,7 +137,10 @@ cp obsidian-plugin/main.js obsidian-plugin/manifest.json "$vault/.obsidian/plugi
 
 ---
 
-**Step 5 — Enable and configure the plugin**
+**Step 5 — Restart Obsidian, then enable and configure the plugin**
+
+After copying the files, **fully quit and reopen Obsidian** — the plugin will not appear
+until Obsidian is restarted.
 
 1. In Obsidian: **Settings** → **Community plugins** → find **Synthadoc** → toggle **on**
 2. Click the gear icon next to the Synthadoc entry
@@ -191,6 +218,7 @@ Use a **second terminal** for all commands below. All plugin commands are now ac
 | `Synthadoc: Ingest current file as source` | Queues the open file for ingest |
 | `Synthadoc: Ingest all sources` | Queues every file under `raw_sources/` |
 | `Synthadoc: Ingest from URL...` | Opens a URL input modal; queues a web page for ingest |
+| `Synthadoc: Web search...` | Opens a search modal; type a topic and the engine fetches web results and ingests them *(v2)* |
 | `Synthadoc: Query wiki...` | Opens a query modal with markdown-rendered answer and citations |
 | `Synthadoc: Lint report` | Opens a modal showing contradicted pages and orphans |
 | `Synthadoc: Run lint` | Queues a lint job; shows a notice with contradiction + orphan counts |
@@ -219,12 +247,12 @@ You can also query from Obsidian: open the command palette (`Ctrl/Cmd+P`) →
 
 The four source files are pre-built in `raw_sources/`:
 
-| File | Format | Scenario |
-|------|--------|----------|
-| `turing-enigma-decryption.pdf` | PDF | **A — Clean merge**: enriches `alan-turing` |
-| `computing-pioneers-timeline.xlsx` | XLSX | **A — Clean merge**: structured timeline, enriches multiple pages |
-| `first-compiler-controversy.pdf` | PDF | **B — Conflict**: contradicts `grace-hopper` |
-| `quantum-computing-primer.png` | PNG | **C — Orphan**: brand new topic, no existing page links to it |
+| File | Skill | Scenario |
+|------|-------|----------|
+| `turing-enigma-decryption.pdf` | `pdf` (`.pdf` extension) | **A — Clean merge**: enriches `alan-turing` |
+| `computing-pioneers-timeline.xlsx` | `xlsx` (`.xlsx` extension) | **A — Clean merge**: structured timeline, enriches multiple pages |
+| `first-compiler-controversy.pdf` | `pdf` (`.pdf` extension) | **B — Conflict**: contradicts `grace-hopper` |
+| `quantum-computing-primer.png` | `image` (`.png` extension) | **C — Orphan**: brand new topic, no existing page links to it |
 
 **Via CLI** using `--batch`:
 
@@ -318,7 +346,7 @@ synthadoc jobs status <job-id> -w history-of-computing
 The LLM proposes a resolution, appends it as a `**Resolution:**` block, and sets
 `status: active`. Review the result in Obsidian and edit if needed.
 
-> **Option 3 — Via Claude (MCP):** see Step 10 for MCP setup and a full example.
+> **Option 3 — Via Claude (MCP):** see Step 11 for MCP setup and a full example.
 
 ---
 
@@ -434,7 +462,70 @@ You can also ingest from Obsidian: open any note → command palette (`Ctrl/Cmd+
 
 ---
 
-### Step 10 — Control Synthadoc from Claude (MCP)
+### Step 10 — Web search ingestion *(v2 preview)*
+
+> **Status:** The `web_search` skill is a v2 stub. Running these commands today returns a
+> `NotImplementedError` with a clear message. This step shows the intended UX so you can
+> plan ahead — all commands and intent phrases are final.
+
+Unlike every other skill, `web_search` has **no file extension**. It is selected purely by
+recognising an intent phrase in the source string — no `--skill` flag needed. The engine
+reads the phrase, routes to `web_search`, calls the configured search API, fetches and
+cleans the top results, and hands the text to the ingest pipeline exactly like a PDF or URL.
+
+**Trigger phrases** (any of these in the source string activates the skill):
+
+| Phrase | Example source string |
+|--------|-----------------------|
+| `search for` | `"search for: Dennis Ritchie C language Bell Labs"` |
+| `find on the web` | `"find on the web: Linus Torvalds Linux creation story"` |
+| `look up` | `"look up Ada Lovelace Analytical Engine contributions"` |
+| `web search` | `"web search ENIAC first electronic computer 1945"` |
+| `browse` | `"browse recent articles on quantum error correction"` |
+
+**Example — enrich the history-of-computing wiki via web search:**
+
+```
+synthadoc ingest "search for: Dennis Ritchie C programming language Bell Labs history" -w history-of-computing
+synthadoc ingest "find on the web: Linus Torvalds Linux kernel creation 1991" -w history-of-computing
+synthadoc ingest "search for: ENIAC first general purpose electronic computer history" -w history-of-computing
+```
+
+Each command routes to `web_search`, queries the configured search provider for the top
+results, and feeds the extracted text into the ingest pipeline. Pages such as
+`dennis-ritchie`, `linux-kernel-history`, and `eniac` would be created or enriched.
+
+**Batch web search using a manifest file:**
+
+Create `raw_sources/web-searches.txt`:
+
+```
+search for: Dennis Ritchie C programming language Bell Labs history
+find on the web: Linus Torvalds Linux kernel creation 1991
+search for: Ada Lovelace first computer programmer analytical engine
+look up: history of ARPANET and internet origins
+search for: John von Neumann stored-program computer architecture
+```
+
+Then ingest the whole file at once:
+
+```
+synthadoc ingest --file raw_sources/web-searches.txt -w history-of-computing
+```
+
+Each line is dispatched as a separate ingest job. Watch progress:
+
+```
+synthadoc jobs list -w history-of-computing
+```
+
+**Via Obsidian plugin:** command palette (`Ctrl/Cmd+P`) →
+`Synthadoc: Ingest from URL...` — the same input field accepts intent strings.
+Type `search for: Linus Torvalds Linux kernel creation 1991` and press **Ingest**.
+
+---
+
+### Step 11 — Control Synthadoc from Claude (MCP)
 
 Synthadoc exposes an MCP server so Claude Desktop (or any MCP-capable Claude surface) can drive
 the wiki in natural language — no CLI required.
@@ -531,7 +622,31 @@ if the Obsidian Claude plugin is active.
 
 ---
 
-### Step 11 — Uninstall
+#### Use case E — Expand the wiki via web search *(v2 preview)*
+
+After reviewing the wiki, tell Claude:
+
+> *"My history-of-computing wiki doesn't cover Dennis Ritchie or the C language. Search the web
+> and add pages for both."*
+
+Claude will:
+1. Call `synthadoc_ingest(source="search for: Dennis Ritchie C programming language Bell Labs history")` — intent phrase routes to `web_search`
+2. Call `synthadoc_ingest(source="search for: history of C programming language UNIX influence")` for supplementary context
+3. Poll `synthadoc_job_status(job_id)` for each job
+4. Call `synthadoc_query("What is the relationship between C, Unix, and Bell Labs?")` to verify the new pages are queryable
+5. Report the new pages created and suggest `[[wikilinks]]` to add in related pages such as `unix-history` and `programming-languages-overview`
+
+You can also drive multi-topic research in one prompt:
+
+> *"Search the web for the top 5 computing pioneers not yet in my wiki and add a page for each."*
+
+Claude reads `wiki/index.md` to find what is already covered, builds a list of gaps, then
+fires one `synthadoc_ingest` per topic using `search for:` intent strings, and links each
+new page back into `index.md`.
+
+---
+
+### Step 12 — Uninstall
 
 ```
 synthadoc uninstall history-of-computing

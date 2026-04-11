@@ -83,6 +83,9 @@ class Orchestrator:
                 "tokens_used": result.tokens_used,
                 "cost_usd": result.cost_usd,
             })
+        except NotImplementedError as e:
+            # Skill is a known stub — fail immediately, no retry
+            await self._queue.fail_permanent(job_id, str(e))
         except Exception as e:
             await self._queue.fail(job_id, str(e))
             raise

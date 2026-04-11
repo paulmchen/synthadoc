@@ -124,42 +124,60 @@ class IngestAgent:
         data = Path(path).read_bytes()
         return hashlib.sha256(data).hexdigest(), len(data)
 
+    def _needs_file_check(self, source: str) -> bool:
+        """Return True when source must exist as a local file before ingestion.
+
+        URL sources (http/https) and intent-matched sources are remote/virtual
+        and must bypass the file-system existence check.
+        """
+        s = source.lower()
+        if s.startswith(("http://", "https://")):
+            return False
+        try:
+            meta = self._skill_agent.detect_skill(source)
+            if any(intent in s for intent in meta.triggers.intents):
+                return False
+        except Exception:
+            pass
+        return True
+
     async def ingest(self, source: str, force: bool = False, bust_cache: bool = False) -> IngestResult:
-        p = Path(source).resolve()
-
-        # Security: reject sources outside wiki_root
-        if self._wiki_root is not None:
-            root_resolved = self._wiki_root.resolve()
-            try:
-                p.relative_to(root_resolved)
-            except ValueError:
-                raise PermissionError(
-                    f"Source {p} is outside wiki root {root_resolved}"
-                )
-
-        if not p.exists():
-            raise FileNotFoundError(f"Source not found: {source}")
-        if p.stat().st_size == 0:
-            raise ValueError(f"Source file is empty: {source}")
-
         result = IngestResult(source=source)
 
-        # Dedup: hash + size
-        src_hash, src_size = self._hash(str(p))
+        if self._needs_file_check(source):
+            p = Path(source).resolve()
 
-        # Check for hash collision (same hash, different size)
-        if not force:
-            existing = await self._audit.find_by_hash_only(src_hash)
-            if existing and existing["size"] != src_size:
-                logger.warning(
-                    "Hash collision detected: hash=%s matches existing record but size differs "
-                    "(existing=%d, current=%d). Treating as new source.",
-                    src_hash, existing["size"], src_size
-                )
-            elif await self._audit.find_by_hash(src_hash, src_size):
-                result.skipped = True
-                result.skip_reason = "already ingested"
-                return result
+            # Security: reject sources outside wiki_root
+            if self._wiki_root is not None:
+                root_resolved = self._wiki_root.resolve()
+                try:
+                    p.relative_to(root_resolved)
+                except ValueError:
+                    raise PermissionError(
+                        f"Source {p} is outside wiki root {root_resolved}"
+                    )
+
+            if not p.exists():
+                raise FileNotFoundError(f"Source not found: {source}")
+            if p.stat().st_size == 0:
+                raise ValueError(f"Source file is empty: {source}")
+
+            # Dedup: hash + size (file sources only)
+            src_hash, src_size = self._hash(str(p))
+
+            # Check for hash collision (same hash, different size)
+            if not force:
+                existing = await self._audit.find_by_hash_only(src_hash)
+                if existing and existing["size"] != src_size:
+                    logger.warning(
+                        "Hash collision detected: hash=%s matches existing record but size differs "
+                        "(existing=%d, current=%d). Treating as new source.",
+                        src_hash, existing["size"], src_size
+                    )
+                elif await self._audit.find_by_hash(src_hash, src_size):
+                    result.skipped = True
+                    result.skip_reason = "already ingested"
+                    return result
 
         extracted = await self._skill_agent.extract(source)
 
