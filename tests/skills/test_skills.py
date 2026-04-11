@@ -86,78 +86,110 @@ async def test_url_skill_raises_on_connection_error():
             await UrlSkill().extract("https://unreachable.example/")
 
 
-def test_pip_skills_loaded_from_entry_points():
+def test_pip_skills_loaded_from_entry_points(tmp_wiki):
     """Skills registered via entry_points('synthadoc.skills') are auto-discovered."""
-    from unittest.mock import MagicMock, patch
+    import yaml
+    from unittest.mock import patch
     from synthadoc.agents.skill_agent import SkillAgent
-    from synthadoc.skills.base import BaseSkill, ExtractedContent, SkillMeta
 
-    class FakeCustomSkill(BaseSkill):
-        meta = SkillMeta(name="custom_pip", description="pip skill", extensions=[".xyz"])
-        async def extract(self, source): return ExtractedContent("", source, {})
-
-    ep = MagicMock()
-    ep.load.return_value = FakeCustomSkill
-    with patch("importlib.metadata.entry_points", return_value=[ep]):
-        agent = SkillAgent()
+    skill_dir = tmp_wiki / "skills" / "custom_pip"
+    (skill_dir / "scripts").mkdir(parents=True)
+    fm = {
+        "name": "custom_pip", "version": "1.0", "description": "pip skill",
+        "entry": {"script": "scripts/main.py", "class": "CustomPipSkill"},
+        "triggers": {"extensions": [".xyz"], "intents": []}, "requires": [],
+    }
+    (skill_dir / "SKILL.md").write_text(f"---\n{yaml.dump(fm)}---\n", encoding="utf-8")
+    (skill_dir / "scripts" / "main.py").write_text(
+        "from synthadoc.skills.base import BaseSkill, ExtractedContent\n"
+        "class CustomPipSkill(BaseSkill):\n"
+        "    async def extract(self, s): return ExtractedContent('', s, {})\n",
+        encoding="utf-8",
+    )
+    with patch("synthadoc.agents.skill_agent._entry_point_skill_dirs",
+               return_value=[skill_dir]):
+        agent = SkillAgent(wiki_root=tmp_wiki)
     assert "custom_pip" in [s.name for s in agent.list_skills()]
 
 
 def test_local_skill_loaded_from_skills_folder(tmp_path):
-    """A .py file dropped in skills/ is discovered and registered without install."""
+    """A skill folder dropped in wiki/skills/ is discovered and registered."""
+    import yaml
     from synthadoc.agents.skill_agent import SkillAgent
 
-    skill_file = tmp_path / "custom_local.py"
-    skill_file.write_text(
-        "from synthadoc.skills.base import BaseSkill, ExtractedContent, SkillMeta\n"
-        "class LocalSkill(BaseSkill):\n"
-        "    meta = SkillMeta(name='local_csv', description='local', extensions=['.tsv'])\n"
-        "    async def extract(self, source): return ExtractedContent('', source, {})\n",
+    (tmp_path / "skills").mkdir()
+    (tmp_path / ".synthadoc").mkdir()
+    skill_dir = tmp_path / "skills" / "local_csv"
+    (skill_dir / "scripts").mkdir(parents=True)
+    fm = {
+        "name": "local_csv", "version": "1.0", "description": "local",
+        "entry": {"script": "scripts/main.py", "class": "LocalCsvSkill"},
+        "triggers": {"extensions": [".tsv"], "intents": []}, "requires": [],
+    }
+    (skill_dir / "SKILL.md").write_text(f"---\n{yaml.dump(fm)}---\n", encoding="utf-8")
+    (skill_dir / "scripts" / "main.py").write_text(
+        "from synthadoc.skills.base import BaseSkill, ExtractedContent\n"
+        "class LocalCsvSkill(BaseSkill):\n"
+        "    async def extract(self, s): return ExtractedContent('', s, {})\n",
         encoding="utf-8",
     )
-    agent = SkillAgent(extra_dirs=[tmp_path])
+    agent = SkillAgent(wiki_root=tmp_path)
     assert "local_csv" in [s.name for s in agent.list_skills()]
 
 
 def test_local_skill_overrides_builtin(tmp_path):
-    """A local skill with the same name as a built-in takes precedence."""
+    """A local skill folder with the same name as a built-in takes precedence."""
+    import yaml
     from synthadoc.agents.skill_agent import SkillAgent
 
-    skill_file = tmp_path / "override_pdf.py"
-    skill_file.write_text(
-        "from synthadoc.skills.base import BaseSkill, ExtractedContent, SkillMeta\n"
-        "class OverridePdf(BaseSkill):\n"
-        "    meta = SkillMeta(name='pdf', description='override', extensions=['.pdf'])\n"
-        "    async def extract(self, source): return ExtractedContent('custom', source, {})\n",
+    (tmp_path / "skills").mkdir()
+    (tmp_path / ".synthadoc").mkdir()
+    skill_dir = tmp_path / "skills" / "pdf"
+    (skill_dir / "scripts").mkdir(parents=True)
+    fm = {
+        "name": "pdf", "version": "1.0", "description": "override",
+        "entry": {"script": "scripts/main.py", "class": "OverridePdfSkill"},
+        "triggers": {"extensions": [".pdf"], "intents": []}, "requires": [],
+    }
+    (skill_dir / "SKILL.md").write_text(f"---\n{yaml.dump(fm)}---\n", encoding="utf-8")
+    (skill_dir / "scripts" / "main.py").write_text(
+        "from synthadoc.skills.base import BaseSkill, ExtractedContent\n"
+        "class OverridePdfSkill(BaseSkill):\n"
+        "    async def extract(self, s): return ExtractedContent('custom', s, {})\n",
         encoding="utf-8",
     )
-    agent = SkillAgent(extra_dirs=[tmp_path])
-    skill = agent.get_skill("pdf")
-    assert skill.meta.description == "override"
+    agent = SkillAgent(wiki_root=tmp_path)
+    assert agent.detect_skill("doc.pdf").description == "override"
 
 
 def test_local_skill_with_syntax_error_is_skipped(tmp_path, caplog):
-    """Broken local skill files log a warning and do not crash the agent."""
+    """A skill folder with a broken SKILL.md is logged and skipped."""
     import logging
     from synthadoc.agents.skill_agent import SkillAgent
 
-    bad_file = tmp_path / "broken.py"
-    bad_file.write_text("this is not valid python !!!", encoding="utf-8")
+    (tmp_path / "skills").mkdir()
+    (tmp_path / ".synthadoc").mkdir()
+    bad_dir = tmp_path / "skills" / "broken"
+    bad_dir.mkdir()
+    (bad_dir / "SKILL.md").write_text("this is not valid yaml: {{{", encoding="utf-8")
     with caplog.at_level(logging.WARNING):
-        agent = SkillAgent(extra_dirs=[tmp_path])
-    assert any("broken.py" in r.message for r in caplog.records)
+        agent = SkillAgent(wiki_root=tmp_path)
+    assert any("broken" in r.message for r in caplog.records)
     assert "pdf" in [s.name for s in agent.list_skills()]   # built-ins still registered
 
 
 def test_local_file_not_subclassing_baseskill_is_skipped(tmp_path, caplog):
-    """A .py file in skills/ that doesn't subclass BaseSkill is silently skipped."""
+    """A skill folder with no SKILL.md is silently ignored."""
     import logging
     from synthadoc.agents.skill_agent import SkillAgent
 
-    bad_file = tmp_path / "notaskill.py"
-    bad_file.write_text("class NotASkill:\n    pass\n", encoding="utf-8")
+    (tmp_path / "skills").mkdir()
+    (tmp_path / ".synthadoc").mkdir()
+    bad_dir = tmp_path / "skills" / "notaskill"
+    bad_dir.mkdir()
+    # no SKILL.md — not a skill folder
     with caplog.at_level(logging.WARNING):
-        agent = SkillAgent(extra_dirs=[tmp_path])
+        agent = SkillAgent(wiki_root=tmp_path)
     assert "notaskill" not in [s.name for s in agent.list_skills()]
 
 

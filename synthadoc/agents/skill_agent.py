@@ -2,84 +2,149 @@
 # Copyright (C) 2026 Paul Chen / axoviq.com
 from __future__ import annotations
 
+import importlib.util
 import logging
 from pathlib import Path
 from typing import Optional
 
 from synthadoc.skills.base import BaseSkill, ExtractedContent, SkillMeta
+from synthadoc.skills.registry import build_registry_cache, parse_skill_md, SkillManifestError
 
 logger = logging.getLogger(__name__)
 
+_BUILTIN_SKILLS_DIR = Path(__file__).parent.parent / "skills"
+_GLOBAL_SKILLS_DIR = Path.home() / ".synthadoc" / "skills"
+
 
 class SkillNotFoundError(Exception):
-    pass
+    def __init__(self, source: str, available: list[str] = None):
+        msg = f"No skill for: {source!r}."
+        if available:
+            msg += f" Available: {', '.join(sorted(available))}"
+        super().__init__(msg)
+
+
+def _entry_point_skill_dirs() -> list[Path]:
+    import importlib.metadata
+    dirs = []
+    for ep in importlib.metadata.entry_points(group="synthadoc.skills"):
+        try:
+            d = Path(ep.value)
+            if d.is_dir() and (d / "SKILL.md").exists():
+                dirs.append(d)
+        except Exception:
+            logger.warning("Bad entry point skill %s", ep.name, exc_info=True)
+    return dirs
+
+
+def _skill_dirs_in(base: Optional[Path]) -> list[Path]:
+    if not base or not base.is_dir():
+        return []
+    return [d for d in sorted(base.iterdir())
+            if d.is_dir() and (d / "SKILL.md").exists()]
+
+
+def _import_class(script: Path, class_name: str) -> type:
+    spec = importlib.util.spec_from_file_location(script.stem, script)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    cls = getattr(mod, class_name, None)
+    if cls is None:
+        raise ImportError(f"Class '{class_name}' not found in {script}")
+    return cls
+
+
+def _register(skill_dir: Path, registry: dict, override: bool) -> None:
+    try:
+        meta = parse_skill_md(skill_dir)
+        if override or meta.name not in registry:
+            registry[meta.name] = meta
+    except Exception as exc:
+        logger.warning("Skipping skill folder %s: %s", skill_dir, exc)
 
 
 class SkillAgent:
-    def __init__(self, extra_dirs: Optional[list[Path]] = None) -> None:
-        self._registry: dict[str, type[BaseSkill]] = {}
-        self._load_builtins()
-        self._load_entry_points()
-        for d in (extra_dirs or []):
-            self._load_local_dir(Path(d))
+    def __init__(
+        self,
+        wiki_root: Optional[Path] = None,
+        extra_dirs: Optional[list[Path]] = None,
+    ) -> None:
+        self._registry: dict[str, SkillMeta] = {}
+        self._loaded: dict[str, type[BaseSkill]] = {}
+        self._build_registry(wiki_root, extra_dirs or [])
 
-    def _load_builtins(self) -> None:
-        from synthadoc.skills.pdf.scripts.main import PdfSkill
-        from synthadoc.skills.url.scripts.main import UrlSkill
-        from synthadoc.skills.markdown.scripts.main import MarkdownSkill
-        from synthadoc.skills.docx.scripts.main import DocxSkill
-        from synthadoc.skills.xlsx.scripts.main import XlsxSkill
-        from synthadoc.skills.image.scripts.main import ImageSkill
-        for cls in (PdfSkill, UrlSkill, MarkdownSkill, DocxSkill, XlsxSkill, ImageSkill):
-            self._registry[cls.meta.name] = cls
+    def _build_registry(self, wiki_root: Optional[Path], extra_dirs: list[Path]) -> None:
+        reg: dict[str, SkillMeta] = {}
 
-    def _load_entry_points(self) -> None:
-        import importlib.metadata
-        for ep in importlib.metadata.entry_points(group="synthadoc.skills"):
+        # Priority order: extra_dirs > wiki/skills > ~/.synthadoc/skills > entry points > built-ins
+        for d in extra_dirs:
+            for sd in _skill_dirs_in(d):
+                _register(sd, reg, override=True)
+
+        if wiki_root:
+            for sd in _skill_dirs_in(wiki_root / "skills"):
+                _register(sd, reg, override=True)
+
+        for sd in _skill_dirs_in(_GLOBAL_SKILLS_DIR):
+            _register(sd, reg, override=False)
+
+        for sd in _entry_point_skill_dirs():
+            _register(sd, reg, override=False)
+
+        for sd in _skill_dirs_in(_BUILTIN_SKILLS_DIR):
+            _register(sd, reg, override=False)
+
+        self._registry = reg
+
+        if wiki_root is not None:
+            cache_path = wiki_root / ".synthadoc" / "skill_registry.json"
+            all_dirs = (
+                list(extra_dirs)
+                + [wiki_root / "skills", _GLOBAL_SKILLS_DIR]
+                + _entry_point_skill_dirs()
+                + [_BUILTIN_SKILLS_DIR]
+            )
             try:
-                cls = ep.load()
-                if isinstance(cls, type) and issubclass(cls, BaseSkill) and cls is not BaseSkill:
-                    self._registry[cls.meta.name] = cls
+                build_registry_cache(all_dirs, cache_path)
             except Exception:
-                logger.warning("Failed to load pip skill entry point %s", ep.name, exc_info=True)
-
-    def _load_local_dir(self, directory: Path) -> None:
-        import importlib.util
-        for py_file in sorted(directory.glob("*.py")):
-            try:
-                spec = importlib.util.spec_from_file_location(py_file.stem, py_file)
-                mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
-                loaded_any = False
-                for attr in vars(mod).values():
-                    if (isinstance(attr, type) and issubclass(attr, BaseSkill)
-                            and attr is not BaseSkill):
-                        resources_dir = py_file.parent / "resources"
-                        attr._resources_dir = resources_dir if resources_dir.exists() else None
-                        self._registry[attr.meta.name] = attr
-                        loaded_any = True
-                if not loaded_any:
-                    logger.warning("No BaseSkill subclass found in %s — skipped", py_file)
-            except Exception:
-                logger.warning("Failed to load local skill from %s", py_file, exc_info=True)
+                logger.debug("Could not write skill registry cache", exc_info=True)
 
     def list_skills(self) -> list[SkillMeta]:
-        """Tier 1: metadata only, always available."""
-        return [cls.meta for cls in self._registry.values()]
+        return list(self._registry.values())
 
     def detect_skill(self, source: str) -> SkillMeta:
-        source_lower = source.lower()
-        for cls in self._registry.values():
-            for ext in cls.meta.extensions:
-                if source_lower.endswith(ext) or source_lower.startswith(ext):
-                    return cls.meta
-        raise SkillNotFoundError(f"No skill for: {source}")
+        s = source.lower()
+        for meta in self._registry.values():
+            for ext in meta.triggers.extensions:
+                if s.endswith(ext) or s.startswith(ext):
+                    return meta
+            for intent in meta.triggers.intents:
+                if intent in s:
+                    return meta
+        raise SkillNotFoundError(source, list(self._registry.keys()))
 
     def get_skill(self, name: str) -> BaseSkill:
-        """Tier 2: instantiate skill body."""
         if name not in self._registry:
-            raise SkillNotFoundError(f"Skill not found: {name}")
-        return self._registry[name]()
+            raise SkillNotFoundError(name, list(self._registry.keys()))
+        if name not in self._loaded:
+            meta = self._registry[name]
+            self._check_requires(meta)
+            cls = _import_class(meta.skill_dir / meta.entry_script, meta.entry_class)
+            self._loaded[name] = cls
+        instance = self._loaded[name]()
+        instance.skill_dir = self._registry[name].skill_dir
+        return instance
+
+    def _check_requires(self, meta: SkillMeta) -> None:
+        import importlib.metadata
+        for pkg in meta.requires:
+            dist_name = pkg.split("[")[0]
+            try:
+                importlib.metadata.distribution(dist_name)
+            except importlib.metadata.PackageNotFoundError:
+                raise ImportError(
+                    f"Skill '{meta.name}' requires '{pkg}' — run: pip install {pkg}"
+                )
 
     async def extract(self, source: str) -> ExtractedContent:
         meta = self.detect_skill(source)
