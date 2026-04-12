@@ -115,16 +115,18 @@ For full architecture details, data models, API reference, and plugin developmen
 
 ---
 
-## What's Included in v1
+## What's Included in v0.1
 
 - **3 agents** — IngestAgent (two-pass synthesis), QueryAgent (BM25 + LLM), LintAgent (contradiction + orphan detection + auto-resolution)
-- **6 built-in skills** — PDF, URL, Markdown/TXT, DOCX, XLSX/CSV, Image (vision)
+- **7 built-in skills** — PDF, URL, Markdown/TXT, DOCX, XLSX/CSV, Image (vision), Web search (v0.2 stub)
+- **Folder-based skill system** — each skill is a self-contained folder with a `SKILL.md` manifest; intent-based dispatch alongside extension matching; drop a folder in `skills/` to add a new format without touching core code
 - **3 access surfaces** — CLI (thin HTTP client), HTTP REST API, MCP server
-- **Obsidian plugin** — ingest, query, lint, jobs — all from the command palette
+- **Obsidian plugin** — ingest (with file picker when no note is active), query (responsive modal, stays open), lint report, jobs list, web search placeholder — all from the command palette; ribbon shows engine health + page count
 - **3-layer cache** — embedding cache, LLM response cache, provider prompt cache
 - **Cost guards** — configurable soft-warn and hard-gate USD thresholds
 - **Hook system** — shell commands on 8 lifecycle events; blocking or background
-- **Job queue** — SQLite-backed, persistent, retry with exponential backoff
+- **Job queue** — SQLite-backed, persistent, retry with exponential backoff; non-retryable errors (`failed`) distinguished from exhausted-retry errors (`dead`)
+- **Startup banner** — ASCII logo with version, port, wiki, and PID on `synthadoc serve`; plain-text version served at `GET /`
 - **Multi-wiki** — unlimited isolated wikis, each on its own port
 - **OpenTelemetry** — traces, metrics, structured logs; OTLP export optional
 - **Cross-platform** — Windows, Linux, macOS
@@ -623,10 +625,13 @@ Edit `<wiki-root>/AGENTS.md` to give the LLM domain-specific instructions — wh
 
 ---
 
-## v2 Roadmap
+## v0.2 Roadmap
+
+Target: week of 2026-04-25.
 
 | Feature | Notes |
 |---------|-------|
+| **Web search skill** | Full `WebSearchSkill` implementation — `synthadoc ingest "search for: <query>"` fetches and compiles top results |
 | **Web UI** | Browser-based dashboard; view pages, run jobs, inspect contradictions without Obsidian |
 | **Vector search + re-ranking** | `fastembed` (already an optional dependency); replaces BM25-only with hybrid BM25 + vector |
 | **Graph-aware retrieval** | Multi-hop queries traverse the wikilink graph, not just single-page BM25 hits |

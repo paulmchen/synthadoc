@@ -44,13 +44,10 @@ dev = [
 [project.scripts]
 synthadoc = "synthadoc.cli.main:app"
 
-[project.entry-points."synthadoc.skills"]
-pdf      = "synthadoc.skills.pdf:PdfSkill"
-url      = "synthadoc.skills.url:UrlSkill"
-markdown = "synthadoc.skills.markdown:MarkdownSkill"
-docx     = "synthadoc.skills.docx:DocxSkill"
-xlsx     = "synthadoc.skills.xlsx:XlsxSkill"
-image    = "synthadoc.skills.image:ImageSkill"
+# Built-in skills are discovered automatically via folder scan (_BUILTIN_SKILLS_DIR).
+# Community / pip-installed skills declare their skill folder path here:
+# [project.entry-points."synthadoc.skills"]
+# my_skill = "/absolute/path/to/my_skill_folder"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
