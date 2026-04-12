@@ -37,6 +37,9 @@ async def test_lint_finds_orphans(tmp_wiki):
     agent = LintAgent(provider=AsyncMock(), store=store, log_writer=log)
     report = await agent.lint(scope="orphans")
     assert "orphan" in report.orphan_slugs
+    assert "index" not in report.orphan_slugs
+    assert "dashboard" not in report.orphan_slugs
+    assert "log" not in report.orphan_slugs
 
 
 @pytest.mark.asyncio

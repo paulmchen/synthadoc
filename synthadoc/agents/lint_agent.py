@@ -38,7 +38,8 @@ class LintAgent:
                     # Strip alias (e.g. [[slug|Display Text]]) before normalising
                     slug_part = link.split("|")[0].strip()
                     referenced.add(slug_part.lower().replace(" ", "-"))
-        return [s for s in slugs if s not in referenced and s not in ("index", "log")]
+        return [s for s in slugs if s not in referenced
+                and s not in ("index", "dashboard", "log")]
 
     async def lint(self, scope: str = "all", auto_resolve: bool = False) -> LintReport:
         report = LintReport()
