@@ -737,7 +737,74 @@ new page back into `index.md`.
 
 ---
 
-### Step 13 — Uninstall
+### Step 13 — Hook: auto-commit wiki to git
+
+Hooks let you trigger shell scripts on lifecycle events. This step wires up
+`git-auto-commit.py` so every successful ingest produces a git commit
+— giving the wiki automatic version history with descriptive commit messages.
+
+#### One-time setup
+
+**1. Initialise a git repo in the wiki root** (skip if already done):
+
+```bash
+cd $(synthadoc status | grep Path | awk '{print $2}')
+git init
+git add .
+git commit -m "init: initial wiki snapshot"
+```
+
+**2. Copy the hook script from the library:**
+
+```bash
+cp /path/to/synthadoc/repo/hooks/git-auto-commit.py .
+```
+
+**3. Add to `.synthadoc/config.toml`:**
+
+```toml
+[hooks]
+on_ingest_complete = "python git-auto-commit.py"
+```
+
+**4. Restart the server** to pick up the config change:
+
+```bash
+synthadoc serve -w history-of-computing
+```
+
+#### Run it
+
+Ingest a new source:
+
+```
+synthadoc ingest sources/ada-lovelace.md -w history-of-computing
+```
+
+#### Verify
+
+```bash
+git log --oneline -5
+```
+
+Expected output:
+
+```
+a3f1b2c wiki: ingest ada-lovelace.md → created ada-lovelace
+d9e4c81 wiki: ingest turing-award.pdf → updated alan-turing; created turing-award
+...
+```
+
+Each commit message names the source file and lists which pages were created
+or updated. Open the wiki in Obsidian — `git log` is the full audit trail of
+how the wiki evolved over time.
+
+> **More hooks:** see [`hooks/README.md`](../hooks/README.md) in the repository
+> for the full library and contribution guidelines.
+
+---
+
+### Step 14 — Uninstall
 
 ```
 synthadoc uninstall history-of-computing

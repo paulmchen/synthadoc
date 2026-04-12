@@ -849,6 +849,22 @@ Two events are fired in v0.1:
 }
 ```
 
+### Hook library
+
+The [`hooks/`](../hooks/) folder in the repository is a community-maintained
+library of ready-to-use scripts. Copy a script to your wiki root and configure
+it in `config.toml`.
+
+**Writing a hook script:**
+
+- Read context from `sys.stdin` (JSON) — never from files or env vars
+- Write human-readable status to `sys.stderr` (not stdout)
+- Exit `0` on success, non-zero on failure
+- Include the standard header block (event, description, setup instructions)
+
+See [`hooks/README.md`](../hooks/README.md) for contribution guidelines and
+the full list of available scripts.
+
 ---
 
 ## 13. Cache System
