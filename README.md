@@ -563,6 +563,7 @@ tail -f .synthadoc/logs/synthadoc.log | jq .
 tail -f .synthadoc/logs/synthadoc.log | jq 'select(.level == "ERROR")'
 
 # Filter to a specific job
+# job_id is present only on records logged in job context (ingest/lint workers)
 tail -f .synthadoc/logs/synthadoc.log | jq 'select(.job_id == "abc123")'
 ```
 
@@ -638,11 +639,11 @@ synthadoc ingest --force problem.pdf -w my-wiki
 Every significant event is appended as a Markdown entry:
 
 ```markdown
-## 2026-04-10 14:32 — Ingest: constitutional-ai.pdf
-- Pages created: `constitutional-ai`
-- Pages updated: `ai-alignment-overview`
-- Pages flagged (contradiction): `reward-hacking` ⚠
-- Tokens: 4,820  |  Cost: $0.031  |  Cache hits: 3
+## 2026-04-10 14:32 | INGEST | constitutional-ai.pdf
+- Created: ['constitutional-ai']
+- Updated: ['ai-alignment-overview']
+- Flagged: ['reward-hacking']
+- Tokens: 4,820 | Cost: $0.0000 | Cache hits: 3
 ```
 
 Open `log.md` in Obsidian to browse and search the full history.
@@ -701,9 +702,9 @@ class NotionSkill(BaseSkill):
             extensions=[".notion.zip"],
         )
 
-    def extract(self, source: str) -> ExtractedContent:
+    async def extract(self, source: str) -> ExtractedContent:
         # … your extraction logic …
-        return ExtractedContent(title="My Page", body="extracted text …")
+        return ExtractedContent(text="extracted text …", source_path=source, metadata={})
 ```
 
 3. Drop the file in the skills directory. Synthadoc hot-loads it on the next ingest — no restart needed.
@@ -743,9 +744,9 @@ Hooks are shell commands (any language) that receive a JSON context on stdin:
 import json, subprocess, sys
 ctx = json.load(sys.stdin)
 if ctx["pages_created"] or ctx["pages_updated"]:
-    subprocess.run(["git", "add", "-A"], cwd=ctx["wiki_root"])
+    subprocess.run(["git", "add", "-A"], cwd=ctx["wiki"])
     subprocess.run(["git", "commit", "-m", f"ingest: {ctx['source']}"],
-                   cwd=ctx["wiki_root"])
+                   cwd=ctx["wiki"])
 ```
 
 Register in `.synthadoc/config.toml`:
@@ -755,12 +756,12 @@ Register in `.synthadoc/config.toml`:
 on_ingest_complete = "python hooks/auto_commit.py"
 ```
 
-Available events: `on_ingest_complete`, `on_ingest_failed`, `on_contradiction_found`, `on_lint_complete`, `on_query_saved`, `on_batch_complete`, `on_cost_warning`, `on_dead_job`.
+Available events: `on_ingest_complete`, `on_lint_complete`.
 
 Set `blocking = true` to make the hook gate the operation:
 
 ```toml
-on_contradiction_found = { cmd = "python hooks/notify.py", blocking = true }
+on_ingest_complete = { cmd = "python hooks/auto_commit.py", blocking = true }
 ```
 
 ### Cache invalidation control
