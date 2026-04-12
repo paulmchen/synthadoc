@@ -31,3 +31,5 @@ from synthadoc.cli import ingest, query, lint, status, jobs, serve  # noqa: F401
 from synthadoc.cli import demo  # noqa: F401, E402
 from synthadoc.cli import schedule  # noqa: F401, E402
 from synthadoc.cli import cache  # noqa: F401, E402
+from synthadoc.cli.audit import audit_app  # noqa: F401, E402
+app.add_typer(audit_app)

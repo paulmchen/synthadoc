@@ -110,6 +110,52 @@ class AuditDB:
                 row = await cur.fetchone()
             return dict(row) if row else None
 
+    async def list_ingests(self, limit: int = 50) -> list[dict]:
+        async with aiosqlite.connect(self._path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT source_path, wiki_page, tokens, cost_usd, ingested_at "
+                "FROM ingests ORDER BY id ASC LIMIT ?",
+                (limit,),
+            ) as cur:
+                rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def list_events(self, limit: int = 100) -> list[dict]:
+        async with aiosqlite.connect(self._path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT job_id, event, timestamp, metadata "
+                "FROM audit_events ORDER BY id ASC LIMIT ?",
+                (limit,),
+            ) as cur:
+                rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def cost_summary(self, days: int = 30) -> dict:
+        from datetime import timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        async with aiosqlite.connect(self._path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT DATE(ingested_at) as day, "
+                "SUM(tokens) as day_tokens, SUM(cost_usd) as day_cost "
+                "FROM ingests WHERE ingested_at >= ? GROUP BY day ORDER BY day DESC",
+                (cutoff,),
+            ) as cur:
+                rows = await cur.fetchall()
+
+        total_tokens = 0
+        total_cost = 0.0
+        daily = []
+        for r in rows:
+            rd = dict(r)
+            total_tokens += rd.get("day_tokens") or 0
+            total_cost += rd.get("day_cost") or 0.0
+            daily.append({"day": rd["day"], "cost_usd": rd.get("day_cost") or 0.0})
+
+        return {"total_tokens": total_tokens, "total_cost_usd": total_cost, "daily": daily}
+
     async def record_audit_event(self, job_id: str, event: str, metadata: dict) -> None:
         ts = datetime.now(timezone.utc).isoformat()
         async with aiosqlite.connect(self._path) as db:
