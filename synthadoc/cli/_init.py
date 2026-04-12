@@ -48,6 +48,15 @@ backup_count = 5
 
 _GITIGNORE = ".synthadoc/\n__pycache__/\n*.pyc\n.env\n"
 
+_PURPOSE_MD = """\
+# Wiki Purpose
+
+This wiki covers: {domain}.
+
+Include: topics directly related to {domain}.
+Exclude: unrelated domains. When in doubt, ingest and review.
+"""
+
 _DASHBOARD_MD = """\
 ---
 title: Dashboard
@@ -116,6 +125,8 @@ def init_wiki(root: Path, domain: str = "General") -> None:
         _AGENTS_MD.format(domain=domain), encoding="utf-8", newline="\n")
     (root / "wiki" / "index.md").write_text(
         "# Index\n\n", encoding="utf-8", newline="\n")
+    (root / "wiki" / "purpose.md").write_text(
+        _PURPOSE_MD.format(domain=domain), encoding="utf-8", newline="\n")
     (root / "wiki" / "dashboard.md").write_text(
         _DASHBOARD_MD.format(domain=domain, created=date.today().isoformat()),
         encoding="utf-8", newline="\n")

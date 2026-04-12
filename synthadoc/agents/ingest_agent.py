@@ -119,6 +119,16 @@ class IngestAgent:
         self._max_pages = max_pages
         self._wiki_root = Path(wiki_root) if wiki_root is not None else None
         self._skill_agent = SkillAgent()
+        self._purpose = self._load_purpose()
+
+    def _load_purpose(self) -> str:
+        """Load wiki/purpose.md for scope filtering. Returns '' if absent."""
+        if self._wiki_root is None:
+            return ""
+        p = self._wiki_root / "wiki" / "purpose.md"
+        if not p.exists():
+            return ""
+        return p.read_text(encoding="utf-8")[:500]
 
     def _hash(self, path: str) -> tuple[str, int]:
         data = Path(path).read_bytes()
@@ -251,8 +261,15 @@ class IngestAgent:
             result.cache_hits += 1
             decisions = cached2
         else:
+            decision_prompt = _DECISION_PROMPT
+            if self._purpose:
+                purpose_block = (
+                    f"Wiki scope (from purpose.md):\n{self._purpose}\n\n"
+                    "If the source is clearly outside this scope, respond with action=\"skip\".\n\n"
+                )
+                decision_prompt = purpose_block + _DECISION_PROMPT
             resp2 = await self._provider.complete(
-                messages=[Message(role="user", content=_DECISION_PROMPT.format(
+                messages=[Message(role="user", content=decision_prompt.format(
                     pages=pages_str,
                     summary=text[:1500],
                     entities=entities,
@@ -265,6 +282,11 @@ class IngestAgent:
 
         # Pass 4: writes based on action
         action = decisions.get("action", "create")
+
+        if action == "skip":
+            result.skipped = True
+            result.skip_reason = "out of scope (purpose.md)"
+            return result
         target = decisions.get("target", "")
         new_slug = decisions.get("new_slug") or ""
         update_content = decisions.get("update_content", "")

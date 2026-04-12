@@ -313,3 +313,68 @@ async def test_ingest_hash_size_mismatch_warns_and_proceeds(tmp_wiki, mock_provi
     assert not result.skipped
     assert any("collision" in r.message.lower() or "size" in r.message.lower()
                for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_purpose_md_filters_out_of_scope_source(tmp_wiki, mock_provider):
+    """When purpose.md is present and LLM returns action=skip, result is skipped."""
+    import itertools
+    from synthadoc.providers.base import CompletionResponse
+
+    (tmp_wiki / "wiki" / "purpose.md").write_text(
+        "This wiki covers AI and machine learning only.", encoding="utf-8")
+
+    store = WikiStorage(tmp_wiki / "wiki")
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    audit = AuditDB(tmp_wiki / ".synthadoc" / "audit.db")
+    await audit.init()
+    cache = CacheManager(tmp_wiki / ".synthadoc" / "cache.db")
+    await cache.init()
+
+    source = tmp_wiki / "raw_sources" / "cooking.md"
+    source.write_text("# Pasta Recipes\nHow to make carbonara.", encoding="utf-8")
+
+    entity_resp = CompletionResponse(
+        text='{"entities":["pasta"],"concepts":["cooking"],"tags":["food"]}',
+        input_tokens=50, output_tokens=20)
+    skip_resp = CompletionResponse(
+        text='{"reasoning":"Out of scope","action":"skip","target":"","new_slug":"","update_content":""}',
+        input_tokens=50, output_tokens=20)
+    mock_provider.complete.side_effect = itertools.cycle([entity_resp, skip_resp])
+
+    agent = IngestAgent(provider=mock_provider, store=store, search=search,
+                        log_writer=log, audit_db=audit, cache=cache, max_pages=15,
+                        wiki_root=tmp_wiki)
+    result = await agent.ingest(str(source))
+    assert result.skipped
+    assert "scope" in result.skip_reason.lower()
+
+
+@pytest.mark.asyncio
+async def test_purpose_md_absent_does_not_break_ingest(tmp_wiki, mock_provider):
+    """No purpose.md — ingest proceeds normally."""
+    assert not (tmp_wiki / "wiki" / "purpose.md").exists()
+    store = WikiStorage(tmp_wiki / "wiki")
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    audit = AuditDB(tmp_wiki / ".synthadoc" / "audit.db")
+    await audit.init()
+    cache = CacheManager(tmp_wiki / ".synthadoc" / "cache.db")
+    await cache.init()
+    source = tmp_wiki / "raw_sources" / "test.md"
+    source.write_text("# AI Safety\nAlignment research.", encoding="utf-8")
+    agent = IngestAgent(provider=mock_provider, store=store, search=search,
+                        log_writer=log, audit_db=audit, cache=cache,
+                        max_pages=15, wiki_root=tmp_wiki)
+    result = await agent.ingest(str(source))
+    assert not result.skipped
+
+
+def test_init_wiki_creates_purpose_md(tmp_path):
+    from synthadoc.cli._init import init_wiki
+    init_wiki(tmp_path, domain="AI Research")
+    purpose = tmp_path / "wiki" / "purpose.md"
+    assert purpose.exists()
+    text = purpose.read_text(encoding="utf-8")
+    assert "AI Research" in text
