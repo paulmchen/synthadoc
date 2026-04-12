@@ -109,7 +109,7 @@ Every page is a plain Markdown file with YAML frontmatter. No proprietary format
 | MCP server built-in | **Yes** | No | No | No |
 | Obsidian integration | **Yes** | No | No | No |
 | Cost guard + audit trail | **Yes** | No | No | No |
-| Hook / CI integration | **Yes** | No | No | No |
+| Hook / CI integration | **Yes** (2 events) | No | No | No |
 | Offline browsable artifact | **Yes** | No | No | No |
 | Multi-wiki isolation | **Yes** | No | No | No |
 | Web search → wiki pages | **Yes** | No | No | No |
@@ -196,7 +196,7 @@ For full architecture details, data models, API reference, and plugin developmen
 - **Audit CLI** — `synthadoc audit history / cost / events` query `audit.db` without needing direct access; `--analyse-only` flag previews ingest analysis before writing pages
 - **3-layer cache** — embedding cache, LLM response cache, provider prompt cache
 - **Cost guards** — configurable soft-warn and hard-gate USD thresholds
-- **Hook system** — shell commands on 8 lifecycle events; blocking or background
+- **Hook system** — shell commands on `on_ingest_complete` and `on_lint_complete` lifecycle events; blocking or background; context passed as JSON on stdin
 - **Job queue** — SQLite-backed, persistent, retry with exponential backoff; non-retryable errors (`failed`) distinguished from exhausted-retry errors (`dead`)
 - **Startup banner** — ASCII logo with version, port, wiki, and PID on `synthadoc serve`; plain-text version served at `GET /`
 - **Multi-wiki** — unlimited isolated wikis, each on its own port
