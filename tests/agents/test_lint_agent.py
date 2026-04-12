@@ -37,3 +37,18 @@ async def test_lint_finds_orphans(tmp_wiki):
     agent = LintAgent(provider=AsyncMock(), store=store, log_writer=log)
     report = await agent.lint(scope="orphans")
     assert "orphan" in report.orphan_slugs
+
+
+@pytest.mark.asyncio
+async def test_lint_aliased_wikilink_not_orphan(tmp_wiki):
+    """[[slug|Display Text]] aliases should not cause the target to be flagged as orphan."""
+    store = WikiStorage(tmp_wiki / "wiki")
+    store.write_page("hub", WikiPage(title="Hub", tags=[],
+        content="See [[quantum-computing|Quantum Computing]] for details.",
+        status="active", confidence="medium", sources=[]))
+    store.write_page("quantum-computing", WikiPage(title="Quantum Computing", tags=[],
+        content="content", status="active", confidence="medium", sources=[]))
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    agent = LintAgent(provider=AsyncMock(), store=store, log_writer=log)
+    report = await agent.lint(scope="orphans")
+    assert "quantum-computing" not in report.orphan_slugs

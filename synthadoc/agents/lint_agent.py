@@ -35,7 +35,9 @@ class LintAgent:
             page = self._store.read_page(slug)
             if page:
                 for link in _WIKILINK_RE.findall(page.content):
-                    referenced.add(link.lower().replace(" ", "-"))
+                    # Strip alias (e.g. [[slug|Display Text]]) before normalising
+                    slug_part = link.split("|")[0].strip()
+                    referenced.add(slug_part.lower().replace(" ", "-"))
         return [s for s in slugs if s not in referenced and s not in ("index", "log")]
 
     async def lint(self, scope: str = "all", auto_resolve: bool = False) -> LintReport:
