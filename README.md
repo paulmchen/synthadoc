@@ -495,13 +495,6 @@ synthadoc audit cost -w my-wiki
 synthadoc audit events -w my-wiki
 ```
 
-### Searching without LLM
-
-```bash
-# BM25 keyword search — instant, zero tokens
-synthadoc search "Turing machine" -w my-wiki
-```
-
 ### Scheduling recurring jobs
 
 ```bash

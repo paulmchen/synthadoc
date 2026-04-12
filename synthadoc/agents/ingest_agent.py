@@ -265,6 +265,13 @@ class IngestAgent:
                     result.skip_reason = "already ingested"
                     return result
 
+        # For URL / non-file sources p, src_hash, src_size are not set above.
+        # Provide safe defaults so the audit call at the end always succeeds.
+        if not self._needs_file_check(source):
+            p = Path(source.split("?")[0].rstrip("/").split("/")[-1] or "url-source")
+            src_hash = hashlib.sha256(source.encode()).hexdigest()
+            src_size = len(source.encode())
+
         extracted = await self._skill_agent.extract(source)
 
         # Web search fan-out: return child sources; orchestrator enqueues them as jobs
