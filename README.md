@@ -193,7 +193,7 @@ For full architecture details, data models, API reference, and plugin developmen
 - **Two-step ingest** — `_analyse()` caches entity extraction + summary; decision prompt uses summary instead of full text; reduces cost on large documents
 - **purpose.md scope filtering** — define what belongs in your wiki; the LLM skips out-of-scope sources cleanly
 - **overview.md auto-summary** — 2-paragraph wiki overview regenerated automatically after every ingest that creates or updates pages
-- **Audit CLI** — `synthadoc audit history / cost / events` query `audit.db` without needing `sqlite3`; `--analyse-only` flag previews ingest analysis before writing pages
+- **Audit CLI** — `synthadoc audit history / cost / events` query `audit.db` without needing direct access; `--analyse-only` flag previews ingest analysis before writing pages
 - **3-layer cache** — embedding cache, LLM response cache, provider prompt cache
 - **Cost guards** — configurable soft-warn and hard-gate USD thresholds
 - **Hook system** — shell commands on 8 lifecycle events; blocking or background
