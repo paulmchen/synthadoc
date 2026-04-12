@@ -120,13 +120,16 @@ def serve_cmd(
 
     _check_network(provider)
 
+    from synthadoc.cli.logo import print_banner
+    mode = "MCP (stdio)" if mcp_only else "HTTP" if http_only else "HTTP + MCP"
+    print_banner(port=effective_port, wiki=str(root), mode=mode)
+
     if not mcp_only:
         from synthadoc.integration.http_server import create_app
         http_app = create_app(wiki_root=root)
-        typer.echo(f"HTTP API running on http://127.0.0.1:{effective_port}")
-        uvicorn.run(http_app, host="127.0.0.1", port=effective_port)
+        uvicorn.run(http_app, host="127.0.0.1", port=effective_port,
+                    log_level="warning")
     else:
         from synthadoc.integration.mcp_server import create_mcp_server
         mcp = create_mcp_server(wiki_root=root)
-        typer.echo("MCP server running (stdio transport)")
         mcp.run()

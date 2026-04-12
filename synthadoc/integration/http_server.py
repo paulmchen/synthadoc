@@ -97,6 +97,25 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
         allow_headers=["Content-Type"],
     )
 
+    @app.get("/", response_class=Response)
+    async def index():
+        from synthadoc.cli.logo import banner_text
+        import synthadoc
+        text = banner_text(version=synthadoc.__version__)
+        text += (
+            f"  Endpoints\n"
+            f"  ---------------------------------\n"
+            f"  GET  /health          liveness probe\n"
+            f"  GET  /status          wiki stats\n"
+            f"  POST /jobs/ingest     enqueue ingest job\n"
+            f"  POST /jobs/lint       enqueue lint job\n"
+            f"  GET  /jobs            list jobs\n"
+            f"  GET  /jobs/{{id}}       job detail\n"
+            f"  POST /query           query the wiki\n"
+            f"  GET  /lint/report     orphans + contradictions\n"
+        )
+        return Response(content=text, media_type="text/plain; charset=utf-8")
+
     @app.get("/health")
     async def health():
         return {"status": "ok"}
