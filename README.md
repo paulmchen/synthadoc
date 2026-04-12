@@ -485,15 +485,18 @@ synthadoc ingest report.pdf --analyse-only -w my-wiki
 ### Audit trail
 
 ```bash
-# Last 20 ingest records (source, pages, tokens)
-synthadoc audit history -w my-wiki
+# Ingest history: timestamp, source file, wiki page, tokens, cost
+synthadoc audit history -w my-wiki            # last 50 records
+synthadoc audit history -n 100 -w my-wiki     # last 100 records
+synthadoc audit history --json -w my-wiki     # raw JSON for scripting
 
-# Token usage summary for last 30 days (or --days N)
-# Note: cost column is always $0.00 — per-model pricing not yet implemented
-synthadoc audit cost -w my-wiki
+# Token usage: totals + daily breakdown (cost always $0.0000 in v0.1)
+synthadoc audit cost -w my-wiki               # last 30 days
+synthadoc audit cost --days 7 -w my-wiki      # last 7 days
 
 # Audit events: contradictions found, auto-resolutions, cost gate triggers
-synthadoc audit events -w my-wiki
+synthadoc audit events -w my-wiki             # last 100 events
+synthadoc audit events --json -w my-wiki      # raw JSON for scripting
 ```
 
 ### Scheduling recurring jobs
@@ -574,18 +577,19 @@ tail -f .synthadoc/logs/synthadoc.log | jq 'select(.job_id == "abc123")'
 ### Audit trail
 
 ```bash
-# Ingest history (no sqlite3 needed)
-synthadoc audit history -w my-wiki          # last 20 records
-synthadoc audit cost -w my-wiki             # token usage summary, last 30 days (cost always $0.00 — pricing not yet implemented)
-synthadoc audit cost --days 7 -w my-wiki    # weekly view
-synthadoc audit events -w my-wiki           # contradictions, resolutions, cost gates
+synthadoc audit history -w my-wiki          # table: timestamp, source file, wiki page, tokens, cost
+synthadoc audit history -n 100 -w my-wiki   # last 100 records (default 50)
+synthadoc audit history --json -w my-wiki   # raw JSON for scripting
 
-# Direct sqlite3 queries for custom analysis
-sqlite3 .synthadoc/audit.db \
-  "SELECT source, hash, cost_usd, ingested_at FROM ingest_log ORDER BY ingested_at DESC LIMIT 20"
-sqlite3 .synthadoc/audit.db \
-  "SELECT SUM(cost_usd) FROM ingest_log"
+synthadoc audit cost -w my-wiki             # total tokens + daily breakdown, last 30 days
+synthadoc audit cost --days 7 -w my-wiki    # weekly view
+synthadoc audit cost --json -w my-wiki      # {total_tokens, total_cost_usd, daily: [...]}
+
+synthadoc audit events -w my-wiki           # table: timestamp, job_id, event type, metadata
+synthadoc audit events --json -w my-wiki    # raw JSON
 ```
+
+> **Note:** `cost_usd` is always `$0.0000` in v0.1 — per-model pricing is not yet implemented. Token counts are accurate.
 
 ### Cache management
 
