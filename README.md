@@ -133,49 +133,40 @@ RAG chunks documents and retrieves them at query time. Synthadoc **compiles** kn
 
 ```mermaid
 flowchart TB
-    subgraph ACCESS["  Access Layer  "]
+    subgraph ACCESS["Access Layer  ·  -w flag selects the target wiki"]
         direction LR
-        CLI["CLI\nsynthadoc …"]
-        OBS["Obsidian Plugin"]
-        MCP["Claude MCP\n⚠ optional"]
+        CLI["synthadoc CLI\n(thin HTTP client)"]
+        OBS["Obsidian Plugin\n(TypeScript)"]
+        MCPC["Claude Desktop\n(MCP · optional)"]
     end
 
-    subgraph ENGINE["  Synthadoc Engine  ·  localhost:PORT  "]
+    subgraph MULTI["One isolated process per wiki domain  ·  each on its own port"]
         direction LR
-        API["HTTP REST API"]
-        QUEUE["Job Queue\nSQLite · asyncio · auto-retry"]
-        API --> QUEUE
+        subgraph WA["wiki-A  ·  port 7070"]
+            EA["HTTP Server + Job Worker\nOrchestrator"]
+            SA[("wiki-A/\nwiki/*.md · audit.db\njobs.db · cache.db")]
+        end
+        subgraph WB["wiki-B  ·  port 7071"]
+            EB["HTTP Server + Job Worker\nOrchestrator"]
+            SB[("wiki-B/\nwiki/*.md · audit.db\njobs.db · cache.db")]
+        end
+        MORE["  ···  \nn wikis"]
     end
 
-    subgraph PROC["  Processing Agents  "]
+    subgraph SHARED["Shared Engine Components  ·  loaded into every instance"]
         direction LR
-        IA["IngestAgent\n+ SkillAgent\nPDF · URL · Web · Image · DOCX · …"]
-        QA["QueryAgent\nBM25 + LLM synthesis"]
-        LA["LintAgent\nContradiction · Orphan detection"]
+        AGENTS["Agents\nIngest · Query · Lint"]
+        SKILLS["Skills\npdf · url · docx · xlsx · image · web_search · custom"]
+        PROVIDERS["Providers\nAnthropic · OpenAI · Gemini · Groq · Ollama"]
+        OPS["Hooks · Scheduler\nAudit · OpenTelemetry"]
     end
 
-    subgraph OPS["  Admin & Ops  "]
-        direction LR
-        ADMIN["Health check · Install · Uninstall\nAudit · Cost report · Jobs monitor · Cache"]
-    end
-
-    subgraph PROV["  LLM Providers  "]
-        LLM["Anthropic  ·  OpenAI  ·  Gemini  ·  Groq  ·  Ollama"]
-    end
-
-    subgraph STORE["  Storage  "]
-        DB["wiki/*.md  ·  embeddings.db  ·  cache.db  ·  audit.db  ·  jobs.db"]
-    end
-
-    CLI -- HTTP --> API
-    OBS -- HTTP --> API
-    MCP -. "stdio MCP" .-> ENGINE
-
-    QUEUE --> IA & QA & LA
-
-    IA & QA & LA --> PROV
-    IA & QA & LA --> STORE
-    ADMIN -. "HTTP / direct" .-> STORE
+    CLI -- "-w selects wiki" --> MULTI
+    OBS --> MULTI
+    MCPC -. "MCP stdio (optional)" .-> MULTI
+    EA --- SA
+    EB --- SB
+    MULTI --> SHARED
 ```
 
 For full architecture details, data models, API reference, and plugin development guide see **[docs/design.md](docs/design.md)**.

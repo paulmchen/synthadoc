@@ -129,59 +129,42 @@ The filename without extension, derived from the page title. ASCII-safe and CJK-
 
 ```mermaid
 flowchart TB
-    subgraph ACCESS["Access Layer"]
+    subgraph ACCESS["Access Layer  ·  -w flag selects the target wiki"]
+        direction LR
         CLI["synthadoc CLI\n(thin HTTP client)"]
         OBS["Obsidian Plugin\n(TypeScript)"]
-        MCP_C["Claude Desktop\n(MCP client — optional)"]
+        MCPC["Claude Desktop\n(MCP client — optional)"]
     end
 
-    subgraph INTEGRATION["Integration Layer  ·  http_server.py  ·  mcp_server.py"]
-        HTTP["Synthadoc Engine\nHTTP REST · localhost:PORT\nCORS · 10 MB limit · 60s timeout\nBackground job worker (2s poll)"]
-        MCP["MCP Server\nstdio transport\n6 tools"]
+    subgraph MULTI["One isolated process per wiki domain  ·  each on its own port"]
+        direction LR
+        subgraph WA["wiki-A  ·  port 7070"]
+            EA["HTTP REST · Job Worker\nOrchestrator\nCORS · 10 MB · 60s timeout"]
+            SA[("wiki-A/\nwiki/*.md · audit.db\njobs.db · cache.db · embeddings.db")]
+        end
+        subgraph WB["wiki-B  ·  port 7071"]
+            EB["HTTP REST · Job Worker\nOrchestrator\nCORS · 10 MB · 60s timeout"]
+            SB[("wiki-B/\nwiki/*.md · audit.db\njobs.db · cache.db · embeddings.db")]
+        end
+        MORE["  ···  \nn wikis"]
+        MCP["MCP Server\nstdio · 6 tools\n(one per wiki · optional)"]
     end
 
-    subgraph CORE["Core Layer"]
-        ORCH["Orchestrator"]
-        AGENTS["IngestAgent\nQueryAgent\nLintAgent"]
-        INFRA["CostGuard\nJobQueue (SQLite)\nCache (3-layer)\nHooks dispatcher\nScheduler"]
+    subgraph SHARED["Shared Engine Components  ·  loaded into every instance"]
+        direction LR
+        AGENTS["Agents\nIngest · Query · Lint"]
+        SKILLS["Skills (lazy-loaded)\npdf · url · markdown · docx\nxlsx · image · web_search · custom"]
+        PROVIDERS["Providers\nAnthropic · OpenAI · Gemini\nGroq · Ollama · Custom"]
+        INFRA["CostGuard · Cache (3-layer)\nJobQueue · Hooks dispatcher"]
+        OPS["Admin & Ops\nScheduler · Audit · OpenTelemetry"]
     end
 
-    subgraph SKILLS["Skill Layer  ·  lazy-loaded"]
-        SA["SkillAgent"]
-        BUILTIN["pdf · url · markdown\ndocx · xlsx · image\nweb_search"]
-        CUSTOM["Custom skills\nwiki/skills/\n~/.synthadoc/skills/"]
-    end
-
-    subgraph PROVIDERS["Provider Layer"]
-        P["Anthropic · OpenAI · Gemini\nGroq · Ollama · Custom"]
-    end
-
-    subgraph STORAGE["Storage Layer"]
-        S["wiki/*.md · audit.db · jobs.db\ncache.db · embeddings.db · logs/"]
-    end
-
-    subgraph ADMIN["Admin & Ops"]
-        OT["OpenTelemetry\ntraces.jsonl / OTLP"]
-        SCHED["OS Scheduler\ncrontab / schtasks"]
-        HOOKS["Hook Scripts\nhooks/*.py"]
-    end
-
-    CLI -- "HTTP REST" --> HTTP
-    OBS -- "HTTP REST" --> HTTP
-    MCP_C -. "MCP stdio (optional)" .-> MCP
-    HTTP --> ORCH
-    MCP --> ORCH
-    ORCH --> AGENTS
-    ORCH --> INFRA
-    AGENTS --> SA
-    SA --> BUILTIN
-    SA --> CUSTOM
-    AGENTS --> P
-    AGENTS --> S
-    INFRA --> S
-    INFRA --> HOOKS
-    INFRA --> SCHED
-    CORE --> OT
+    CLI -- "-w selects wiki" --> MULTI
+    OBS --> MULTI
+    MCPC -. "MCP stdio (optional)" .-> MCP
+    EA --- SA
+    EB --- SB
+    MULTI --> SHARED
 ```
 
 ### Request lifecycle (ingest via CLI)
