@@ -44,6 +44,10 @@ async def test_web_search_extract_returns_child_sources(monkeypatch):
     ("find on the web: AGPL licence",        "AGPL licence"),
     ("web search: neural networks",          "neural networks"),
     ("browse: Rust async runtime",           "Rust async runtime"),
+    # UTF-8 / CJK queries — intent prefix is English, query can be any language
+    ("search for: 量子计算",                  "量子计算"),
+    ("look up: 德尼斯·里奇",                  "德尼斯·里奇"),
+    ("browse: Rustの非同期ランタイム",         "Rustの非同期ランタイム"),
 ])
 async def test_web_search_extracts_query_from_intent(source, expected_query, monkeypatch):
     """Intent prefix is stripped regardless of colon or capitalisation."""
