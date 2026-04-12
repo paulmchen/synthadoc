@@ -268,11 +268,12 @@ before Step 10 if you plan to use that feature.
 
 Use a **second terminal** for all commands below. All plugin commands are now active.
 
-> **Ribbon icon:** The Synthadoc book icon is in the narrow vertical strip on the far left
-> edge of the window. It may be near the bottom if other plugins have added icons above it —
-> hover over the icons to find the one with the **"Synthadoc status"** tooltip. Clicking it
-> shows the live page count. The ribbon icon is optional; all core functionality is in the
-> command palette (`Ctrl/Cmd+P`).
+> **Obsidian ribbon:** The ribbon is the narrow vertical icon strip on the far left edge of
+> the Obsidian window. Once the Synthadoc plugin is enabled, the Synthadoc book icon
+> (![ribbon icon](synthadoc-ribbon-icon.png)) appears there. It may be near the bottom if
+> other plugins have added icons above it — hover to find the one with the **"Synthadoc
+> status"** tooltip. Clicking it shows the live wiki page count. This is a convenience
+> shortcut; all Synthadoc functionality is also available via the command palette (`Ctrl/Cmd+P`).
 
 **Plugin commands available from this point on** (`Ctrl/Cmd+P` in Obsidian):
 
