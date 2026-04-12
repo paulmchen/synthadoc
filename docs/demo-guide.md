@@ -336,6 +336,8 @@ Both methods enqueue one job per file. Watch all jobs at once:
 synthadoc jobs list -w history-of-computing
 ```
 
+![synthadoc jobs list output](synthadoc-jobs-list.png)
+
 Wait until all five show `completed`. Filter by status:
 
 ```
