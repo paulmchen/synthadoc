@@ -524,6 +524,11 @@ synthadoc ingest --force report.pdf -w my-wiki
 # Prefix the query with any recognised intent: "search for:", "find on the web:",
 # "look up:", or "web search:"  (prefix is stripped before the search is sent)
 # Requires TAVILY_API_KEY to be set.
+#
+# Note: web search content is NOT saved to raw_sources/. The flow is direct:
+#   query → Tavily → URLs → each URL fetched → wiki pages written
+# raw_sources/ is for user-provided local files (PDF, DOCX, PPTX, etc.) only.
+# The wiki pages themselves are the persistent output of a web search.
 synthadoc ingest "search for: Bank of Canada interest rate decisions 2024" -w my-wiki
 synthadoc ingest "find on the web: unemployment trends Ontario Q1 2025" -w my-wiki
 
