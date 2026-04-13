@@ -2,7 +2,9 @@
 # Copyright (C) 2026 Paul Chen / axoviq.com
 import httpx
 from bs4 import BeautifulSoup
+from urllib.parse import urlparse
 from synthadoc.skills.base import BaseSkill, ExtractedContent, SkillMeta
+from synthadoc.errors import DomainBlockedException
 
 
 _HEADERS = {
@@ -13,6 +15,9 @@ _HEADERS = {
     ),
 }
 
+# HTTP status codes that indicate bot/access blocking (not transient errors)
+_BLOCKED_STATUSES = {403, 401, 429}
+
 
 class UrlSkill(BaseSkill):
     meta = SkillMeta(name="url", description="Fetch and extract text from web URLs",
@@ -21,10 +26,10 @@ class UrlSkill(BaseSkill):
     async def extract(self, source: str) -> ExtractedContent:
         async with httpx.AsyncClient(follow_redirects=True, timeout=30, headers=_HEADERS) as client:
             resp = await client.get(source)
-            if resp.status_code == 403:
-                raise PermissionError(
-                    f"[ERR-SKILL-003] URL blocked (403 Forbidden): {source} — "
-                    "site requires a browser or login. Try a different source."
+            if resp.status_code in _BLOCKED_STATUSES:
+                domain = urlparse(source).hostname or source
+                raise DomainBlockedException(
+                    domain=domain, url=source, status_code=resp.status_code
                 )
             resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")

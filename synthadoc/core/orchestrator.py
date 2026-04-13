@@ -95,8 +95,47 @@ class Orchestrator:
             # Skill is a known stub — fail immediately, no retry
             await self._queue.fail_permanent(job_id, str(e))
         except Exception as e:
-            await self._queue.fail(job_id, str(e))
-            raise
+            from synthadoc.errors import DomainBlockedException
+            if isinstance(e, DomainBlockedException):
+                await self._auto_block_domain(e)
+                await self._queue.skip(job_id, str(e))
+            else:
+                await self._queue.fail(job_id, str(e))
+                raise
+
+    async def _auto_block_domain(self, exc: "DomainBlockedException") -> None:
+        """Persist a newly discovered blocked domain and record an audit event."""
+        import json
+        import logging
+        from datetime import datetime, timezone
+
+        blocked_path = self._root / ".synthadoc" / "blocked_domains.json"
+        try:
+            existing: list = json.loads(blocked_path.read_text(encoding="utf-8")) \
+                if blocked_path.exists() else []
+            if exc.domain not in existing:
+                existing.append(exc.domain)
+                blocked_path.write_text(
+                    json.dumps(existing, indent=2), encoding="utf-8"
+                )
+        except Exception as write_err:
+            logging.getLogger(__name__).warning(
+                "Could not persist blocked domain %s: %s", exc.domain, write_err
+            )
+
+        try:
+            await self._audit.record_audit_event(
+                job_id="system",
+                event="domain_auto_blocked",
+                metadata={
+                    "domain": exc.domain,
+                    "url": exc.url,
+                    "status_code": exc.status_code,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+        except Exception:
+            pass
 
     async def query(self, question: str):
         from synthadoc.agents.query_agent import QueryAgent

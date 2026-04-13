@@ -91,8 +91,12 @@ async def _worker_loop(orch) -> None:
 
 
 def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAPI:
+    import os
     from synthadoc.config import load_config
     from synthadoc.core.orchestrator import Orchestrator
+
+    # Expose wiki root so skills (e.g. web_search) can load the dynamic blocked-domains list
+    os.environ["SYNTHADOC_WIKI_ROOT"] = str(wiki_root)
 
     cfg = load_config(project_config=wiki_root / ".synthadoc" / "config.toml")
 

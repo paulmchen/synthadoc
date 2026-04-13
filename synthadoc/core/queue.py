@@ -15,6 +15,7 @@ class JobStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     DEAD = "dead"
+    SKIPPED = "skipped"   # deliberately not retried (e.g. domain auto-blocked)
 
 
 @dataclass
@@ -112,6 +113,15 @@ class JobQueue:
             await db.execute(
                 "UPDATE jobs SET status='failed',error=? WHERE id=?",
                 (error, job_id),
+            )
+            await db.commit()
+
+    async def skip(self, job_id: str, reason: str) -> None:
+        """Mark a job as skipped — deliberately not retried (e.g. domain auto-blocked)."""
+        async with aiosqlite.connect(self._path) as db:
+            await db.execute(
+                "UPDATE jobs SET status='skipped',error=? WHERE id=?",
+                (reason, job_id),
             )
             await db.commit()
 
