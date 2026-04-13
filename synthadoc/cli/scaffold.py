@@ -57,6 +57,7 @@ def _run_scaffold(dest: Path, domain: str, protected_slugs: Optional[list[str]] 
     except Exception as exc:
         import logging
         logging.getLogger(__name__).warning("Scaffold LLM call failed: %s", exc)
+        typer.echo(f"Error: LLM scaffold failed — {exc}", err=True)
         return None
 
 

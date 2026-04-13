@@ -140,7 +140,7 @@ class ScaffoldAgent:
             desc = cat.get("description", "")
             lines.append(f"\n## {heading}")
             if desc:
-                lines.append(f"<!-- {desc} -->")
+                lines.append(f"*{desc}*\n")
         lines.append("")
         return "\n".join(lines)
 

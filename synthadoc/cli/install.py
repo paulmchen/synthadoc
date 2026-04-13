@@ -60,6 +60,7 @@ def _run_scaffold(dest: Path, domain: str):
     except Exception as exc:
         import logging
         logging.getLogger(__name__).warning("Scaffold LLM call failed: %s", exc)
+        typer.echo(f"  Warning: LLM scaffold failed ({exc})", err=True)
         return None
 
 
@@ -165,11 +166,12 @@ def install_cmd(
                 1,
             )
             dashboard_path.write_text(dash, encoding="utf-8", newline="\n")
-            typer.echo("  Scaffold complete.")
+            typer.echo("  Scaffold complete — domain-specific content generated.")
         else:
             typer.echo(
-                f"  Tip: Run synthadoc scaffold -w {name} after setting your LLM API key"
-                " to generate a domain-specific scaffold"
+                "  Scaffold skipped — static templates written.\n"
+                f"  Run 'synthadoc scaffold -w {name}' after setting your LLM API key"
+                " to generate domain-specific content."
             )
 
     registry = _read_registry()
