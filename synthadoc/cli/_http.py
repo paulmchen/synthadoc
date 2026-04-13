@@ -20,7 +20,7 @@ def server_url(wiki: str) -> str:
         E.cli_error(
             E.WIKI_NOT_REGISTERED,
             f"Wiki '{wiki}' is not installed.",
-            "Run 'synthadoc list' to see installed wikis.",
+            f"Make sure wiki '{wiki}' was installed with 'synthadoc install'.",
         )
     cfg = load_config(project_config=config_path)
     port = cfg.server.port
