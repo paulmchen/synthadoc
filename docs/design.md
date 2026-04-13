@@ -1,6 +1,6 @@
 # Synthadoc — Design Document
 
-**Version:** 0.1 (updated 2026-04-11)  
+**Version:** 0.1 (updated 2026-04-12)  
 **Audience:** Product users who want to understand how the system works; developers adding features, skills, and plugins.
 
 ---
@@ -636,6 +636,37 @@ Registry stored at `~/.synthadoc/wikis.json`:
 }
 ```
 
+### Error codes
+
+Every user-facing error carries a stable code in the format `[ERR-<CATEGORY>-<NNN>]`. Codes are printed to stderr and embedded in job `error` fields, making them greppable in logs.
+
+**File:** `synthadoc/errors.py`
+
+| Code | Meaning |
+|------|---------|
+| `ERR-SRV-001` | No server listening for the requested wiki |
+| `ERR-SRV-002` | Port already bound by another process |
+| `ERR-SRV-003` | Server returned a 4xx/5xx HTTP response |
+| `ERR-SRV-004` | Background server process exited immediately |
+| `ERR-WIKI-001` | Wiki root directory does not exist |
+| `ERR-WIKI-002` | Directory exists but missing `wiki/` subfolder |
+| `ERR-WIKI-003` | `wiki/` directory is not writable |
+| `ERR-WIKI-004` | Install target already exists on disk |
+| `ERR-WIKI-005` | Unknown demo template name |
+| `ERR-WIKI-006` | Name not in `~/.synthadoc/wikis.json` |
+| `ERR-CFG-001` | Required API key environment variable not set |
+| `ERR-CFG-002` | Provider name not recognised |
+| `ERR-SKILL-001` | No skill matched the source string |
+| `ERR-SKILL-002` | Required pip package for skill not installed |
+| `ERR-SKILL-003` | URL returned 403 (bot/paywall protection) |
+| `ERR-SKILL-004` | `TAVILY_API_KEY` not set for web search |
+| `ERR-INGEST-001` | Source file or directory not found |
+| `ERR-INGEST-002` | Source file exists but is empty |
+| `ERR-INGEST-003` | `--batch` target is not a directory |
+| `ERR-JOB-001` | Job ID does not exist in `jobs.db` |
+
+**CLI errors** go through the `cli_error(code, message, hint)` helper, which prints `[ERR-XXX-NNN] message` to stderr with an optional hint line and exits with code 1. **Agent and skill errors** embed the code directly in the exception message string so it surfaces in the job `error` field.
+
 ---
 
 ## 11. Configuration
@@ -1222,3 +1253,7 @@ Five providers supported: `anthropic`, `openai`, `gemini`, `groq`, `ollama`. Gem
 ### Web search intent matching
 
 All five intent phrases (`search for`, `find on the web`, `look up`, `web search`, `browse`) are now matched by a single compiled regex (`_INTENT_RE`) that strips the prefix from the query sent to Tavily. The colon after the phrase is optional — `search for quantum computing` and `search for: quantum computing` are both handled correctly.
+
+### Error code system
+
+Every user-facing error now carries a stable code in the format `[ERR-<CATEGORY>-<NNN>]` (e.g. `[ERR-SRV-001]`). The central registry lives in `synthadoc/errors.py`. CLI errors go through the `cli_error()` helper; agent and skill errors embed the code in the exception message so it surfaces in the job `error` field. See [Section 10 — CLI](#10-cli) for the full code table.
