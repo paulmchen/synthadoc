@@ -28,20 +28,36 @@ Obsidian is free for personal use. Download it from **obsidian.md**.
 ### What does Synthadoc add?
 
 Obsidian is a writing and organisation tool — you create and edit notes manually.
-synthadoc is a **compilation engine**: it reads raw source documents (PDFs, spreadsheets,
+Synthadoc is a **compilation engine**: it reads raw source documents (PDFs, spreadsheets,
 images, web pages) and uses an LLM to synthesise, cross-reference, and maintain a
 structured wiki automatically.
 
+But Synthadoc goes further than compilation. It also **understands your domain** and
+configures itself around it — so you spend your time building knowledge, not managing
+the tool.
 
-| Without Synthadoc                  | With Synthadoc                                                     |
-| ---------------------------------- | ------------------------------------------------------------------ |
-| You write each note by hand        | LLM synthesises notes from source documents                        |
-| You manage links between notes     | Cross-references are inserted automatically                        |
-| You notice contradictions manually | Ingest pipeline flags conflicting content (`status: contradicted`) |
-| You track orphan pages by eye      | Dashboard and CLI report orphans with fix suggestions              |
-| Notes are static once written      | Wiki compiles incrementally as new sources arrive                  |
+| Without Synthadoc                        | With Synthadoc                                                                         |
+| ---------------------------------------- | -------------------------------------------------------------------------------------- |
+| You write each note by hand              | LLM synthesises notes from source documents                                            |
+| You design the category structure        | Install generates domain-specific index categories, scope rules, and agent guidelines  |
+| You manage links between notes           | Cross-references are inserted automatically                                            |
+| You notice contradictions manually       | Ingest pipeline flags conflicting content (`status: contradicted`)                     |
+| You track orphan pages by eye            | Dashboard and CLI report orphans with fix suggestions                                  |
+| Notes are static once written            | Wiki compiles incrementally as new sources arrive                                      |
+| You rewrite instructions as domain grows | `synthadoc scaffold` refreshes index, guidelines, and scope from the current wiki state |
+| You write a wiki overview by hand        | `overview.md` is regenerated automatically after every ingest                         |
 
-synthadoc writes into the same Markdown files Obsidian reads. No special format — every
+**Domain-aware from day one.** When you create a wiki with `synthadoc install --domain "Machine Learning"`,
+the LLM generates a domain-specific index with 5–8 relevant category headings, ingest and query
+guidelines tailored to that field, and a scope definition that tells the engine what to include
+and what to skip. No manual setup required.
+
+**Self-improving over time.** As your wiki grows, run `synthadoc scaffold -w <wiki>` to
+refresh the index structure, agent guidelines, and purpose definition based on what the wiki
+has become. Pages already linked from the index are detected automatically and protected —
+the scaffold adapts around your existing knowledge, never discards it.
+
+Synthadoc writes into the same Markdown files Obsidian reads. No special format — every
 synthadoc wiki page is a valid Obsidian note.
 
 ---
