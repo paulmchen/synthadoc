@@ -9,6 +9,7 @@ import typer
 
 from synthadoc.config import load_config
 from synthadoc.cli.install import resolve_wiki_path
+from synthadoc import errors as E
 
 
 def server_url(wiki: str) -> str:
@@ -28,8 +29,8 @@ def get(wiki: str, path: str, **params) -> dict:
     except httpx.ConnectError:
         _no_server(wiki)
     except httpx.HTTPStatusError as e:
-        typer.echo(f"Server error: {e.response.status_code} {e.response.text}", err=True)
-        raise typer.Exit(1)
+        E.cli_error(E.SRV_HTTP_ERROR,
+                    f"Server returned {e.response.status_code}: {e.response.text.strip()}")
 
 
 def post(wiki: str, path: str, body: dict) -> dict:
@@ -41,8 +42,8 @@ def post(wiki: str, path: str, body: dict) -> dict:
     except httpx.ConnectError:
         _no_server(wiki)
     except httpx.HTTPStatusError as e:
-        typer.echo(f"Server error: {e.response.status_code} {e.response.text}", err=True)
-        raise typer.Exit(1)
+        E.cli_error(E.SRV_HTTP_ERROR,
+                    f"Server returned {e.response.status_code}: {e.response.text.strip()}")
 
 
 def delete(wiki: str, path: str) -> dict:
@@ -54,15 +55,13 @@ def delete(wiki: str, path: str) -> dict:
     except httpx.ConnectError:
         _no_server(wiki)
     except httpx.HTTPStatusError as e:
-        typer.echo(f"Server error: {e.response.status_code} {e.response.text}", err=True)
-        raise typer.Exit(1)
+        E.cli_error(E.SRV_HTTP_ERROR,
+                    f"Server returned {e.response.status_code}: {e.response.text.strip()}")
 
 
 def _no_server(wiki: str) -> None:
-    typer.echo(
-        f"\nError: no synthadoc server is running for wiki '{wiki}'.\n"
-        f"Start it with:\n"
-        f"  synthadoc serve -w {wiki}\n",
-        err=True,
+    E.cli_error(
+        E.SRV_NOT_RUNNING,
+        f"No synthadoc server is running for wiki '{wiki}'.",
+        f"Start it with:\n  synthadoc serve -w {wiki}",
     )
-    raise typer.Exit(1)

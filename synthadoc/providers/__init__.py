@@ -4,30 +4,24 @@ from __future__ import annotations
 import os
 from synthadoc.config import Config, AgentConfig
 from synthadoc.providers.base import LLMProvider
+from synthadoc import errors as E
 
 
 def _require_env(var: str, provider: str, url: str) -> str:
     value = os.environ.get(var, "").strip()
     if not value:
-        raise SystemExit(
-            f"\nError: {var} is not set.\n"
-            f"synthadoc uses {provider} as its LLM provider.\n\n"
+        E.cli_error(
+            E.CFG_MISSING_API_KEY,
+            f"{var} is not set. synthadoc uses {provider} as its LLM provider.",
             f"  1. Get your API key at: {url}\n"
             f"  2. Set it for the current session:\n"
-            f"       Linux / macOS (bash/zsh):\n"
-            f"         export {var}=<your-key>\n"
-            f"       Windows cmd.exe:\n"
-            f"         set {var}=<your-key>\n"
-            f"       Windows PowerShell:\n"
-            f"         $env:{var}='<your-key>'\n\n"
-            f"  3. To set it permanently (survives terminal restarts):\n"
+            f"       Linux / macOS:   export {var}=<your-key>\n"
+            f"       Windows cmd.exe: set {var}=<your-key>\n"
+            f"       PowerShell:      $env:{var}='<your-key>'\n"
+            f"  3. To persist across sessions:\n"
             f"       Linux / macOS:  echo 'export {var}=<your-key>' >> ~/.bashrc\n"
             f"       Windows:        [System.Environment]::SetEnvironmentVariable('{var}', '<your-key>', 'User')\n"
-            f"                       (run in PowerShell, then reopen all terminals)\n\n"
-            f"  Note: variables set in one terminal session (cmd.exe / PowerShell / bash)\n"
-            f"  are not visible in other sessions until set permanently.\n\n"
-            f"  Alternatively, set provider = \"ollama\" in .synthadoc/config.toml\n"
-            f"  to use a local model with no API key required.\n"
+            f"  Alternatively, set provider = \"ollama\" in .synthadoc/config.toml to use a local model.",
         )
     return value
 
@@ -63,4 +57,5 @@ def make_provider(agent_name: str, config: Config) -> LLMProvider:
     if name == "ollama":
         from synthadoc.providers.ollama import OllamaProvider
         return OllamaProvider(config=agent_cfg)
-    raise ValueError(f"Unknown provider: {name!r}")
+    E.cli_error(E.CFG_UNKNOWN_PROVIDER, f"Unknown provider: {name!r}",
+                "Supported providers: anthropic, openai, gemini, groq, ollama")

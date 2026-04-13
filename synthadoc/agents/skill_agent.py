@@ -18,7 +18,7 @@ _GLOBAL_SKILLS_DIR = Path.home() / ".synthadoc" / "skills"
 
 class SkillNotFoundError(Exception):
     def __init__(self, source: str, available: list[str] = None):
-        msg = f"No skill for: {source!r}."
+        msg = f"[SKILL-001] No skill matched: {source!r}."
         if available:
             msg += f" Available: {', '.join(sorted(available))}"
         super().__init__(msg)
@@ -148,7 +148,7 @@ class SkillAgent:
                 importlib.metadata.distribution(dist_name)
             except importlib.metadata.PackageNotFoundError:
                 raise ImportError(
-                    f"Skill '{meta.name}' requires '{pkg}' — run: pip install {pkg}"
+                    f"[SKILL-002] Skill '{meta.name}' requires '{pkg}' — run: pip install {pkg}"
                 )
 
     async def extract(self, source: str) -> ExtractedContent:

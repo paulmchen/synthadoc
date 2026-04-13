@@ -65,8 +65,8 @@ def lint_report(
 
     wiki_dir = resolve_wiki_path(wiki) / "wiki"
     if not wiki_dir.exists():
-        typer.echo(f"Error: wiki directory not found at {wiki_dir}", err=True)
-        raise typer.Exit(1)
+        from synthadoc import errors as E
+        E.cli_error(E.WIKI_NOT_FOUND, f"Wiki directory not found: {wiki_dir}")
 
     pages = list(wiki_dir.glob("*.md"))
 

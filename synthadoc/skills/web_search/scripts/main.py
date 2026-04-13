@@ -42,7 +42,7 @@ class WebSearchSkill(BaseSkill):
         api_key = os.environ.get("TAVILY_API_KEY", "").strip()
         if not api_key:
             raise EnvironmentError(
-                "TAVILY_API_KEY is not set. Get a free key at https://tavily.com "
+                "[SKILL-004] TAVILY_API_KEY is not set. Get a free key at https://tavily.com "
                 "and set it with: export TAVILY_API_KEY=<your-key>"
             )
         max_results = int(

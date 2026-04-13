@@ -27,13 +27,14 @@ def ingest_cmd(
     """Enqueue a source for ingestion. Requires synthadoc serve to be running."""
     sources = []
     if batch and source:
+        from synthadoc import errors as E
         p = Path(source)
         if not p.exists():
-            typer.echo(f"Error: directory not found: {p.resolve()}", err=True)
-            raise typer.Exit(1)
+            E.cli_error(E.INGEST_NOT_FOUND, f"Directory not found: {p.resolve()}")
         if not p.is_dir():
-            typer.echo(f"Error: {p.resolve()} is not a directory. Use --batch with a folder.", err=True)
-            raise typer.Exit(1)
+            E.cli_error(E.INGEST_NOT_DIR,
+                        f"{p.resolve()} is not a directory.",
+                        "Use --batch with a folder path.")
         sources = [str(f) for f in p.rglob("*") if f.is_file() and f.suffix in _SUPPORTED]
         if not sources:
             typer.echo(

@@ -11,6 +11,7 @@ from typing import Optional
 import typer
 
 from synthadoc.cli.main import app
+from synthadoc import errors as E
 
 _REGISTRY = Path.home() / ".synthadoc" / "wikis.json"
 
@@ -68,30 +69,28 @@ def install_cmd(
         if name in registry:
             entry = registry[name]
             kind = f"demo ({entry['demo']})" if entry.get("demo") else "wiki"
-            typer.echo(
-                f"'{name}' is already installed as a {kind} at {dest}.\n"
-                f"To reinstall, run: synthadoc uninstall {name}  then install again.",
-                err=True,
+            E.cli_error(
+                E.WIKI_ALREADY_EXISTS,
+                f"'{name}' is already installed as a {kind} at {dest}.",
+                f"To reinstall: synthadoc uninstall {name}  then install again.",
             )
         else:
-            typer.echo(
-                f"Error: '{name}' already exists at {dest} but is not tracked by synthadoc.\n"
+            E.cli_error(
+                E.WIKI_ALREADY_EXISTS,
+                f"'{name}' already exists at {dest} but is not tracked by synthadoc.",
                 f"It may be a leftover from a previous install. To remove it:\n"
                 f"  rm -rf \"{dest}\"    # Linux / macOS\n"
                 f"  Remove-Item -Recurse -Force \"{dest}\"    # Windows PowerShell\n"
                 f"Then run install again.",
-                err=True,
             )
-        raise typer.Exit(1)
 
     if demo:
         if name not in _DEMOS:
-            typer.echo(
-                f"Error: no demo template named '{name}'.\n"
+            E.cli_error(
+                E.WIKI_DEMO_NOT_FOUND,
+                f"No demo template named '{name}'.",
                 f"Available demos: {', '.join(_DEMOS)}",
-                err=True,
             )
-            raise typer.Exit(1)
         shutil.copytree(_DEMOS[name], dest)
         # Ensure operational directories exist — the demo template may not include
         # empty dirs (git doesn't track them) and shutil.copytree won't create them.
@@ -124,15 +123,14 @@ def uninstall_cmd(
     registry = _read_registry()
 
     if name not in registry:
-        typer.echo(
-            f"Wiki '{name}' is not in the registry — it may have already been uninstalled,\n"
-            f"or it was never installed via `synthadoc install`.\n"
+        E.cli_error(
+            E.WIKI_NOT_REGISTERED,
+            f"Wiki '{name}' is not in the registry.",
+            f"It may have already been uninstalled or was never installed via `synthadoc install`.\n"
             f"If the directory still exists, remove it manually:\n"
             f"  rm -rf <path-to-wiki>    # Linux / macOS\n"
             f"  Remove-Item -Recurse -Force <path-to-wiki>    # Windows PowerShell",
-            err=True,
         )
-        raise typer.Exit(1)
 
     dest = Path(registry[name]["path"])
 

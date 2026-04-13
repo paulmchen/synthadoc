@@ -14,6 +14,7 @@ import typer
 
 from synthadoc.cli.main import app
 from synthadoc.cli.install import resolve_wiki_path
+from synthadoc import errors as E
 
 # Internal env var set on the detached child to suppress duplicate banner output.
 _NO_BANNER_ENV = "_SYNTHADOC_NO_BANNER"
@@ -31,34 +32,37 @@ def _check_port(port: int) -> None:
         try:
             s.bind(("127.0.0.1", port))
         except OSError:
-            raise SystemExit(
-                f"\nError: port {port} is already in use.\n"
-                f"Another synthadoc server (or a different process) is listening on that port.\n\n"
+            E.cli_error(
+                E.SRV_PORT_IN_USE,
+                f"Port {port} is already in use.",
                 f"  Option 1 — Stop the existing process and retry.\n"
                 f"  Option 2 — Use a different port:\n"
                 f"               synthadoc serve -w <wiki> --port {port + 1}\n"
-                f"             (update the Server URL in the Obsidian plugin settings to match)\n"
+                f"             (update the Server URL in the Obsidian plugin settings to match)",
             )
 
 
 def _check_wiki(root: Path) -> None:
     """Fail early if the wiki directory is missing or incomplete."""
     if not root.exists():
-        raise SystemExit(
-            f"\nError: wiki directory not found: {root}\n"
+        E.cli_error(
+            E.WIKI_NOT_FOUND,
+            f"Wiki directory not found: {root}",
             f"Run 'synthadoc install <name> --target <dir>' to create a wiki,\n"
-            f"or check that the --wiki name matches a registered wiki.\n"
+            f"or check that the --wiki name matches a registered wiki.",
         )
     wiki_dir = root / "wiki"
     if not wiki_dir.is_dir():
-        raise SystemExit(
-            f"\nError: {root} does not look like a synthadoc wiki (missing wiki/ subfolder).\n"
-            f"If this is a new wiki, run 'synthadoc install' to set it up properly.\n"
+        E.cli_error(
+            E.WIKI_INVALID,
+            f"{root} does not look like a synthadoc wiki (missing wiki/ subfolder).",
+            "If this is a new wiki, run 'synthadoc install' to set it up properly.",
         )
     if not os.access(wiki_dir, os.W_OK):
-        raise SystemExit(
-            f"\nError: wiki directory is not writable: {wiki_dir}\n"
-            f"Check file permissions.\n"
+        E.cli_error(
+            E.WIKI_NOT_WRITABLE,
+            f"Wiki directory is not writable: {wiki_dir}",
+            "Check file permissions.",
         )
 
 
@@ -120,12 +124,11 @@ def _spawn_background(wiki_root: Path, effective_port: int, log_path: Path) -> N
     # Brief pause — detect immediate crashes before telling the user it worked.
     time.sleep(1.5)
     if proc.poll() is not None:
-        typer.echo(
-            f"\nError: background server exited immediately (code {proc.returncode}).\n"
+        E.cli_error(
+            E.SRV_BG_CRASH,
+            f"Background server exited immediately (code {proc.returncode}).",
             f"Check logs: {log_path}",
-            err=True,
         )
-        raise typer.Exit(1)
 
     typer.echo(
         f"\nServer running in background\n"

@@ -23,7 +23,7 @@ class UrlSkill(BaseSkill):
             resp = await client.get(source)
             if resp.status_code == 403:
                 raise PermissionError(
-                    f"URL blocked (403 Forbidden): {source} — "
+                    f"[SKILL-003] URL blocked (403 Forbidden): {source} — "
                     "site requires a browser or login. Try a different source."
                 )
             resp.raise_for_status()
