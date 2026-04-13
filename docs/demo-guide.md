@@ -21,7 +21,7 @@ You open a folder on your filesystem as a "vault" and Obsidian gives it a struct
 | **Command palette**   | `Ctrl/Cmd+P` runs any plugin command, including Synthadoc's ingest and query.                                                   |
 | **Community plugins** | Extend Obsidian with third-party functionality installed from within the app.                                                   |
 
-Obsidian is free for personal use. Download it from **obsidian.md**.
+Obsidian is free for personal use. Download it from **[obsidian.md](https://obsidian.md)**.
 
 ---
 
@@ -111,7 +111,7 @@ If any of these are missing, complete [README Steps 4–6](../README.md#step-4--
 
 ### Set up Obsidian
 
-**Obsidian must already be installed** — download from **obsidian.md** if not.
+**Obsidian must already be installed** — download from **[obsidian.md](https://obsidian.md)** if not.
 
 **Step 1 — Open the vault in Obsidian**
 
