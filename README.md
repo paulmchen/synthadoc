@@ -239,9 +239,21 @@ $env:TAVILY_API_KEY = "tvly-…"
 synthadoc --version
 ```
 
-### Step 6 — Start the Synthadoc engine
+### Step 6 — Install a wiki, then start the engine
 
-The engine must be running before you can ingest sources or run queries. Start it against the demo wiki (install it first if you haven't — see the Quick-Start Guide below):
+A wiki must be installed before the engine can serve it. The fastest way to get started is the **History of Computing** demo, which ships with 10 pre-built pages and sample source files — no LLM API key required to browse it.
+
+**Install the demo wiki:**
+
+```bash
+# Linux / macOS
+synthadoc install history-of-computing --target ~/wikis --demo
+
+# Windows (cmd.exe)
+synthadoc install history-of-computing --target %USERPROFILE%\wikis --demo
+```
+
+**Then start the engine:**
 
 ```bash
 # Foreground — keeps the terminal; logs stream to the console
@@ -251,7 +263,7 @@ synthadoc serve -w history-of-computing
 synthadoc serve -w history-of-computing --background
 ```
 
-The server binds to `http://127.0.0.1:7070` by default. Leave it running while you work — the Obsidian plugin, CLI ingest commands, and query commands all talk to it.
+The server binds to `http://127.0.0.1:7070` by default (port is set in `<wiki-root>/.synthadoc/config.toml`). Leave it running while you work — the Obsidian plugin, CLI ingest commands, and query commands all talk to it.
 
 To stop a background server:
 
@@ -269,17 +281,18 @@ The PID is printed when the background server starts and saved to `<wiki-root>/.
 
 ## Quick-Start Guide
 
-The fastest way to see Synthadoc in action is the **History of Computing** demo wiki. It includes 10 pre-built pages and four raw source files that demonstrate clean merge, contradiction, and orphan scenarios.
+The **History of Computing** demo includes 10 pre-built pages, raw source files covering clean-merge, contradiction, and orphan scenarios, and a full walkthrough of every Synthadoc feature.
 
-**Follow the full walkthrough: [docs/demo-guide.md](docs/demo-guide.md)**
+**Full step-by-step walkthrough: [docs/demo-guide.md](docs/demo-guide.md)**
 
 The guide covers:
-1. Installing the demo vault
-2. Opening it in Obsidian
-3. Installing the Obsidian and Dataview plugins
-4. Running batch ingest
-5. Resolving a contradiction (manual and LLM)
+1. Installing the demo vault and opening it in Obsidian
+2. Installing the Dataview and Synthadoc plugins
+3. Starting the engine and querying pre-built content
+4. Running batch ingest across all demo sources
+5. Resolving a contradiction (manual and LLM auto-resolve)
 6. Fixing an orphan page
+7. Web search ingestion, audit commands, hooks, and scheduling
 
 ---
 
