@@ -17,14 +17,18 @@ This wiki captures knowledge about: {domain}.
 - Always cite sources using `[[page-name]]` link syntax
 """
 
-_CONFIG_TOML = """# synthadoc per-project configuration
+_CONFIG_TOML = """\
+# synthadoc per-project configuration
+
+[wiki]
+domain = "{domain}"
 
 [server]
-port = 7070  # change this if running multiple wikis simultaneously
+port = {port}  # change this if running multiple wikis simultaneously
 
 [agents]
-# default = { provider = "anthropic", model = "claude-opus-4-6" }
-# lint    = { model = "claude-haiku-4-5" }
+# default = {{ provider = "anthropic", model = "claude-opus-4-6" }}
+# lint    = {{ model = "claude-haiku-4-5" }}
 
 [ingest]
 max_pages_per_ingest = 15
@@ -95,6 +99,7 @@ FROM "wiki"
 WHERE length(file.inlinks) = 0
 AND file.name != "index"
 AND file.name != "dashboard"
+AND file.name != "purpose"
 SORT created DESC
 ```
 
@@ -108,14 +113,14 @@ Add `[[page-name]]` to a related page or to [[index]].*
 ```dataview
 TABLE status, confidence
 FROM "wiki"
-WHERE file.name != "index" AND file.name != "dashboard"
+WHERE file.name != "index" AND file.name != "dashboard" AND file.name != "purpose"
 SORT created DESC
 LIMIT 10
 ```
 """
 
 
-def init_wiki(root: Path, domain: str = "General") -> None:
+def init_wiki(root: Path, domain: str = "General", port: int = 7070) -> None:
     from datetime import date
     (root / "wiki").mkdir(parents=True, exist_ok=True)
     (root / "raw_sources").mkdir(exist_ok=True)
@@ -133,5 +138,6 @@ def init_wiki(root: Path, domain: str = "General") -> None:
     (root / "log.md").write_text(
         "# Activity Log\n\n", encoding="utf-8", newline="\n")
     (root / ".synthadoc" / "config.toml").write_text(
-        _CONFIG_TOML, encoding="utf-8", newline="\n")
+        _CONFIG_TOML.format(domain=domain, port=port),
+        encoding="utf-8", newline="\n")
     (root / ".gitignore").write_text(_GITIGNORE, encoding="utf-8", newline="\n")

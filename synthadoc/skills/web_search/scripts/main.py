@@ -2,11 +2,13 @@
 # Copyright (C) 2026 Paul Chen / axoviq.com
 from __future__ import annotations
 
+import json
 import os
-from synthadoc.skills.base import BaseSkill, ExtractedContent
-
 import re
+from pathlib import Path
 from urllib.parse import urlparse
+
+from synthadoc.skills.base import BaseSkill, ExtractedContent
 
 # Matches all intents declared in SKILL.md; colon and leading whitespace optional
 _INTENT_RE = re.compile(
@@ -28,6 +30,8 @@ _BLOCKED_DOMAINS = {
     "x.com",
     "linkedin.com",
     "tiktok.com",
+    # Wikipedia blocks plain HTTP clients even with a browser User-Agent
+    "wikipedia.org",
     # Require institutional/subscription access
     "ieeexplore.ieee.org",
     "dl.acm.org",
@@ -35,6 +39,20 @@ _BLOCKED_DOMAINS = {
     "springer.com",
     "jstor.org",
 }
+
+
+def _load_dynamic_blocked() -> set[str]:
+    """Load domains auto-blocked at runtime from .synthadoc/blocked_domains.json."""
+    wiki_root = os.environ.get("SYNTHADOC_WIKI_ROOT", "")
+    if not wiki_root:
+        return set()
+    blocked_path = Path(wiki_root) / ".synthadoc" / "blocked_domains.json"
+    if not blocked_path.exists():
+        return set()
+    try:
+        return set(json.loads(blocked_path.read_text(encoding="utf-8")))
+    except Exception:
+        return set()
 
 
 class WebSearchSkill(BaseSkill):
@@ -53,11 +71,13 @@ class WebSearchSkill(BaseSkill):
         from synthadoc.skills.web_search.scripts.fetcher import search_tavily
         response = await search_tavily(query, max_results=max_results, api_key=api_key)
 
+        all_blocked = _BLOCKED_DOMAINS | _load_dynamic_blocked()
+
         def _allowed(url: str) -> bool:
             try:
                 host = urlparse(url).hostname or ""
                 return not any(
-                    host == d or host.endswith("." + d) for d in _BLOCKED_DOMAINS
+                    host == d or host.endswith("." + d) for d in all_blocked
                 )
             except Exception:
                 return True

@@ -42,13 +42,14 @@ def _check_port(port: int) -> None:
             )
 
 
-def _check_wiki(root: Path) -> None:
+def _check_wiki(root: Path, wiki_arg: str = "") -> None:
     """Fail early if the wiki directory is missing or incomplete."""
     if not root.exists():
+        name = wiki_arg or root.name
         E.cli_error(
             E.WIKI_NOT_FOUND,
             f"Wiki directory not found: {root}",
-            f"Run 'synthadoc install <name> --target <dir>' to create a wiki,\n"
+            f"Run 'synthadoc install {name} --target <dir>' to create it,\n"
             f"or check that the --wiki name matches a registered wiki.",
         )
     wiki_dir = root / "wiki"
@@ -173,7 +174,7 @@ def serve_cmd(
     provider = cfg.agents.resolve("ingest").provider
 
     # Pre-flight checks — run before binding the port or starting workers
-    _check_wiki(root)
+    _check_wiki(root, wiki_arg=wiki or "")
 
     # Logging — must come after wiki root is validated so the logs dir can be created
     setup_logging(root, cfg=cfg.logs, verbose=verbose)

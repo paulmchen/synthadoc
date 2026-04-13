@@ -91,8 +91,12 @@ async def _worker_loop(orch) -> None:
 
 
 def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAPI:
+    import os
     from synthadoc.config import load_config
     from synthadoc.core.orchestrator import Orchestrator
+
+    # Expose wiki root so skills (e.g. web_search) can load the dynamic blocked-domains list
+    os.environ["SYNTHADOC_WIKI_ROOT"] = str(wiki_root)
 
     cfg = load_config(project_config=wiki_root / ".synthadoc" / "config.toml")
 
@@ -211,7 +215,7 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
     @app.get("/lint/report")
     async def lint_report():
         import yaml as _yaml
-        _SKIP = {"index", "log", "dashboard"}
+        _SKIP = {"index", "log", "dashboard", "purpose"}
         wiki_dir = wiki_root / "wiki"
         pages = list(wiki_dir.glob("*.md"))
 
@@ -225,7 +229,8 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
         referenced: set[str] = set()
         for text in page_texts.values():
             for link in _WIKILINK_RE.findall(text):
-                referenced.add(link.lower().replace(" ", "-"))
+                slug_part = link.split("|")[0].strip()
+                referenced.add(slug_part.lower().replace(" ", "-"))
 
         orphan_slugs = [
             stem for stem in page_texts

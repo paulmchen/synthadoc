@@ -561,8 +561,9 @@ The CLI is a thin HTTP client — it posts jobs to the running server and polls 
 
 ```
 synthadoc
-├── install <name> --target <dir> [--demo]
+├── install <name> --target <dir> [--demo] [--domain <str>] [--port <N>]
 ├── uninstall <name>
+├── scaffold [-w wiki]
 ├── demo list
 ├── serve [-w wiki] [--port N] [--background] [--mcp-only] [--http-only] [--verbose]
 ├── ingest <source> [-w wiki] [--batch] [--file manifest] [--force] [--analyse-only]
@@ -1257,3 +1258,28 @@ All five intent phrases (`search for`, `find on the web`, `look up`, `web search
 ### Error code system
 
 Every user-facing error now carries a stable code in the format `[ERR-<CATEGORY>-<NNN>]` (e.g. `[ERR-SRV-001]`). The central registry lives in `synthadoc/errors.py`. CLI errors go through the `cli_error()` helper; agent and skill errors embed the code in the exception message so it surfaces in the job `error` field. See [Section 10 — CLI](#10-cli) for the full code table.
+
+### Smart install scaffold
+
+`synthadoc install` now includes two enhancements:
+
+**Port auto-detection:** If the default port (7070) is already in use, the installer scans upward (7071, 7072 …) and prompts the user to confirm the alternative port. The chosen port is written into `<wiki-root>/.synthadoc/config.toml` under `[server] port`. Use `--port N` to skip auto-detection and specify a port directly.
+
+**LLM scaffold at install time:** For fresh (non-demo) wikis, the installer calls `ScaffoldAgent` after creating the directory tree. The agent makes a single LLM call and returns domain-specific content for four files:
+
+| File | What is generated |
+|------|------------------|
+| `wiki/index.md` | Category headings with `<!-- description -->` comments (5–8 domain categories) |
+| `AGENTS.md` | Domain-specific ingest and query guidelines as a bullet list |
+| `wiki/purpose.md` | Include/exclude scope definition for the domain |
+| `wiki/dashboard.md` | Dashboard intro sentence injected below the heading |
+
+If no LLM API key is set at install time, the installer falls back to static template files and prints a tip to run `synthadoc scaffold -w <name>` later.
+
+**`synthadoc scaffold` refresh command:** Re-runs the LLM scaffold on an existing wiki at any time. Protected slugs — `[[wikilinks]]` in `index.md` that point to existing `wiki/<slug>.md` files — are detected automatically and passed to the LLM so those categories are preserved. Only `index.md`, `AGENTS.md`, and `purpose.md` are rewritten; `config.toml` and `dashboard.md` are never touched by `scaffold`.
+
+```bash
+synthadoc scaffold -w my-wiki
+# Can be scheduled:
+synthadoc schedule add --op "scaffold" --cron "0 4 * * 0" -w my-wiki
+```

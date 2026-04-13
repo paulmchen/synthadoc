@@ -228,9 +228,13 @@ export GEMINI_API_KEY=AIza…          # free tier — recommended starting poin
 export ANTHROPIC_API_KEY=sk-ant-…    # if using Anthropic
 export TAVILY_API_KEY=tvly-…         # optional — web search only
 
-# Windows (PowerShell) — add to your profile to persist
-$env:GEMINI_API_KEY = "AIza…"
-$env:TAVILY_API_KEY = "tvly-…"
+# Windows cmd — current session
+set GEMINI_API_KEY=AIza…
+set TAVILY_API_KEY=tvly-…
+
+# Windows cmd — permanent (open a new cmd window after running)
+setx GEMINI_API_KEY AIza…
+setx TAVILY_API_KEY tvly-…
 ```
 
 ### Step 5 — Verify
@@ -239,9 +243,21 @@ $env:TAVILY_API_KEY = "tvly-…"
 synthadoc --version
 ```
 
-### Step 6 — Start the Synthadoc engine
+### Step 6 — Install a demo wiki, then start the engine
 
-The engine must be running before you can ingest sources or run queries. Start it against the demo wiki (install it first if you haven't — see the Quick-Start Guide below):
+A wiki must be installed before the engine can serve it. The fastest way to get started is the **History of Computing** demo, which ships with 10 pre-built pages and sample source files — no LLM API key required to browse it.
+
+**Install the demo wiki:**
+
+```bash
+# Linux / macOS
+synthadoc install history-of-computing --target ~/wikis --demo
+
+# Windows (cmd.exe)
+synthadoc install history-of-computing --target %USERPROFILE%\wikis --demo
+```
+
+**Then start the engine:**
 
 ```bash
 # Foreground — keeps the terminal; logs stream to the console
@@ -251,7 +267,7 @@ synthadoc serve -w history-of-computing
 synthadoc serve -w history-of-computing --background
 ```
 
-The server binds to `http://127.0.0.1:7070` by default. Leave it running while you work — the Obsidian plugin, CLI ingest commands, and query commands all talk to it.
+The server binds to `http://127.0.0.1:7070` by default (port is set in `<wiki-root>/.synthadoc/config.toml`). Leave it running while you work — the Obsidian plugin, CLI ingest commands, and query commands all talk to it.
 
 To stop a background server:
 
@@ -259,7 +275,7 @@ To stop a background server:
 # Linux / macOS
 kill <PID>
 
-# Windows (PowerShell or cmd.exe)
+# Windows (cmd)
 taskkill /PID <PID> /F
 ```
 
@@ -269,17 +285,98 @@ The PID is printed when the background server starts and saved to `<wiki-root>/.
 
 ## Quick-Start Guide
 
-The fastest way to see Synthadoc in action is the **History of Computing** demo wiki. It includes 10 pre-built pages and four raw source files that demonstrate clean merge, contradiction, and orphan scenarios.
+The **History of Computing** demo includes 10 pre-built pages, raw source files covering clean-merge, contradiction, and orphan scenarios, and a full walkthrough of every Synthadoc feature.
 
-**Follow the full walkthrough: [docs/demo-guide.md](docs/demo-guide.md)**
+**Full step-by-step walkthrough: [docs/demo-guide.md](docs/demo-guide.md)**
 
 The guide covers:
-1. Installing the demo vault
-2. Opening it in Obsidian
-3. Installing the Obsidian and Dataview plugins
-4. Running batch ingest
-5. Resolving a contradiction (manual and LLM)
+1. Installing the demo vault and opening it in Obsidian
+2. Installing the Dataview and Synthadoc plugins
+3. Starting the engine and querying pre-built content
+4. Running batch ingest across all demo sources
+5. Resolving a contradiction (manual and LLM auto-resolve)
 6. Fixing an orphan page
+7. Web search ingestion, audit commands, hooks, and scheduling
+
+---
+
+## Creating Your Own Wiki
+
+Once you've walked through the demo, creating a wiki for your own domain takes two commands:
+
+```bash
+# "market-condition-canada" is the wiki name (used in all -w commands)
+# "Market conditions and trends in Canada" is the subject domain the wiki will manage
+synthadoc install market-condition-canada --target ~/wikis --domain "Market conditions and trends in Canada"
+synthadoc serve -w market-condition-canada
+```
+
+`--target` is the parent folder where the wiki directory will be created. `--domain` is a free-text description of the subject area — the LLM uses it to tailor the scaffold content to your domain.
+
+**Then open the wiki in Obsidian as a new vault** and install both plugins — each wiki is an independent vault, so this is required once per wiki:
+
+1. Open Obsidian → **Open folder as vault** → select the wiki folder (e.g. `~/wikis/market-condition-canada`)
+2. **Settings → Community plugins → Turn on community plugins → Browse** → install and enable **Dataview**
+3. Install and enable **Synthadoc** (or copy the plugin from an existing vault's `.obsidian/plugins/` folder)
+
+`install` creates the folder structure and, if an API key is set, runs a one-time LLM scaffold that generates four domain-aware starter files:
+
+| File | Purpose |
+|---|---|
+| `wiki/index.md` | Table of contents — organises pages into domain-relevant categories with `[[wikilinks]]` |
+| `wiki/purpose.md` | Scope declaration — tells the ingest agent what belongs in this wiki and what to ignore |
+| `AGENTS.md` | LLM behaviour guidelines — domain-specific instructions for tone, terminology, and synthesis style |
+| `wiki/dashboard.md` | Live Dataview dashboard — orphan pages, contradictions, and page count (requires Obsidian + Dataview plugin) |
+
+These files are the wiki's "self-knowledge" — Synthadoc reads them on every ingest to decide how to classify, merge, and label new content for that domain.
+
+**Scaffold can be re-run at any time** as your domain evolves. Pages already linked in `index.md` are protected and never overwritten:
+
+```bash
+synthadoc scaffold -w market-condition-canada
+```
+
+**Recommended first steps after the plugins are configured and the scaffold files look right:**
+
+**1. Seed the wiki with web searches** — pull in real content for the topics you care about:
+
+```bash
+synthadoc ingest "search for: Economy, employment and labour market analysis and performance in Toronto GTA" -w market-condition-canada
+synthadoc ingest "search for: Bank of Canada interest rate outlook 2025" -w market-condition-canada
+synthadoc ingest "search for: Ontario housing affordability and rental market trends" -w market-condition-canada
+```
+
+Each search fans out into up to 20 URL ingest jobs. Watch them process:
+
+```bash
+synthadoc jobs list -w market-condition-canada
+```
+
+**2. Run lint and query** — once jobs complete, check what was built and whether anything conflicts:
+
+```bash
+synthadoc lint run -w market-condition-canada
+synthadoc lint report -w market-condition-canada
+synthadoc query "What are the current employment trends in the Toronto GTA?" -w market-condition-canada
+```
+
+**3. Re-run scaffold** — now that the wiki has real pages, scaffold can generate a much richer index with categories that reflect actual content:
+
+```bash
+synthadoc scaffold -w market-condition-canada
+```
+
+**4. Set up a daily scheduler** — keep the wiki fresh automatically:
+
+```bash
+# Re-ingest key topics nightly at 2 AM
+synthadoc schedule add --op "ingest" --source "search for: Toronto GTA economic indicators latest" --cron "0 2 * * *" -w market-condition-canada
+
+# Re-run scaffold weekly on Sunday at 4 AM to keep the index current
+synthadoc schedule add --op "scaffold" --cron "0 4 * * 0" -w market-condition-canada
+```
+
+See [docs/design.md](docs/design.md) for a full description of how ingest, contradiction detection, and orphan tracking work under the hood.
 
 ---
 
@@ -354,15 +451,32 @@ Full config reference: [docs/design.md — Configuration](docs/design.md#configu
 ### Setting up a wiki
 
 ```bash
-# Create a new empty wiki
-synthadoc install my-wiki --target ~/wikis/my-wiki
+# Create a new empty wiki (LLM scaffold runs automatically if API key is set)
+synthadoc install my-wiki --target ~/wikis --domain "Machine Learning"
 
-# Install the demo (includes pre-built pages and raw sources)
-synthadoc install history-of-computing --target ~/wikis/history-of-computing --demo
+# Create a wiki on a specific port (useful when running multiple wikis)
+synthadoc install my-wiki --target ~/wikis --domain "Machine Learning" --port 7071
+
+# Install the demo (includes pre-built pages and raw sources — no LLM call needed)
+synthadoc install history-of-computing --target ~/wikis --demo
 
 # List available demo templates
 synthadoc demo list
 ```
+
+### Refreshing wiki scaffold
+
+After install, you can re-run the LLM scaffold at any time to regenerate domain-specific content (index categories, AGENTS.md guidelines, purpose.md scope). Pages already linked in `index.md` are protected and preserved.
+
+```bash
+# Regenerate scaffold for an existing wiki
+synthadoc scaffold -w my-wiki
+
+# Schedule weekly refresh (runs every Sunday at 4 AM)
+synthadoc schedule add --op "scaffold" --cron "0 4 * * 0" -w my-wiki
+```
+
+`config.toml` and `dashboard.md` are never modified by `scaffold`.
 
 ### Running the server
 
@@ -405,6 +519,25 @@ synthadoc ingest --file sources.txt -w my-wiki
 
 # Force re-ingest (bypass deduplication and cache)
 synthadoc ingest --force report.pdf -w my-wiki
+
+# Web search — triggers a Tavily search, then ingests each result URL as a child job.
+# Prefix the query with any recognised intent: "search for:", "find on the web:",
+# "look up:", or "web search:"  (prefix is stripped before the search is sent)
+# Requires TAVILY_API_KEY to be set.
+#
+# Note: web search content is NOT saved to raw_sources/. The flow is direct:
+#   query → Tavily → URLs → each URL fetched → wiki pages written
+# raw_sources/ is for user-provided local files (PDF, DOCX, PPTX, etc.) only.
+# The wiki pages themselves are the persistent output of a web search.
+synthadoc ingest "search for: Bank of Canada interest rate decisions 2024" -w my-wiki
+synthadoc ingest "find on the web: unemployment trends Ontario Q1 2025" -w my-wiki
+
+# Multiple web searches at once via a manifest file
+# web-searches.txt:
+#   search for: Bank of Canada interest rate decisions 2024
+#   find on the web: unemployment trends Ontario Q1 2025
+#   look up: Toronto housing market affordability index
+synthadoc ingest --file web-searches.txt -w my-wiki
 ```
 
 ### Querying
@@ -497,8 +630,15 @@ synthadoc schedule remove <id> -w my-wiki
 
 ### Removing a wiki
 
+Stop the server for that wiki before uninstalling — the serve process must not be running
+when the directory is deleted.
+
 ```bash
-# Two-step confirmation required — no --yes escape
+# Stop the background server (PID is in <wiki-root>/.synthadoc/server.pid)
+kill $(cat ~/wikis/my-wiki/.synthadoc/server.pid)          # Linux / macOS
+taskkill /PID <pid> /F                                      # Windows
+
+# Then uninstall — two-step confirmation required, no --yes escape
 synthadoc uninstall my-wiki
 ```
 

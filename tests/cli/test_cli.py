@@ -28,6 +28,7 @@ def test_install_creates_fresh_wiki(tmp_path, monkeypatch):
     """install creates wiki structure and registers the path."""
     import synthadoc.cli.install as install_mod
     monkeypatch.setattr(install_mod, "_REGISTRY", tmp_path / "wikis.json")
+    monkeypatch.setattr(install_mod, "_find_free_port", lambda start=7070, max_scan=20: 7070)
 
     result = runner.invoke(app, ["install", "my-wiki", "--target", str(tmp_path)])
     assert result.exit_code == 0, result.output
@@ -53,6 +54,7 @@ def test_install_demo_copies_template(tmp_path, monkeypatch):
     (source / "wiki" / "index.md").write_text("# Index")
     monkeypatch.setattr(install_mod, "_DEMOS", {"my-demo": source})
     monkeypatch.setattr(install_mod, "_REGISTRY", tmp_path / "wikis.json")
+    monkeypatch.setattr(install_mod, "_find_free_port", lambda start=7070, max_scan=20: 7070)
 
     result = runner.invoke(app, ["install", "my-demo", "--target", str(tmp_path), "--demo"])
     assert result.exit_code == 0, result.output
@@ -100,18 +102,18 @@ def test_install_unknown_demo_exits_nonzero(tmp_path, monkeypatch):
 
 
 def test_install_output_instructs_parent_dir(tmp_path, monkeypatch):
-    """install output must point users to the project root, not the wiki/ subfolder."""
+    """install output must confirm installation and show the serve command."""
     import synthadoc.cli.install as install_mod
     monkeypatch.setattr(install_mod, "_REGISTRY", tmp_path / "wikis.json")
+    monkeypatch.setattr(install_mod, "_find_free_port", lambda start=7070, max_scan=20: 7070)
 
     result = runner.invoke(app, ["install", "my-research", "--target", str(tmp_path)])
-    open_line = next(
-        (l for l in result.output.splitlines() if "Open" in l and "Obsidian" in l), ""
-    )
-    assert open_line, "No 'Open ... Obsidian' line in output"
-    # Extract just the vault path: the token between "Open" and "as an Obsidian vault"
-    vault_path = open_line.split("as an Obsidian")[0].replace("Open", "").strip().rstrip("/\\")
-    assert not vault_path.endswith("wiki"), f"Vault path should not end in 'wiki', got: {vault_path}"
+    # No absolute paths in output
+    assert str(tmp_path) not in result.output
+    # Must confirm installation by name
+    assert "my-research" in result.output
+    # Must show serve command
+    assert "synthadoc serve -w my-research" in result.output
 
 
 # ---------------------------------------------------------------------------

@@ -142,3 +142,52 @@ def test_cache_clear_no_db_reports_nothing(tmp_path):
 def test_cache_clear_unknown_action_exits_nonzero(tmp_path):
     result = runner.invoke(app, ["cache", "bogus"])
     assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# install + LLM scaffold
+# ---------------------------------------------------------------------------
+
+def test_install_fresh_wiki_calls_scaffold_agent(tmp_path):
+    """install must call ScaffoldAgent when API key is available."""
+    from synthadoc.agents.scaffold_agent import ScaffoldResult
+    import synthadoc.cli.install as install_mod
+
+    mock_result = ScaffoldResult(
+        index_md="---\ntitle: Index\n---\n# Test Index\n",
+        agents_md="# AGENTS.md — Robotics Wiki\n",
+        purpose_md="# Wiki Purpose\nThis wiki covers: Robotics.\n",
+        dashboard_intro="A wiki tracking Robotics knowledge.",
+    )
+
+    with patch("synthadoc.cli.install._run_scaffold", return_value=mock_result) as mock_scaffold, \
+         patch("synthadoc.cli.install._find_free_port", return_value=7070):
+        with patch.object(install_mod, "_REGISTRY", tmp_path / "wikis.json"):
+            result = runner.invoke(app, [
+                "install", "test-wiki",
+                "--target", str(tmp_path),
+                "--domain", "Robotics",
+            ])
+
+    assert result.exit_code == 0, result.output
+    mock_scaffold.assert_called_once()
+
+
+def test_install_fresh_wiki_falls_back_when_no_api_key(tmp_path):
+    """install must fall back to static templates when scaffold returns None."""
+    import synthadoc.cli.install as install_mod
+
+    with patch("synthadoc.cli.install._run_scaffold", return_value=None), \
+         patch("synthadoc.cli.install._find_free_port", return_value=7070):
+        with patch.object(install_mod, "_REGISTRY", tmp_path / "wikis.json"):
+            result = runner.invoke(app, [
+                "install", "test-wiki2",
+                "--target", str(tmp_path),
+                "--domain", "Physics",
+            ])
+
+    assert result.exit_code == 0, result.output
+    # Static index.md fallback must still be written
+    assert (tmp_path / "test-wiki2" / "wiki" / "index.md").exists()
+    # Hint message must appear
+    assert "scaffold" in result.output.lower()

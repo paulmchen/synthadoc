@@ -11,6 +11,7 @@ from typing import Optional
 import typer
 
 from synthadoc.cli.main import app
+from synthadoc.cli._port import find_free_port as _find_free_port, _DEFAULT_PORT
 from synthadoc import errors as E
 
 _REGISTRY = Path.home() / ".synthadoc" / "wikis.json"
@@ -29,6 +30,38 @@ def _read_registry() -> dict:
 def _write_registry(data: dict) -> None:
     _REGISTRY.parent.mkdir(parents=True, exist_ok=True)
     _REGISTRY.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _run_scaffold(dest: Path, domain: str):
+    """Try to run ScaffoldAgent. Returns ScaffoldResult or None if no API key is set."""
+    import asyncio
+    import os
+    from synthadoc.config import load_config
+    from synthadoc.providers import make_provider
+
+    cfg = load_config(project_config=dest / ".synthadoc" / "config.toml")
+    provider_name = cfg.agents.resolve("ingest").provider
+
+    _KEY_ENV = {
+        "anthropic": "ANTHROPIC_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "gemini": "GEMINI_API_KEY",
+        "groq": "GROQ_API_KEY",
+    }
+    env_var = _KEY_ENV.get(provider_name)
+    if env_var and not os.environ.get(env_var, "").strip():
+        return None  # no key — caller will fall back to static template
+
+    try:
+        provider = make_provider("ingest", cfg)
+        from synthadoc.agents.scaffold_agent import ScaffoldAgent
+        agent = ScaffoldAgent(provider=provider)
+        return asyncio.run(agent.scaffold(domain=domain))
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Scaffold LLM call failed: %s", exc)
+        typer.echo(f"  Warning: LLM scaffold failed ({exc})", err=True)
+        return None
 
 
 def resolve_wiki_path(wiki: str) -> Path:
@@ -53,6 +86,7 @@ def install_cmd(
     target: str = typer.Option(..., "--target", "-t", help="Parent directory to install into"),
     demo: bool = typer.Option(False, "--demo", "-d", help="Install from a demo template matching <name>"),
     domain: str = typer.Option("General", "--domain", help="Knowledge domain (fresh wikis only)"),
+    port: Optional[int] = typer.Option(None, "--port", help="Server port (default: auto-detect from 7070)"),
 ):
     """Create a new wiki, optionally from a demo template.
 
@@ -64,25 +98,40 @@ def install_cmd(
     """
     dest = (Path(target) / name).resolve()
 
+    # Registry check first — same name cannot be installed twice regardless of --target path
+    registry = _read_registry()
+    if name in registry:
+        entry = registry[name]
+        kind = f"demo ({entry['demo']})" if entry.get("demo") else "wiki"
+        E.cli_error(
+            E.WIKI_ALREADY_EXISTS,
+            f"'{name}' is already installed as a {kind} at {entry['path']}.",
+            f"To reinstall: synthadoc uninstall {name}  then install again.",
+        )
+
     if dest.exists():
-        registry = _read_registry()
-        if name in registry:
-            entry = registry[name]
-            kind = f"demo ({entry['demo']})" if entry.get("demo") else "wiki"
-            E.cli_error(
-                E.WIKI_ALREADY_EXISTS,
-                f"'{name}' is already installed as a {kind} at {dest}.",
-                f"To reinstall: synthadoc uninstall {name}  then install again.",
+        E.cli_error(
+            E.WIKI_ALREADY_EXISTS,
+            f"'{name}' already exists at {dest} but is not tracked by synthadoc.",
+            f"It may be a leftover from a previous install. To remove it:\n"
+            f"  rm -rf \"{dest}\"    # Linux / macOS\n"
+            f"  Remove-Item -Recurse -Force \"{dest}\"    # Windows PowerShell\n"
+            f"Then run install again.",
+        )
+
+    # ── Port resolution ────────────────────────────────────────────────────────
+    if port is not None:
+        effective_port = port
+    else:
+        effective_port = _find_free_port(_DEFAULT_PORT)
+        if effective_port != _DEFAULT_PORT:
+            confirmed = typer.confirm(
+                f"Port {_DEFAULT_PORT} is already in use. "
+                f"Install '{name}' on port {effective_port} instead?"
             )
-        else:
-            E.cli_error(
-                E.WIKI_ALREADY_EXISTS,
-                f"'{name}' already exists at {dest} but is not tracked by synthadoc.",
-                f"It may be a leftover from a previous install. To remove it:\n"
-                f"  rm -rf \"{dest}\"    # Linux / macOS\n"
-                f"  Remove-Item -Recurse -Force \"{dest}\"    # Windows PowerShell\n"
-                f"Then run install again.",
-            )
+            if not confirmed:
+                typer.echo("Tip: use --port <N> to specify a port manually.", err=True)
+                raise typer.Exit(1)
 
     if demo:
         if name not in _DEMOS:
@@ -97,7 +146,33 @@ def install_cmd(
         (dest / ".synthadoc" / "logs").mkdir(parents=True, exist_ok=True)
     else:
         from synthadoc.cli._init import init_wiki
-        init_wiki(dest, domain)
+        init_wiki(dest, domain, port=effective_port)
+
+        # ── LLM scaffold ──────────────────────────────────────────────────────
+        typer.echo("Generating domain-specific scaffold...")
+        scaffold_result = _run_scaffold(dest, domain)
+        if scaffold_result:
+            (dest / "wiki" / "index.md").write_text(
+                scaffold_result.index_md, encoding="utf-8", newline="\n")
+            (dest / "AGENTS.md").write_text(
+                scaffold_result.agents_md, encoding="utf-8", newline="\n")
+            (dest / "wiki" / "purpose.md").write_text(
+                scaffold_result.purpose_md, encoding="utf-8", newline="\n")
+            dashboard_path = dest / "wiki" / "dashboard.md"
+            dash = dashboard_path.read_text(encoding="utf-8")
+            dash = dash.replace(
+                f"# {domain} — Dashboard",
+                f"# {domain} — Dashboard\n\n{scaffold_result.dashboard_intro}",
+                1,
+            )
+            dashboard_path.write_text(dash, encoding="utf-8", newline="\n")
+            typer.echo("  Scaffold complete — domain-specific content generated.")
+        else:
+            typer.echo(
+                "  Scaffold skipped — static templates written.\n"
+                f"  Run 'synthadoc scaffold -w {name}' after setting your LLM API key"
+                " to generate domain-specific content."
+            )
 
     registry = _read_registry()
     registry[name] = {
@@ -107,8 +182,22 @@ def install_cmd(
     }
     _write_registry(registry)
 
-    typer.echo(f"Wiki '{name}' installed at {dest}")
-    typer.echo(f"Open {dest}/ as an Obsidian vault — pages are in {dest}/wiki/")
+    typer.echo(f"Wiki '{name}' installed.")
+    typer.echo(f"  Port   {effective_port}")
+    typer.echo(f"Start:   synthadoc serve -w {name}")
+
+
+@app.command("list")
+def list_cmd():
+    """List all installed wikis."""
+    registry = _read_registry()
+    if not registry:
+        typer.echo("No wikis installed. Run 'synthadoc install' to create one.")
+        return
+    for name, entry in registry.items():
+        demo_tag = f"  [demo]" if entry.get("demo") else ""
+        installed = entry.get("installed", "")
+        typer.echo(f"{name:<30}  installed: {installed}{demo_tag}")
 
 
 @app.command("uninstall")
@@ -135,7 +224,7 @@ def uninstall_cmd(
     dest = Path(registry[name]["path"])
 
     if not dest.exists():
-        typer.echo(f"Registered path {dest} no longer exists — removing from registry.")
+        typer.echo(f"Wiki '{name}' no longer exists on disk — removing from registry.")
         del registry[name]
         _write_registry(registry)
         raise typer.Exit(0)
@@ -155,4 +244,4 @@ def uninstall_cmd(
     shutil.rmtree(dest)
     del registry[name]
     _write_registry(registry)
-    typer.echo(f"Removed {dest}")
+    typer.echo(f"Wiki '{name}' removed.")

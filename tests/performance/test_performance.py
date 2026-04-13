@@ -119,8 +119,7 @@ async def test_web_search_fanout_enqueue_is_fast(tmp_wiki):
     child_sources = [f"https://example.com/page-{i}" for i in range(20)]
 
     start = time.perf_counter()
-    for url in child_sources:
-        await queue.enqueue("ingest", {"source": url, "force": False})
+    await queue.enqueue_many("ingest", [{"source": url, "force": False} for url in child_sources])
     elapsed = time.perf_counter() - start
 
     assert elapsed < 5.0, f"Enqueueing 20 child jobs took {elapsed:.2f}s — exceeds 5s SLO"

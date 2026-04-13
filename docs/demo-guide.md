@@ -21,27 +21,43 @@ You open a folder on your filesystem as a "vault" and Obsidian gives it a struct
 | **Command palette**   | `Ctrl/Cmd+P` runs any plugin command, including Synthadoc's ingest and query.                                                   |
 | **Community plugins** | Extend Obsidian with third-party functionality installed from within the app.                                                   |
 
-Obsidian is free for personal use. Download it from **obsidian.md**.
+Obsidian is free for personal use. Download it from **[obsidian.md](https://obsidian.md)**.
 
 ---
 
 ### What does Synthadoc add?
 
 Obsidian is a writing and organisation tool — you create and edit notes manually.
-synthadoc is a **compilation engine**: it reads raw source documents (PDFs, spreadsheets,
+Synthadoc is a **compilation engine**: it reads raw source documents (PDFs, spreadsheets,
 images, web pages) and uses an LLM to synthesise, cross-reference, and maintain a
 structured wiki automatically.
 
+But Synthadoc goes further than compilation. It also **understands your domain** and
+configures itself around it — so you spend your time building knowledge, not managing
+the tool.
 
-| Without Synthadoc                  | With Synthadoc                                                     |
-| ---------------------------------- | ------------------------------------------------------------------ |
-| You write each note by hand        | LLM synthesises notes from source documents                        |
-| You manage links between notes     | Cross-references are inserted automatically                        |
-| You notice contradictions manually | Ingest pipeline flags conflicting content (`status: contradicted`) |
-| You track orphan pages by eye      | Dashboard and CLI report orphans with fix suggestions              |
-| Notes are static once written      | Wiki compiles incrementally as new sources arrive                  |
+| Without Synthadoc                        | With Synthadoc                                                                         |
+| ---------------------------------------- | -------------------------------------------------------------------------------------- |
+| You write each note by hand              | LLM synthesises notes from source documents                                            |
+| You design the category structure        | Install generates domain-specific index categories, scope rules, and agent guidelines  |
+| You manage links between notes           | Cross-references are inserted automatically                                            |
+| You notice contradictions manually       | Ingest pipeline flags conflicting content (`status: contradicted`)                     |
+| You track orphan pages by eye            | Dashboard and CLI report orphans with fix suggestions                                  |
+| Notes are static once written            | Wiki compiles incrementally as new sources arrive                                      |
+| You rewrite instructions as domain grows | `synthadoc scaffold` refreshes index, guidelines, and scope from the current wiki state |
+| You write a wiki overview by hand        | `overview.md` is regenerated automatically after every ingest                         |
 
-synthadoc writes into the same Markdown files Obsidian reads. No special format — every
+**Domain-aware from day one.** When you create a wiki with `synthadoc install --domain "Machine Learning"`,
+the LLM generates a domain-specific index with 5–8 relevant category headings, ingest and query
+guidelines tailored to that field, and a scope definition that tells the engine what to include
+and what to skip. No manual setup required.
+
+**Self-improving over time.** As your wiki grows, run `synthadoc scaffold -w <wiki>` to
+refresh the index structure, agent guidelines, and purpose definition based on what the wiki
+has become. Pages already linked from the index are detected automatically and protected —
+the scaffold adapts around your existing knowledge, never discards it.
+
+Synthadoc writes into the same Markdown files Obsidian reads. No special format — every
 synthadoc wiki page is a valid Obsidian note.
 
 ---
@@ -72,38 +88,35 @@ plus a human-readable Markdown body for documentation.
 
 ---
 
-### Set up the demo vault
+### Before you start
 
-This section walks you from a fresh install of synthadoc to a fully configured Obsidian
-vault in one sequence. **Obsidian must already be installed** (download from obsidian.md).
+If you followed the README, you should already have:
 
-**Step 1 — Install the demo wiki**
+- **Demo wiki installed** — `synthadoc install history-of-computing --target ... --demo`
+- **LLM API key set** — at least one of `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`
+- **Engine running** — `synthadoc serve -w history-of-computing`
 
-**Windows (cmd.exe):**
+If any of these are missing, complete [README Steps 4–6](../README.md#step-4--set-your-api-keys) first, then come back here.
 
-```cmd
-synthadoc install history-of-computing --target %USERPROFILE%\wikis --demo
-```
-
-**Linux / macOS:**
-
-```bash
-synthadoc install history-of-computing --target ~/wikis --demo
-```
-
-Expected output:
-
-```
-Wiki 'history-of-computing' installed at ...
-Open .../history-of-computing/ as an Obsidian vault — pages are in .../history-of-computing/wiki/
-```
+> **No API key needed to browse.** The 10 pre-built pages are already in the wiki — you
+> can open them in Obsidian and explore Graph view without any key. An API key is only
+> required when you ingest new sources or run lint. Web search (Step 9) additionally
+> requires `TAVILY_API_KEY` — see [Appendix — Tavily web search key](#appendix--tavily-web-search-key).
+>
+> Want to use a different LLM provider (e.g. free-tier Gemini Flash)? See
+> [Appendix — Switching LLM providers](#appendix--switching-llm-providers) at the bottom
+> of this guide.
 
 ---
 
-**Step 2 — Open the vault in Obsidian**
+### Set up Obsidian
 
-Open Obsidian → **Open folder as vault** → select the installed folder
-(e.g. `%USERPROFILE%\wikis\history-of-computing`).
+**Obsidian must already be installed** — download from **[obsidian.md](https://obsidian.md)** if not.
+
+**Step 1 — Open the vault in Obsidian**
+
+Open Obsidian → **Open folder as vault** → select the installed wiki folder
+(e.g. `%USERPROFILE%\wikis\history-of-computing` on Windows, `~/wikis/history-of-computing` on Linux/macOS).
 
 > **Tip — show all file types in the explorer:** By default Obsidian only displays
 > file types it natively understands. `.xlsx` and `.pptx` files in `raw_sources/`
@@ -113,16 +126,23 @@ Open Obsidian → **Open folder as vault** → select the installed folder
 
 ---
 
-**Step 3 — Install the Dataview community plugin**
+**Step 2 — Install the Dataview community plugin**
 
 Dataview is required for the live dashboard in `wiki/dashboard.md`.
 
 1. **Settings** (gear icon, bottom-left) → **Community plugins** → **Turn on community plugins**
 2. Click **Browse** → search `Dataview` → **Install** → **Enable**
 
+> **Dataview cache:** Dataview caches frontmatter and does not always reflect changes
+> made externally by Synthadoc — pages may appear missing, stale, or show an old status
+> after an ingest or lint run. When the dashboard disagrees with
+> `synthadoc lint report`, drop the cache:
+> `Ctrl/Cmd+P` → **Dataview: Drop all cached file metadata**, then reopen the dashboard.
+> The CLI report reads files directly and is always authoritative.
+
 ---
 
-**Step 4 — Install the Synthadoc Obsidian plugin**
+**Step 3 — Install the Synthadoc Obsidian plugin**
 
 The plugin is pre-built (`obsidian-plugin/main.js`) — no build step needed unless you
 modify the TypeScript source.
@@ -147,7 +167,7 @@ cp main.js manifest.json "$vault/.obsidian/plugins/synthadoc/"
 
 ---
 
-**Step 5 — Restart Obsidian, then enable and configure the plugin**
+**Step 4 — Restart Obsidian, then enable and configure the plugin**
 
 After copying the files, **fully quit and reopen Obsidian** — the plugin will not appear
 until Obsidian is restarted.
@@ -160,99 +180,10 @@ until Obsidian is restarted.
 
 ---
 
-### Set your API key
-
-Synthadoc supports five LLM providers. The demo uses Anthropic by default, but **Gemini Flash is a great free-tier alternative** — 15 requests per minute and 1 million tokens per day at no cost, which is more than enough for demos and personal wikis.
-
-#### Option A — Anthropic (Claude)
-
-Get a key at console.anthropic.com — pay-per-token, no free tier.
-
-**Windows (cmd.exe):**
-
-```cmd
-set ANTHROPIC_API_KEY=sk-ant-your-key-here
-```
-
-**Windows (PowerShell, permanent):**
-
-```powershell
-[System.Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-your-key-here", "User")
-```
-
-**Linux / macOS:**
-
-```bash
-export ANTHROPIC_API_KEY="sk-ant-your-key-here"
-```
-
-#### Option B — Google Gemini (free tier)
-
-1. Go to **aistudio.google.com/app/apikey** → create a key (free, no credit card)
-2. Set the key:
-
-**Windows (cmd.exe):**
-
-```cmd
-set GEMINI_API_KEY=your-gemini-key-here
-```
-
-**Linux / macOS:**
-
-```bash
-export GEMINI_API_KEY="your-gemini-key-here"
-```
-
-3. Update the wiki config to use Gemini:
-
-Open `<wiki-root>/.synthadoc/config.toml` (create it if absent) and add:
-
-```toml
-[agents]
-default = { provider = "gemini", model = "gemini-2.0-flash" }
-```
-
-If `synthadoc serve` is already running, restart it after changing the config.
-
-#### Switching providers mid-demo
-
-You can switch at any time by changing the `provider` line in `.synthadoc/config.toml` and restarting the server. The wiki, cache, and audit trail are provider-agnostic — switching providers does not require re-ingesting anything.
-
-
-| Provider    | Key env var         | Free tier                  |
-| ----------- | ------------------- | -------------------------- |
-| `anthropic` | `ANTHROPIC_API_KEY` | No                         |
-| `openai`    | `OPENAI_API_KEY`    | No                         |
-| `gemini`    | `GEMINI_API_KEY`    | Yes (15 RPM, 1M tok/day)   |
-| `groq`      | `GROQ_API_KEY`      | Yes (Llama/Mixtral models) |
-| `ollama`    | _(none)_            | Yes (fully local)          |
-
-#### Tavily (web search — optional)
-
-Web search ingestion (Step 10) requires a Tavily API key. Get a free key at
-**tavily.com** (1,000 searches/month, no credit card required).
-
-**Windows (cmd.exe):**
-
-```cmd
-set TAVILY_API_KEY=tvly-your-key-here
-```
-
-**Linux / macOS:**
-
-```bash
-export TAVILY_API_KEY="tvly-your-key-here"
-```
-
-If this key is not set, the server starts normally but web search jobs will fail.
-Skip this step if you do not plan to use Step 10.
-
----
-
 ## Part 2 — Demo Walkthrough
 
-> **Before starting:** complete Part 1 — Set up the demo vault. The vault should be
-> open in Obsidian with Dataview and the Synthadoc plugin enabled.
+> **Before starting:** the demo wiki must be installed, the engine must be running, and
+> Obsidian must be open with the Dataview and Synthadoc plugins enabled (Part 1 above).
 
 ### Vault orientation
 
@@ -264,40 +195,30 @@ Skip this step if you do not plan to use Step 10.
 In **Graph view** (`Ctrl/Cmd+G`) you should see 10 interconnected nodes. The `index` and
 `dashboard` nodes connect to everything; topic pages cluster by cross-links.
 
----
+The server should already be running from README Step 6. If the Obsidian plugin shows a
+connection error, check the server is up:
 
-### Step 1 — Start the server
+```
+synthadoc status -w history-of-computing
+```
 
-The server must be running before any ingest, query, or lint command can execute.
+or probe the health endpoint directly:
 
-**Option A — Background mode (recommended):** the banner is shown and the shell is immediately released. All logs go to `<wiki>/.synthadoc/logs/synthadoc.log`. Use the same terminal for all subsequent commands.
+```
+curl http://127.0.0.1:7070/health
+```
+
+If neither responds, start the server:
 
 ```
 synthadoc serve -w history-of-computing --background
 ```
 
-After ~1.5 seconds you will see:
-
-```
-Server running in background
-  PID   <pid>
-  Port  7070
-  Logs  C:\Users\you\wikis\history-of-computing\.synthadoc\logs\synthadoc.log
-
-To stop: taskkill /PID <pid> /F
-```
-
-**Option B — Foreground mode:** the server runs in this terminal and logs print live. Open a second terminal for all subsequent commands.
-
-```
-synthadoc serve -w history-of-computing
-```
-
 ![synthadoc serve startup](synthadoc-serve.png)
 
 The banner confirms the port, wiki path, and PID. If you see
-`Warning: TAVILY_API_KEY is not set`, web search jobs will not work — set the key
-before Step 10 if you plan to use that feature.
+`Warning: TAVILY_API_KEY is not set`, web search jobs will not work — see
+[Appendix — Tavily web search key](#appendix--tavily-web-search-key) if you plan to use Step 9.
 
 > **Obsidian ribbon:** The ribbon is the narrow vertical icon strip on the far left edge of
 > the Obsidian window. Once the Synthadoc plugin is enabled, the Synthadoc book icon
@@ -323,7 +244,7 @@ before Step 10 if you plan to use that feature.
 
 ---
 
-### Step 2 — Query the pre-built wiki
+### Step 1 — Query the pre-built wiki
 
 Before ingesting anything, verify the pre-built content is queryable:
 
@@ -342,7 +263,7 @@ You can also query from Obsidian: open the command palette (`Ctrl/Cmd+P`) →
 
 ---
 
-### Step 3 — Batch ingest all demo sources
+### Step 2 — Batch ingest all demo sources
 
 The five source files are pre-built in `raw_sources/`:
 
@@ -388,7 +309,7 @@ Once all jobs complete, open **Graph view** (`Ctrl/Cmd+G`) in Obsidian to see th
 
 ---
 
-### Step 4 — Scenario A: Clean merge
+### Step 3 — Scenario A: Clean merge
 
 Refresh Obsidian after the first three jobs complete.
 
@@ -441,7 +362,7 @@ synthadoc query "When did the modern internet begin?" -w history-of-computing
 
 ---
 
-### Step 5 — Scenario B: Conflict detection and resolution
+### Step 4 — Scenario B: Conflict detection and resolution
 
 After `first-compiler-controversy.pdf` is processed, open `wiki/grace-hopper.md`.
 The frontmatter will show:
@@ -489,9 +410,14 @@ synthadoc jobs status <job-id> -w history-of-computing
 The LLM proposes a resolution, appends it as a `**Resolution:**` block, and sets
 `status: active`. Review the result in Obsidian and edit if needed.
 
+> **Dashboard still showing the contradiction?** Dataview may be serving stale cached
+> metadata. Drop the cache: `Ctrl/Cmd+P` → **Dataview: Drop all cached file metadata**.
+> If `synthadoc lint report -w history-of-computing` shows "all clear", the file on disk
+> is already correct — Dataview just hasn't caught up yet.
+
 ---
 
-### Step 6 — Scenario C: Orphan detection and human decision
+### Step 5 — Scenario C: Orphan detection and human decision
 
 After `quantum-computing-primer.png` is processed, a new wiki page is created (e.g.
 `wiki/quantum-computing.md`). No existing page links to it — it is an orphan.
@@ -513,11 +439,16 @@ Orphan pages (2) - no inbound links:
          - [[quantum-computing]] — quantum computing, qubits, Shor's algorithm, Grover's algorithm
 ```
 
-**In Obsidian:** open `wiki/dashboard.md` — the new page appears in the **Orphan pages**
+**In Obsidian:** open `wiki/dashboard.md` — the new page should appear in the **Orphan pages**
 table. In Graph view it may still appear connected if the page contains outbound
 `[[wikilinks]]` to other pages — Obsidian draws edges in both directions. Synthadoc
 defines an orphan as a page with no **inbound** links: no other page references it. The
 dashboard and lint report are the reliable way to identify orphans.
+
+> **Orphan count not matching the CLI?** Dataview may not have indexed the newly created
+> pages yet. Drop the cache: `Ctrl/Cmd+P` → **Dataview: Drop all cached file metadata**,
+> then reopen `dashboard.md`. Use `synthadoc lint report -w history-of-computing` as the
+> authoritative count — it reads files directly with no cache.
 
 **Three options:**
 
@@ -549,7 +480,7 @@ synthadoc ingest raw_sources/quantum-computing-primer.png --force -w history-of-
 
 ---
 
-### Step 7 — Run a full lint pass
+### Step 6 — Run a full lint pass
 
 After resolving the conflict and orphan, confirm everything is clean:
 
@@ -567,7 +498,7 @@ All clear — no contradictions or orphan pages found.
 
 ---
 
-### Step 8 — Check overall status
+### Step 7 — Check overall status
 
 ```
 synthadoc status -w history-of-computing
@@ -579,19 +510,14 @@ pages). `synthadoc status` shows page count, pending jobs, and total jobs.
 
 ---
 
-### Step 9 — Single-file ingest
+### Step 8 — Single-file ingest
 
 The demo used batch ingest. You can also ingest one file at a time:
 
-**Windows (PowerShell):**
+**Windows (cmd):**
 
-```powershell
-@'
-# Ada Lovelace
-Ada Lovelace (1815-1852) is widely regarded as the first computer programmer.
-She worked with Charles Babbage on his Analytical Engine and wrote the first
-algorithm intended to be processed by a machine.
-'@ | Set-Content "$env:USERPROFILE\wikis\history-of-computing\raw_sources\ada-lovelace.txt"
+```cmd
+(echo # Ada Lovelace & echo Ada Lovelace (1815-1852) is widely regarded as the first computer programmer. & echo She worked with Charles Babbage on his Analytical Engine and wrote the first & echo algorithm intended to be processed by a machine.) > %USERPROFILE%\wikis\history-of-computing\raw_sources\ada-lovelace.txt
 
 synthadoc ingest raw_sources/ada-lovelace.txt -w history-of-computing
 ```
@@ -617,11 +543,9 @@ You can also ingest from Obsidian: open any note → command palette (`Ctrl/Cmd+
 
 ---
 
-### Step 10 — Web search ingestion
+### Step 9 — Web search ingestion
 
-> **Requires:** `TAVILY_API_KEY` — get a free key (1,000 searches/month) at **tavily.com**.
-> Set it before starting the server: `set TAVILY_API_KEY=tvly-your-key-here` (Windows)
-> or `export TAVILY_API_KEY="tvly-your-key-here"` (Linux/macOS).
+> **Requires:** `TAVILY_API_KEY` — see [Appendix — Tavily web search key](#tavily-web-search-key).
 
 The `web_search` skill is fully live in v0.1. Unlike every other skill, it has **no file extension** — it is selected by recognising an intent phrase in the source string. The engine calls the Tavily search API, gets the top result URLs (up to 20), and enqueues each URL as a separate ingest job. Pages are created for each result that passes scope filtering.
 
@@ -690,7 +614,7 @@ The modal prepends `search for:` automatically — just type the topic, no prefi
 
 ---
 
-### Step 11 — Audit commands
+### Step 10 — Audit commands
 
 The `synthadoc audit` commands query the append-only `audit.db` without needing `sqlite3`. Use them to review what was ingested, how much it cost, and what events occurred.
 
@@ -737,7 +661,7 @@ These three commands replace the need to run raw `sqlite3` queries and are safe 
 
 ---
 
-### Step 12 — Hook: auto-commit wiki to git
+### Step 11 — Hook: auto-commit wiki to git
 
 Hooks let you trigger shell scripts on lifecycle events. This step wires up
 `git-auto-commit.py` so every successful ingest produces a git commit
@@ -775,10 +699,25 @@ synthadoc serve -w history-of-computing
 
 #### Run it
 
-Ingest a new source:
+Drop a new file into `raw_sources/` and ingest it:
+
+**Windows (cmd):**
+
+```cmd
+echo Ada Lovelace (1815-1852) is widely regarded as the first computer programmer. > %USERPROFILE%\wikis\history-of-computing\raw_sources\ada-lovelace.txt
+```
+
+**Linux / macOS:**
+
+```bash
+echo "Ada Lovelace (1815-1852) is widely regarded as the first computer programmer." \
+  > ~/wikis/history-of-computing/raw_sources/ada-lovelace.txt
+```
+
+Then ingest it:
 
 ```
-synthadoc ingest sources/ada-lovelace.md -w history-of-computing
+synthadoc ingest raw_sources/ada-lovelace.txt -w history-of-computing
 ```
 
 #### Verify
@@ -790,7 +729,7 @@ git log --oneline -5
 Expected output:
 
 ```
-a3f1b2c wiki: ingest ada-lovelace.md → created ada-lovelace
+a3f1b2c wiki: ingest ada-lovelace.txt → created ada-lovelace
 d9e4c81 wiki: ingest turing-award.pdf → updated alan-turing; created turing-award
 ...
 ```
@@ -804,7 +743,7 @@ how the wiki evolved over time.
 
 ---
 
-### Step 14 — Scheduler: nightly auto-ingest
+### Step 12 — Scheduler: nightly auto-ingest
 
 Hooks react to events that already happened. The scheduler goes the other
 direction — it proactively triggers operations on a timer, so the wiki
@@ -883,7 +822,23 @@ synthadoc schedule remove sched-b7e9d012 -w history-of-computing
 
 ---
 
-### Step 15 — Uninstall
+### Step 13 — Uninstall
+
+> **Stop the server first.** The serve process must be stopped before uninstalling,
+> otherwise the wiki directory will be locked or partially deleted on some systems.
+
+If the server is running in the background, stop it using the PID printed at startup
+(also saved in `<wiki-root>/.synthadoc/server.pid`):
+
+```bash
+# Linux / macOS
+kill $(cat ~/wikis/history-of-computing/.synthadoc/server.pid)
+
+# Windows (cmd)
+for /f %p in (%USERPROFILE%\wikis\history-of-computing\.synthadoc\server.pid) do taskkill /PID %p /F
+```
+
+Then uninstall:
 
 ```
 synthadoc uninstall history-of-computing
@@ -895,3 +850,97 @@ Two confirmations required:
 2. Type `history-of-computing` to confirm the name
 
 The directory and registry entry are both removed. There is no `--yes` flag — this is intentional.
+
+---
+
+## Appendix — Switching LLM providers
+
+Synthadoc supports five LLM providers. The demo uses Anthropic by default, but
+**Gemini Flash is a great free-tier alternative** — 15 requests per minute and 1 million
+tokens per day at no cost, which is more than enough for demos and personal wikis.
+
+You can switch at any time by changing the `provider` line in
+`<wiki-root>/.synthadoc/config.toml` and restarting the server. The wiki, cache, and
+audit trail are provider-agnostic — switching does not require re-ingesting anything.
+
+| Provider    | Key env var         | Free tier                  |
+| ----------- | ------------------- | -------------------------- |
+| `anthropic` | `ANTHROPIC_API_KEY` | No                         |
+| `openai`    | `OPENAI_API_KEY`    | No                         |
+| `gemini`    | `GEMINI_API_KEY`    | Yes (15 RPM, 1M tok/day)   |
+| `groq`      | `GROQ_API_KEY`      | Yes (Llama/Mixtral models) |
+| `ollama`    | _(none)_            | Yes (fully local)          |
+
+### Option A — Anthropic (Claude)
+
+Get a key at **console.anthropic.com** — pay-per-token, no free tier.
+
+**Windows (cmd — current session only):**
+
+```cmd
+set ANTHROPIC_API_KEY=sk-ant-your-key-here
+```
+
+**Windows (cmd — permanent, survives reboot):**
+
+```cmd
+setx ANTHROPIC_API_KEY sk-ant-your-key-here
+```
+
+> After `setx`, open a new cmd window for the variable to take effect.
+
+**Linux / macOS:**
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-your-key-here"
+```
+
+### Option B — Google Gemini (free tier)
+
+1. Go to **aistudio.google.com/app/apikey** → create a key (free, no credit card)
+2. Set the key:
+
+**Windows (cmd.exe):**
+
+```cmd
+set GEMINI_API_KEY=your-gemini-key-here
+```
+
+**Linux / macOS:**
+
+```bash
+export GEMINI_API_KEY="your-gemini-key-here"
+```
+
+3. Update the wiki config to use Gemini:
+
+Open `<wiki-root>/.synthadoc/config.toml` and set:
+
+```toml
+[agents]
+default = { provider = "gemini", model = "gemini-2.0-flash" }
+```
+
+Restart `synthadoc serve` to pick up the change.
+
+---
+
+## Appendix — Tavily web search key
+
+Web search ingestion (Step 9) requires a Tavily API key. Get a free key at
+**tavily.com** (1,000 searches/month, no credit card required).
+
+**Windows (cmd.exe):**
+
+```cmd
+set TAVILY_API_KEY=tvly-your-key-here
+```
+
+**Linux / macOS:**
+
+```bash
+export TAVILY_API_KEY="tvly-your-key-here"
+```
+
+If this key is not set, the server starts normally but web search jobs will fail with
+`[ERR-SKILL-004]`. All other features work without it.

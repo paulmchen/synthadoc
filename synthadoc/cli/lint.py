@@ -13,7 +13,7 @@ from synthadoc.cli._http import post
 
 _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
-_SKIP_SLUGS = {"index", "log", "dashboard"}
+_SKIP_SLUGS = {"index", "log", "dashboard", "purpose"}
 
 
 def _parse_frontmatter(text: str) -> dict:
@@ -86,7 +86,8 @@ def lint_report(
         raw = p.read_text(encoding="utf-8")
         page_texts[p.stem] = raw
         for link in _WIKILINK_RE.findall(raw):
-            referenced.add(link.lower().replace(" ", "-"))
+            slug_part = link.split("|")[0].strip()
+            referenced.add(slug_part.lower().replace(" ", "-"))
 
     orphans = [
         p.stem for p in pages

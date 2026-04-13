@@ -15,7 +15,14 @@ from synthadoc import errors as E
 def server_url(wiki: str) -> str:
     """Return the base URL for the wiki's server."""
     root = resolve_wiki_path(wiki)
-    cfg = load_config(project_config=root / ".synthadoc" / "config.toml")
+    config_path = root / ".synthadoc" / "config.toml"
+    if not config_path.exists():
+        E.cli_error(
+            E.WIKI_NOT_REGISTERED,
+            f"Wiki '{wiki}' is not installed.",
+            f"Make sure wiki '{wiki}' was installed with 'synthadoc install'.",
+        )
+    cfg = load_config(project_config=config_path)
     port = cfg.server.port
     return f"http://127.0.0.1:{port}"
 

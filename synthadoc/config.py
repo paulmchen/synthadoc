@@ -115,6 +115,11 @@ class WebSearchConfig:
     max_results: int = 20
 
 
+@dataclass
+class WikiConfig:
+    domain: str = "General"
+
+
 # ---------------------------------------------------------------------------
 # Root config
 # ---------------------------------------------------------------------------
@@ -131,6 +136,7 @@ class Config:
     server: ServerConfig = field(default_factory=ServerConfig)
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
     web_search: WebSearchConfig = field(default_factory=WebSearchConfig)
+    wiki: WikiConfig = field(default_factory=WikiConfig)
     hooks: dict = field(default_factory=dict)
     wikis: dict = field(default_factory=dict)
 
@@ -282,6 +288,10 @@ def _raw_to_config(raw: dict, source_has_agents: bool) -> Config:
     # --- hooks ---
     hooks = raw.get("hooks", {})
 
+    # --- wiki ---
+    wk = raw.get("wiki", {})
+    wiki = WikiConfig(domain=wk.get("domain", "General"))
+
     # --- wikis ---
     wikis = raw.get("wikis", {})
 
@@ -295,6 +305,7 @@ def _raw_to_config(raw: dict, source_has_agents: bool) -> Config:
         server=server,
         schedule=schedule,
         web_search=web_search,
+        wiki=wiki,
         hooks=hooks,
         wikis=wikis,
     )
