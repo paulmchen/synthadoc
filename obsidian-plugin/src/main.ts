@@ -241,6 +241,9 @@ class JobsModal extends Modal {
     private tableEl: HTMLElement | null = null;
 
     onOpen() {
+        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
+        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
+
         const { contentEl } = this;
         contentEl.createEl("h3", { text: "Synthadoc: Jobs" });
 
@@ -337,6 +340,9 @@ class JobsModal extends Modal {
 
 class LintReportModal extends Modal {
     onOpen() {
+        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
+        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
+
         const { contentEl } = this;
         contentEl.createEl("h3", { text: "Synthadoc: Lint report" });
         const out = contentEl.createEl("div");
@@ -386,6 +392,9 @@ class LintReportModal extends Modal {
 
 class IngestUrlModal extends Modal {
     onOpen() {
+        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
+        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
+
         const { contentEl } = this;
         contentEl.createEl("h3", { text: "Synthadoc: Ingest from URL" });
 
@@ -419,6 +428,9 @@ class IngestUrlModal extends Modal {
 
 class WebSearchModal extends Modal {
     onOpen() {
+        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
+        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
+
         const { contentEl } = this;
         contentEl.createEl("h3", { text: "Synthadoc: Web search" });
         contentEl.createEl("p", {
