@@ -82,31 +82,34 @@ def _check_network(provider: str) -> None:
 
 def _spawn_background(wiki_root: Path, effective_port: int, log_path: Path) -> None:
     """Detach the server as a background process and return to the shell."""
-    # Reconstruct child command from the current interpreter + script path,
-    # dropping --background / -b so the child runs in foreground mode.
-    executable = sys.argv[0]
-    child_args = [a for a in sys.argv[1:] if a not in ("--background", "-b")]
-    cmd = [executable] + child_args
+    # Strip --background / -b from the forwarded args.
+    server_args = [a for a in sys.argv[1:] if a not in ("--background", "-b")]
 
-    env = {**os.environ, _NO_BANNER_ENV: "1"}
-
-    popen_kwargs: dict = dict(
-        args=cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        stdin=subprocess.DEVNULL,
-        env=env,
-    )
     if sys.platform == "win32":
-        # CREATE_NO_WINDOW: child gets no console — it won't keep the parent's
-        # console window locked after the parent exits.
-        # CREATE_NEW_PROCESS_GROUP: child gets its own signal group so Ctrl-C
-        # in the parent terminal doesn't propagate to the server.
-        popen_kwargs["creationflags"] = (
-            subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+        # pythonw.exe runs Python with no console window at all — the child
+        # process has zero console association, so the parent's CMD/PowerShell
+        # window returns to the prompt as soon as the parent exits.
+        pythonw = Path(sys.executable).with_name("pythonw.exe")
+        interpreter = str(pythonw) if pythonw.exists() else sys.executable
+        cmd = [interpreter, "-m", "synthadoc"] + server_args
+        popen_kwargs: dict = dict(
+            args=cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            env={**os.environ, _NO_BANNER_ENV: "1"},
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
         )
     else:
-        popen_kwargs["start_new_session"] = True
+        cmd = [sys.argv[0]] + server_args
+        popen_kwargs = dict(
+            args=cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            env={**os.environ, _NO_BANNER_ENV: "1"},
+            start_new_session=True,
+        )
 
     proc = subprocess.Popen(**popen_kwargs)
 
