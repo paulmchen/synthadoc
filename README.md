@@ -191,7 +191,7 @@ Get a free key at [tavily.com](https://tavily.com). Without it, web search jobs 
 ```bash
 git clone https://github.com/paulmchen/synthadoc.git
 cd synthadoc
-pip3 install -e .
+pip3 install -e ".[dev]"
 ```
 
 ### Step 2 — Run the Python test suite
