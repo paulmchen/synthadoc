@@ -144,6 +144,13 @@ def install_cmd(
         # Ensure operational directories exist — the demo template may not include
         # empty dirs (git doesn't track them) and shutil.copytree won't create them.
         (dest / ".synthadoc" / "logs").mkdir(parents=True, exist_ok=True)
+        # Write config.toml — .synthadoc/ is git-ignored so it can't be bundled
+        # in the demo template; generate it here the same way init_wiki does.
+        from synthadoc.cli._init import _CONFIG_TOML
+        (dest / ".synthadoc" / "config.toml").write_text(
+            _CONFIG_TOML.format(domain=domain, port=effective_port),
+            encoding="utf-8", newline="\n",
+        )
     else:
         from synthadoc.cli._init import init_wiki
         init_wiki(dest, domain, port=effective_port)
