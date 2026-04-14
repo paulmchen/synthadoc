@@ -98,10 +98,19 @@ class Orchestrator:
             # Skill is a known stub — fail immediately, no retry
             await self._queue.fail_permanent(job_id, str(e))
         except Exception as e:
+            import httpx
             from synthadoc.errors import DomainBlockedException
             if isinstance(e, DomainBlockedException):
                 await self._auto_block_domain(e)
                 await self._queue.skip(job_id, str(e))
+            elif isinstance(e, (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.PoolTimeout)):
+                # Transient network timeout fetching the source URL — retry with backoff.
+                # Log at WARN (not ERROR) and do not re-raise so the worker loop stays clean.
+                import logging
+                logging.getLogger(__name__).warning(
+                    "URL fetch timed out for job %s (%s) — will retry", job_id, source
+                )
+                await self._queue.fail(job_id, f"ReadTimeout: {source}")
             else:
                 await self._queue.fail(job_id, str(e))
                 raise

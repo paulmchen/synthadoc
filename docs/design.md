@@ -3,6 +3,8 @@
 **Version:** 0.1 (updated 2026-04-12)  
 **Audience:** Product users who want to understand how the system works; developers adding features, skills, and plugins.
 
+**Document owners:** Paul Chen, William Johnason
+
 ---
 
 ## Table of Contents
@@ -14,19 +16,18 @@
 5. [Skills System](#5-skills-system)
 6. [Storage](#6-storage)
 7. [HTTP API](#7-http-api)
-8. [MCP Server](#8-mcp-server)
-9. [Obsidian Plugin](#9-obsidian-plugin)
-10. [CLI](#10-cli)
-11. [Configuration](#11-configuration)
-12. [Hook System](#12-hook-system)
-13. [Cache System](#13-cache-system)
-14. [Cost Guard](#14-cost-guard)
-15. [Job Queue](#15-job-queue)
-16. [Observability and Logging](#16-observability-and-logging)
-17. [Security](#17-security)
-18. [Plugin Development Guide](#18-plugin-development-guide)
-19. [v0.2 Roadmap](#19-v02-roadmap)
-20. [New in v0.1 — Feature Reference](#20-new-in-v01--feature-reference)
+8. [Obsidian Plugin](#8-obsidian-plugin)
+9. [CLI](#9-cli)
+10. [Configuration](#10-configuration)
+11. [Hook System](#11-hook-system)
+12. [Cache System](#12-cache-system)
+13. [Cost Guard](#13-cost-guard)
+14. [Job Queue](#14-job-queue)
+15. [Observability and Logging](#15-observability-and-logging)
+16. [Security](#16-security)
+17. [Plugin Development Guide](#17-plugin-development-guide)
+18. [v0.2 Roadmap](#18-v02-roadmap)
+19. [New in v0.1 — Feature Reference](#19-new-in-v01--feature-reference)
 
 ---
 
@@ -107,6 +108,7 @@ Every ingest, lint, and scheduled operation runs as a job:
 pending → in_progress → completed
                       → failed      (retryable; will retry with backoff)
                       → dead        (max_retries exceeded; requires manual intervention)
+                      → skipped     (deliberately not retried; e.g. auto-blocked domain)
 ```
 
 Jobs persist across server restarts. A dead job can be reset to `pending` with `synthadoc jobs retry <id>`.
@@ -151,8 +153,6 @@ All agents are async Python classes. They receive a job context, write results t
 
 ### IngestAgent
 
-**File:** `synthadoc/agents/ingest_agent.py`
-
 Two-step pipeline (replaces the original four-pass design):
 
 | Step | Model | Purpose |
@@ -191,16 +191,12 @@ def _slugify(title: str) -> str:
 
 ### QueryAgent
 
-**File:** `synthadoc/agents/query_agent.py`
-
 1. Extract search terms from the natural language question
 2. BM25 search against wiki
 3. LLM synthesizes answer from retrieved pages, citing `[[page-name]]` sources
 4. Optional: save answer as a new wiki page
 
 ### LintAgent
-
-**File:** `synthadoc/agents/lint_agent.py`
 
 Runs against the entire wiki or a scoped subset:
 
@@ -216,8 +212,6 @@ Runs against the entire wiki or a scoped subset:
 **Index suggestion:** For orphan pages, LintAgent reads the page frontmatter and generates a ready-to-paste `wiki/index.md` entry: `- [[slug]] — tag1, tag2, tag3`.
 
 ### SkillAgent
-
-**File:** `synthadoc/agents/skill_agent.py`
 
 Dispatches to the correct skill based on file extension, URL prefix, or intent keyword match. Manages 3-tier lazy loading. Returns `ExtractedContent` to IngestAgent.
 
@@ -403,7 +397,6 @@ Note: BM25 IDF requires a minimum of 3 documents in the corpus for non-zero scor
 
 ## 7. HTTP API
 
-**File:** `synthadoc/integration/http_server.py`  
 **Base URL:** `http://127.0.0.1:<port>` (default port: 7070)
 
 ### Middleware
@@ -472,41 +465,7 @@ The HTTP server runs a background task that polls `jobs.db` every 2 seconds and 
 
 ---
 
-## 8. MCP Server
-
-**File:** `synthadoc/integration/mcp_server.py`  
-**Transport:** stdio (JSON-RPC 2.0)  
-**Activation:** `synthadoc serve -w <wiki> --mcp-only`
-
-### Tools
-
-| Tool name | Parameters | Returns | Purpose |
-|-----------|-----------|---------|---------|
-| `synthadoc_ingest` | `source: str` | `{job_id, source}` | Enqueue ingest job |
-| `synthadoc_query` | `question: str` | `{answer, citations: [str]}` | Query + LLM synthesis |
-| `synthadoc_lint` | `scope: str = "all"` | `{contradictions_found, orphans}` | Run lint checks |
-| `synthadoc_search` | `terms: str` | `{results: [{slug, score, title, snippet}]}` | BM25 search (no LLM) |
-| `synthadoc_status` | — | `{pages, wiki, queue_depth}` | Wiki statistics |
-| `synthadoc_job_status` | `job_id: str` | `Job` | Poll job by ID |
-
-### Claude Desktop registration
-
-```json
-{
-  "mcpServers": {
-    "synthadoc-my-wiki": {
-      "command": "synthadoc",
-      "args": ["serve", "--wiki", "my-wiki", "--mcp-only"]
-    }
-  }
-}
-```
-
-Register one entry per wiki. Each runs as an isolated MCP server on its own stdio process.
-
----
-
-## 9. Obsidian Plugin
+## 8. Obsidian Plugin
 
 **Package:** `synthadoc-obsidian` (TypeScript)  
 **Location:** `obsidian-plugin/` in the repo  
@@ -534,8 +493,12 @@ Reload the plugin (toggle off/on) after copying — a full Obsidian restart is n
 
 ### Ribbon icon
 
+The Synthadoc ribbon icon (a book icon — `synthadoc-ribbon-icon`) appears in the **left sidebar ribbon** of Obsidian, alongside other plugin icons. Click it to open the engine status at a glance.
+
 Shows engine health and live page count: `✅ online · 12 pages` or `❌ offline — run 'synthadoc serve'`.
 Calls `GET /health` and `GET /status` in parallel (`Promise.allSettled`).
+
+If the icon is not visible, make sure the plugin is enabled under **Settings → Community plugins** and that you are looking at the left ribbon (not the right sidebar). You can also pin it via right-clicking the ribbon area.
 
 ### Settings
 
@@ -550,7 +513,7 @@ Calls `GET /health` and `GET /status` in parallel (`Promise.allSettled`).
 
 ---
 
-## 10. CLI
+## 9. CLI
 
 
 The CLI is a thin HTTP client — it posts jobs to the running server and polls for results. No LLM agents run in the CLI process.
@@ -670,7 +633,7 @@ Every user-facing error carries a stable code in the format `[ERR-<CATEGORY>-<NN
 
 ---
 
-## 11. Configuration
+## 10. Configuration
 
 ### Resolution order
 
@@ -791,7 +754,7 @@ cron = "0 3 * * 0"   # every Sunday at 03:00
 
 ---
 
-## 12. Hook System
+## 11. Hook System
 
 Hooks are shell commands executed when lifecycle events fire. They are configured in `.synthadoc/config.toml` under `[hooks]` and receive a JSON context object on stdin.
 
@@ -863,7 +826,7 @@ the full list of available scripts.
 
 ---
 
-## 13. Cache System
+## 12. Cache System
 
 Three independent cache layers:
 
@@ -912,7 +875,7 @@ Anthropic, OpenAI, and compatible providers cache stable prompt segments server-
 
 ---
 
-## 14. Cost Guard
+## 13. Cost Guard
 
 **File:** `synthadoc/core/cost_guard.py`
 
@@ -948,7 +911,7 @@ The HTTP server always passes `auto_confirm=True` (no interactive terminal avail
 
 ---
 
-## 15. Job Queue
+## 14. Job Queue
 
 **File:** `synthadoc/core/queue.py`  
 **Storage:** `<wiki-root>/.synthadoc/jobs.db` (SQLite)
@@ -960,12 +923,14 @@ pending → in_progress → completed
                       → failed    (non-retryable error; permanent, no retry)
                       → pending   (retryable error; retries < max_retries, after backoff)
                       → dead      (retryable error; retries == max_retries)
+                      → skipped   (deliberately not retried; e.g. auto-blocked domain)
 ```
 
 | Status | Meaning | Action |
 |--------|---------|--------|
 | `failed` | Non-retryable error (e.g. stub skill, bad source) | Inspect error; fix source; enqueue again |
 | `dead` | Retryable error exhausted max retries | `synthadoc jobs retry <id>` to reset to pending |
+| `skipped` | Permanently skipped without retry (e.g. domain auto-blocked after 403) | No action needed; remove from blocked list to re-enable |
 
 **Backoff formula:** `backoff_base_seconds × 2^(retry_count) × jitter`  
 where `jitter ∈ [0.8, 1.2]` (±20% random). Applied only to retryable errors (LLM API timeouts, 5xx responses).
@@ -974,7 +939,7 @@ where `jitter ∈ [0.8, 1.2]` (±20% random). Applied only to retryable errors (
 
 ---
 
-## 16. Observability and Logging
+## 15. Observability and Logging
 
 **Files:** `synthadoc/core/logging_config.py`, `synthadoc/observability/telemetry.py`
 
@@ -1056,7 +1021,7 @@ Spans cover: full operation tree (orchestrator → agent → LLM calls → stora
 
 ---
 
-## 17. Security
+## 16. Security
 
 ### Path traversal
 
@@ -1088,7 +1053,7 @@ Skills in `<wiki-root>/skills/` or `~/.synthadoc/skills/` run in the same Python
 
 ---
 
-## 18. Plugin Development Guide
+## 17. Plugin Development Guide
 
 This section is for developers building custom skills or LLM providers.
 
@@ -1202,7 +1167,7 @@ echo "Event $event fired on wiki $wiki" | mail -s "Synthadoc notification" you@e
 
 ---
 
-## 19. v0.2 Roadmap
+## 18. v0.2 Roadmap
 
 Target: week of 2026-04-25.
 
@@ -1217,7 +1182,7 @@ Target: week of 2026-04-25.
 
 ---
 
-## 20. New in v0.1 — Feature Reference
+## 19. New in v0.1 — Feature Reference
 
 These features were added to v0.1 after the original scope was set.
 
@@ -1245,7 +1210,7 @@ Five providers supported: `anthropic`, `openai`, `gemini`, `groq`, `ollama`. Gem
 
 ### Audit CLI commands
 
-`synthadoc audit history / cost / events` query `audit.db` directly without needing `sqlite3`. See [Section 10 — CLI](#10-cli) for full usage.
+`synthadoc audit history / cost / events` query `audit.db` directly without needing `sqlite3`. See [Section 9 — CLI](#9-cli) for full usage.
 
 ### Obsidian plugin: web search modal
 
@@ -1257,7 +1222,7 @@ All five intent phrases (`search for`, `find on the web`, `look up`, `web search
 
 ### Error code system
 
-Every user-facing error now carries a stable code in the format `[ERR-<CATEGORY>-<NNN>]` (e.g. `[ERR-SRV-001]`). The central registry lives in `synthadoc/errors.py`. CLI errors go through the `cli_error()` helper; agent and skill errors embed the code in the exception message so it surfaces in the job `error` field. See [Section 10 — CLI](#10-cli) for the full code table.
+Every user-facing error now carries a stable code in the format `[ERR-<CATEGORY>-<NNN>]` (e.g. `[ERR-SRV-001]`). The central registry lives in `synthadoc/errors.py`. CLI errors go through the `cli_error()` helper; agent and skill errors embed the code in the exception message so it surfaces in the job `error` field. See [Section 9 — CLI](#9-cli) for the full code table.
 
 ### Smart install scaffold
 

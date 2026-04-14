@@ -28,7 +28,7 @@ export default class SynthadocPlugin extends Plugin {
 
         this.addCommand({
             id: "synthadoc-ingest-current",
-            name: "Synthadoc: Ingest current file as source",
+            name: "Ingest current file as source",
             callback: () => {
                 const file = this.app.workspace.getActiveFile();
                 if (file) {
@@ -41,43 +41,43 @@ export default class SynthadocPlugin extends Plugin {
 
         this.addCommand({
             id: "synthadoc-ingest-all",
-            name: "Synthadoc: Ingest all sources",
+            name: "Ingest all sources",
             callback: () => this.ingestAllSources(),
         });
 
         this.addCommand({
             id: "synthadoc-query",
-            name: "Synthadoc: Query wiki...",
+            name: "Query wiki...",
             callback: () => new QueryModal(this.app).open(),
         });
 
         this.addCommand({
             id: "synthadoc-jobs",
-            name: "Synthadoc: List jobs...",
+            name: "List jobs...",
             callback: () => new JobsModal(this.app).open(),
         });
 
         this.addCommand({
             id: "synthadoc-lint-report",
-            name: "Synthadoc: Lint report",
+            name: "Lint report",
             callback: () => new LintReportModal(this.app).open(),
         });
 
         this.addCommand({
             id: "synthadoc-ingest-url",
-            name: "Synthadoc: Ingest from URL...",
+            name: "Ingest from URL...",
             callback: () => new IngestUrlModal(this.app).open(),
         });
 
         this.addCommand({
             id: "synthadoc-web-search",
-            name: "Synthadoc: Web search...",
+            name: "Web search...",
             callback: () => new WebSearchModal(this.app).open(),
         });
 
         this.addCommand({
             id: "synthadoc-lint",
-            name: "Synthadoc: Run lint",
+            name: "Run lint",
             callback: async () => {
                 new Notice("Synthadoc: running lint...");
                 try {
@@ -89,7 +89,7 @@ export default class SynthadocPlugin extends Plugin {
 
         this.addCommand({
             id: "synthadoc-lint-auto-resolve",
-            name: "Synthadoc: Run lint with auto-resolve",
+            name: "Run lint with auto-resolve",
             callback: async () => {
                 new Notice("Synthadoc: running lint with auto-resolve...");
                 try {
@@ -438,10 +438,11 @@ class WebSearchModal extends Modal {
             cls: "synthadoc-muted",
         }).style.cssText = "font-size:12px;margin-bottom:12px";
 
+        const input = contentEl.createEl("textarea", { placeholder: "e.g. Bank of Canada rate outlook 2025\nOntario housing market trends" });
+        input.style.cssText = "width:100%;min-height:80px;padding:6px 8px;resize:vertical;margin-bottom:8px;box-sizing:border-box";
+
         const row = contentEl.createEl("div");
-        row.style.cssText = "display:flex;gap:8px;margin-bottom:12px";
-        const input = row.createEl("input", { type: "text", placeholder: "e.g. Rust async runtimes" });
-        input.style.cssText = "flex:1;padding:4px 8px";
+        row.style.cssText = "display:flex;justify-content:flex-end;margin-bottom:12px";
         const btn = row.createEl("button", { text: "Search" });
 
         const out = contentEl.createEl("p");
@@ -461,7 +462,7 @@ class WebSearchModal extends Modal {
         };
 
         btn.onclick = submit;
-        input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+        input.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit(); });
         setTimeout(() => input.focus(), 50);
     }
     onClose() { this.contentEl.empty(); }
@@ -479,14 +480,15 @@ class QueryModal extends Modal {
         const { contentEl } = this;
         contentEl.createEl("h3", { text: "Synthadoc: Query your wiki" });
 
+        const input = contentEl.createEl("textarea", { placeholder: "Ask a question…\n(Ctrl+Enter or Cmd+Enter to submit)" });
+        input.style.cssText = "width:100%;min-height:72px;padding:6px 8px;resize:vertical;margin-bottom:8px;box-sizing:border-box";
+
         const row = contentEl.createEl("div");
-        row.style.cssText = "display:flex;gap:8px;margin-bottom:12px";
-        const input = row.createEl("input", { type: "text", placeholder: "Ask a question…" });
-        input.style.cssText = "flex:1;padding:4px 8px";
+        row.style.cssText = "display:flex;justify-content:flex-end;margin-bottom:12px";
         const btn = row.createEl("button", { text: "Ask" });
 
         const out = contentEl.createEl("div");
-        out.style.cssText = "max-height:65vh;overflow-y:auto;padding:4px 0";
+        out.style.cssText = "max-height:60vh;overflow-y:auto;padding:4px 0";
 
         const submit = async () => {
             if (!input.value.trim()) return;
@@ -509,7 +511,7 @@ class QueryModal extends Modal {
         };
 
         btn.onclick = submit;
-        input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+        input.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit(); });
     }
     onClose() { this.contentEl.empty(); }
 }

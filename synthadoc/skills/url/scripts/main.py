@@ -47,7 +47,11 @@ class UrlSkill(BaseSkill):
 
     def _extract_pdf_response(self, content: bytes, source: str) -> ExtractedContent:
         """Write PDF bytes to a temp file and extract text via pypdf."""
+        import logging
         import pypdf
+        # pypdf logs benign structural warnings at WARNING level for many real-world PDFs;
+        # suppress them so they don't pollute the server console.
+        logging.getLogger("pypdf").setLevel(logging.ERROR)
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp.write(content)
             tmp_path = tmp.name

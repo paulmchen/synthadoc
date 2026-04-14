@@ -64,6 +64,9 @@ INGEST_NOT_FOUND  = "ERR-INGEST-001"  # Source file or directory not found
 INGEST_EMPTY      = "ERR-INGEST-002"  # Source file exists but is empty
 INGEST_NOT_DIR    = "ERR-INGEST-003"  # --batch target exists but is not a directory
 
+# ── Query ─────────────────────────────────────────────────────────────────────
+QUERY_TIMEOUT = "ERR-QUERY-001"  # LLM synthesis timed out; retry the query
+
 # ── Jobs ──────────────────────────────────────────────────────────────────────
 JOB_NOT_FOUND = "ERR-JOB-001"   # Job ID does not exist in jobs.db
 

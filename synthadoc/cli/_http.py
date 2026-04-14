@@ -35,6 +35,13 @@ def get(wiki: str, path: str, **params) -> dict:
         return resp.json()
     except httpx.ConnectError:
         _no_server(wiki)
+    except httpx.ReadTimeout:
+        E.cli_error(
+            E.QUERY_TIMEOUT,
+            "The query timed out waiting for the LLM to respond (30 s).",
+            "The wiki server is still running. Try again — if the wiki is large, "
+            "reduce your question scope or increase the timeout.",
+        )
     except httpx.HTTPStatusError as e:
         E.cli_error(E.SRV_HTTP_ERROR,
                     f"Server returned {e.response.status_code}: {e.response.text.strip()}")
@@ -48,6 +55,12 @@ def post(wiki: str, path: str, body: dict) -> dict:
         return resp.json()
     except httpx.ConnectError:
         _no_server(wiki)
+    except httpx.ReadTimeout:
+        E.cli_error(
+            E.QUERY_TIMEOUT,
+            "The request timed out waiting for the server to respond (30 s).",
+            "The wiki server is still running. Try again.",
+        )
     except httpx.HTTPStatusError as e:
         E.cli_error(E.SRV_HTTP_ERROR,
                     f"Server returned {e.response.status_code}: {e.response.text.strip()}")

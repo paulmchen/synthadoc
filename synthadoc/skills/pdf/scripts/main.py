@@ -8,6 +8,10 @@ from synthadoc.skills.base import BaseSkill, ExtractedContent, SkillMeta
 
 logger = logging.getLogger(__name__)
 
+# pypdf logs benign structural warnings (e.g. incorrect startxref pointer) at WARNING
+# level for many real-world PDFs. Suppress them so they don't pollute the console.
+logging.getLogger("pypdf").setLevel(logging.ERROR)
+
 # If pypdf extracts fewer than this many characters per page on average,
 # the PDF likely uses CJK fonts whose ToUnicode CMaps pypdf cannot decode.
 # In that case we fall back to pdfminer.six which has better CJK support.

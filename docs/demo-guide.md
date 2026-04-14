@@ -356,7 +356,6 @@ Verify with queries that use the new content:
 ```
 synthadoc query "What was the Bombe machine and who built it?" -w history-of-computing
 synthadoc query "Who invented FORTRAN and when?" -w history-of-computing
-synthadoc query "Who were the ENIAC Six?" -w history-of-computing
 synthadoc query "When did the modern internet begin?" -w history-of-computing
 ```
 

@@ -13,16 +13,17 @@
     '##                   ##'
       '-+###############+-'
 
-  S Y N T H A D O C  0.1.0
+       S Y N T H A D O C
+    Community Edition  v0.1.0
   ────────────────────────────────
   Domain-agnostic LLM wiki engine
 ```
 
-**Domain-agnostic LLM knowledge compilation engine.**
+**Engineered for solo users and enterprises alike, providing a domain-specific knowledge base that scales seamlessly while maintaining accuracy through autonomous self-optimization.**
 
 > Built for individuals, small teams, and large organizations who need a knowledge base that stays accurate as documents accumulate.
 
-Synthadoc reads your raw source documents — PDFs, spreadsheets, web pages, images, Word files — and uses an LLM to synthesize them into a persistent, structured wiki. Cross-references are built automatically, contradictions are detected and surfaced, orphan pages are flagged, and every answer cites its sources. The result lives as plain Markdown in a local folder that opens directly in [Obsidian](https://obsidian.md).
+Synthadoc reads your raw source documents — PDFs, spreadsheets, web pages, images, Word files — and uses an LLM to synthesize them into a persistent, structured wiki. Cross-references are built automatically, contradictions are detected and surfaced, orphan pages are flagged, and every answer cites its sources. Outputs are stored as local Markdown files, ensuring seamless integration and autonomous management within [Obsidian](https://obsidian.md) or any wiki-compliant ecosystem.
 
 ---
 
@@ -33,7 +34,7 @@ Synthadoc scales from a single researcher to a company-wide knowledge platform:
 | Team size | Typical use case |
 |-----------|-----------------|
 | **Solo / 1–2 people** | Personal research wiki, freelance knowledge base, indie hacker documentation — run it free on Gemini Flash or a local Ollama model with zero ongoing cost |
-| **Small team (3–20)** | Shared internal wiki for a startup or department; each member ingests from their own sources; the shared wiki stays consistent and contradiction-free |
+| **Small team (3–20)** | Centralized internal knowledge base for startups and departments that aggregates diverse individual data sources into a unified, high-integrity wiki. The system automatically resolves contradictions and scales autonomously, ensuring organizational intelligence grows in tandem with your team |
 | **Medium / enterprise** | Compliance-sensitive knowledge bases that must stay local; per-department wikis on separate ports; audit trail for every ingest and cost event; hook system for CI/CD integration; OpenTelemetry for ops dashboards |
 
 No cloud account. No vendor lock-in. The wiki is plain Markdown — open it in any editor, back it up with git, sync it with any cloud drive.
@@ -52,9 +53,9 @@ Most knowledge-management tools retrieve and summarize at query time. Synthadoc 
 | Direction | How Synthadoc moves there |
 |-----------|--------------------------|
 | Agent orchestration | Orchestrator dispatches parallel IngestAgent, QueryAgent, LintAgent sub-agents with cost guards and retry backoff |
-| Sub-agent skills/plugins | 3-tier lazy-load skill system; drop a Python file in `skills/` to add a new file format without touching the core |
+| Sub-agent skills/plugins | Featuring a 3-tier lazy-load capability system, the platform allows for the injection of custom skills and hooks via a plug-and-play interface, ensuring core stability is never compromised during extension |
 | LLM wiki vs. RAG | Pre-compiled structured knowledge beats query-time synthesis for contradiction detection, graph traversal, and offline access |
-| CLI / HTTP | CLI and HTTP REST API cover every integration path — ingest, query, lint, audit, and job management |
+| CLI / HTTP | A unified interface via CLI and RESTful endpoints, the system streamlines full-spectrum integration: from data ingestion and querying to automated linting, security auditing, and job orchestration |
 | Local-first | All data stays on your machine; localhost-only network binding; no cloud dependency except the LLM API itself |
 | Provider choice | Five LLM backends including free-tier Gemini and Groq — no single-vendor dependency |
 
@@ -222,18 +223,20 @@ cd ..
 
 ### Step 4 — Set your API keys
 
+The demo wiki defaults to using **Anthropic** (`ANTHROPIC_API_KEY`) as the LLM provider. Web search uses **Tavily** (`TAVILY_API_KEY`). You can switch to a free-tier provider (Gemini Flash or Groq) by editing `<wiki-root>/.synthadoc/config.toml` after installation.
+
 ```bash
 # macOS / Linux — add to ~/.bashrc or ~/.zshrc to persist
-export GEMINI_API_KEY=AIza…          # free tier — recommended starting point
-export ANTHROPIC_API_KEY=sk-ant-…    # if using Anthropic
-export TAVILY_API_KEY=tvly-…         # optional — web search only
+export ANTHROPIC_API_KEY=sk-ant-…    # default LLM provider for the demo
+export GEMINI_API_KEY=AIza…          # free-tier alternative — 15 RPM / 1M tokens/day
+export TAVILY_API_KEY=tvly-…         # web search (synthadoc ingest "search for: …")
 
 # Windows cmd — current session
-set GEMINI_API_KEY=AIza…
+set ANTHROPIC_API_KEY=sk-ant-…
 set TAVILY_API_KEY=tvly-…
 
 # Windows cmd — permanent (open a new cmd window after running)
-setx GEMINI_API_KEY AIza…
+setx ANTHROPIC_API_KEY sk-ant-…
 setx TAVILY_API_KEY tvly-…
 ```
 
@@ -244,6 +247,8 @@ synthadoc --version
 ```
 
 ### Step 6 — Install a demo wiki, then start the engine
+
+A **wiki** is a self-contained, structured knowledge base — a folder of Markdown pages linked by topic, maintained and cross-referenced automatically by Synthadoc. Think of it as a living document that grows smarter with every source you feed it: each ingest pass adds new pages, updates existing ones, and flags contradictions. For your own work, you can build and grow a domain-specific wiki — whether that's market research, a technical knowledge base, or a team handbook — and query it in plain English at any time.
 
 A wiki must be installed before the engine can serve it. The fastest way to get started is the **History of Computing** demo, which ships with 10 pre-built pages and sample source files — no LLM API key required to browse it.
 
