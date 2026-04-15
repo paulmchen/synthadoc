@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Paul Chen / axoviq.com
 import os
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from synthadoc.providers.base import LLMProvider, Message, CompletionResponse
 from synthadoc.providers.anthropic import AnthropicProvider
 from synthadoc.config import AgentConfig, Config
@@ -39,7 +39,7 @@ async def test_anthropic_provider_retries_on_rate_limit():
         nonlocal call_count
         call_count += 1
         if call_count < 3:
-            raise anthropic.RateLimitError(response=AsyncMock(status_code=429), body={}, message="rate limit")
+            raise anthropic.RateLimitError(response=MagicMock(status_code=429), body={}, message="rate limit")
         m = AsyncMock()
         m.content = [AsyncMock(text="ok")]
         m.usage = AsyncMock(input_tokens=5, output_tokens=2)
@@ -58,7 +58,7 @@ async def test_anthropic_provider_raises_on_bad_api_key():
     provider = AnthropicProvider(api_key="bad-key", config=cfg)
     with patch.object(provider._client.messages, "create",
                       side_effect=anthropic.AuthenticationError(
-                          response=AsyncMock(status_code=401), body={}, message="invalid key")):
+                          response=MagicMock(status_code=401), body={}, message="invalid key")):
         with pytest.raises(anthropic.AuthenticationError):
             await provider.complete(messages=[Message(role="user", content="hi")])
 
@@ -70,7 +70,7 @@ async def test_provider_raises_after_max_retries():
     provider = AnthropicProvider(api_key="test-key", config=cfg)
     with patch.object(provider._client.messages, "create",
                       side_effect=anthropic.RateLimitError(
-                          response=AsyncMock(status_code=429), body={}, message="rate limit")):
+                          response=MagicMock(status_code=429), body={}, message="rate limit")):
         with pytest.raises(anthropic.RateLimitError):
             await provider.complete(messages=[Message(role="user", content="hi")])
 
