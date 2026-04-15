@@ -12,6 +12,7 @@ venv/
 node_modules/
 obsidian-plugin/node_modules/
 .VSCodeCounter/
+.claude/settings.local.json
 
 # synthadoc operational — never commit
 .synthadoc/
