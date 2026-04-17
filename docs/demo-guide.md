@@ -227,20 +227,9 @@ The banner confirms the port, wiki path, and PID. If you see
 > status"** tooltip. Clicking it shows the live wiki page count. This is a convenience
 > shortcut; all Synthadoc functionality is also available via the command palette (`Ctrl/Cmd+P`).
 
-**Plugin commands available from this point on** (`Ctrl/Cmd+P` in Obsidian):
+**Plugin commands available from this point on** (`Ctrl/Cmd+P` in Obsidian, type `Synthadoc` to filter):
 
-
-| Command                                    | What it does                                                                                 |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| `Synthadoc: Ingest current file as source` | Queues the open file for ingest                                                              |
-| `Synthadoc: Ingest all sources`            | Queues every file under`raw_sources/`                                                        |
-| `Synthadoc: Ingest from URL...`            | Opens a URL input modal; queues a web page for ingest                                        |
-| `Synthadoc: Web search...`                 | Opens a search modal; type a topic and the engine fetches web results and ingests them*(v2)* |
-| `Synthadoc: Query wiki...`                 | Opens a query modal with markdown-rendered answer and citations                              |
-| `Synthadoc: Lint report`                   | Opens a modal showing contradicted pages and orphans                                         |
-| `Synthadoc: Run lint`                      | Queues a lint job; shows a notice with contradiction + orphan counts                         |
-| `Synthadoc: Run lint with auto-resolve`    | Same but LLM resolves contradictions automatically when confidence ≥ threshold              |
-| `Synthadoc: List jobs...`                  | Opens a filterable jobs table with per-job result details                                    |
+For the full command reference including syntax, descriptions, and what each command does, see [Appendix A — Obsidian Plugin Command Reference](#appendix-a--obsidian-plugin-command-reference).
 
 ---
 
@@ -953,48 +942,50 @@ Commands are grouped by prefix for easy navigation.
 
 ### Ingest
 
-| Command | What it does |
-|---------|-------------|
-| **Ingest: current file** | Ingests the currently open note as a source. If no file is open, shows a file picker filtered to the configured raw sources folder. |
-| **Ingest: all sources in folder** | Scans the `raw_sources` folder and queues every supported file (md, txt, pdf, docx, xlsx, csv, images) for ingestion. |
-| **Ingest: from URL...** | Opens a modal — paste any URL and queue it for fetch and ingestion. |
-| **Ingest: web search...** | Opens a modal — type a topic and Synthadoc searches the web and compiles results directly into the wiki. `Ctrl/Cmd+Enter` to submit. |
+| Obsidian command | Brief description | What it does |
+|------------------|------------------|--------------|
+| `Synthadoc: Ingest: current file` | Ingest the active note | Ingests the currently open note as a source. If no file is open, shows a file picker filtered to the configured raw sources folder. |
+| `Synthadoc: Ingest: all sources in folder` | Batch-ingest raw sources folder | Scans the `raw_sources` folder and queues every supported file (md, txt, pdf, docx, xlsx, csv, images) for ingestion. |
+| `Synthadoc: Ingest: from URL...` | Ingest a web page by URL | Opens a modal — paste any URL and queue it for fetch and ingestion. |
+| `Synthadoc: Ingest: web search...` | Search the web and ingest results | Opens a modal — type a topic and Synthadoc searches the web and compiles results directly into the wiki. `Ctrl/Cmd+Enter` to submit. |
 
 ### Query
 
-| Command | What it does |
-|---------|-------------|
-| **Query: ask the wiki...** | Opens a query panel — ask a natural language question and get a markdown answer with clickable `[[wikilinks]]` to source pages. `Ctrl/Cmd+Enter` to submit. |
+| Obsidian command | Brief description | What it does |
+|------------------|------------------|--------------|
+| `Synthadoc: Query: ask the wiki...` | Ask the wiki a question | Opens a query panel — ask a natural language question and get a markdown answer with clickable `[[wikilinks]]` to source pages. `Ctrl/Cmd+Enter` to submit. |
 
 ### Lint
 
-| Command | What it does |
-|---------|-------------|
-| **Lint: run** | Runs lint in the background. A notification shows contradiction and orphan counts when complete. |
-| **Lint: run with auto-resolve** | Same as above but automatically resolves contradictions above the 80% confidence threshold. |
-| **Lint: report** | Opens a report listing all contradicted pages (requiring manual resolution) and orphan pages (no inbound links) with suggested index entries. |
+| Obsidian command | Brief description | What it does |
+|------------------|------------------|--------------|
+| `Synthadoc: Lint: run` | Run lint silently | Runs lint in the background. A notification shows contradiction and orphan counts when complete. |
+| `Synthadoc: Lint: run with auto-resolve` | Run lint and auto-fix contradictions | Same as above but automatically resolves contradictions above the 80% confidence threshold. |
+| `Synthadoc: Lint: report` | View full lint report | Opens a report listing all contradicted pages (requiring manual resolution) and orphan pages (no inbound links) with suggested index entries. |
 
 ### Jobs
 
-| Command | What it does |
-|---------|-------------|
-| **Jobs: list...** | Opens a job table showing all ingest/lint/scaffold operations with status, source, and timestamps. Filterable by status: `pending`, `in_progress`, `completed`, `failed`, `skipped`, `dead`. |
-| **Jobs: retry dead job...** | Lists all dead jobs and provides a Retry button per job to re-queue it with a fresh retry counter. |
-| **Jobs: purge old completed/dead...** | Removes completed and dead jobs older than a specified number of days (default: 7). |
+| Obsidian command | Brief description | What it does |
+|------------------|------------------|--------------|
+| `Synthadoc: Jobs: list...` | View all jobs | Opens a job table showing all ingest/lint/scaffold operations with status, source, and timestamps. Filterable by status: `pending`, `in_progress`, `completed`, `failed`, `skipped`, `dead`. |
+| `Synthadoc: Jobs: retry dead job...` | Retry a failed job | Lists all dead jobs and provides a Retry button per job to re-queue it with a fresh retry counter. |
+| `Synthadoc: Jobs: purge old completed/dead...` | Clean up old job history | Removes completed and dead jobs older than a specified number of days (default: 7). |
 
 ### Wiki
 
-| Command | What it does |
-|---------|-------------|
-| **Wiki: regenerate scaffold...** | Rewrites `index.md`, `AGENTS.md`, and `purpose.md` for the wiki's domain using the LLM. All existing wiki pages are preserved. |
+| Obsidian command | Brief description | What it does |
+|------------------|------------------|--------------|
+| `Synthadoc: Wiki: regenerate scaffold...` | Rebuild wiki structure files | Rewrites `index.md`, `AGENTS.md`, and `purpose.md` for the wiki's domain using the LLM. All existing wiki pages are preserved. |
 
 ### Audit
 
-| Command | What it does |
-|---------|-------------|
-| **Audit: ingest history...** | Shows a table of the last N ingest records — source file, wiki page created/updated, token count, cost, and timestamp. |
-| **Audit: cost summary...** | Shows total tokens and USD cost for the last N days with a daily breakdown. |
+| Obsidian command | Brief description | What it does |
+|------------------|------------------|--------------|
+| `Synthadoc: Audit: ingest history...` | View ingest history | Shows a table of the last N ingest records — source file, wiki page created/updated, token count, cost, and timestamp. |
+| `Synthadoc: Audit: cost summary...` | View LLM cost breakdown | Shows total tokens and USD cost for the last N days with a daily breakdown. |
 
 ### Ribbon icon
 
-The **book** icon in the Obsidian left ribbon shows a quick status notice: whether the Synthadoc server is online and how many wiki pages currently exist.
+| Obsidian command | Brief description | What it does |
+|------------------|------------------|--------------|
+| Book icon (left ribbon) | Quick server status | Shows a notice with server online/offline status and current wiki page count. |

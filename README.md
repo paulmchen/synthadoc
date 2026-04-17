@@ -638,6 +638,8 @@ taskkill /PID <pid> /F                                      # Windows
 synthadoc uninstall my-wiki
 ```
 
+For Obsidian plugin commands see [Appendix A — Obsidian Plugin Command Reference](docs/demo-guide.md#appendix-a--obsidian-plugin-command-reference) in the demo guide.
+
 ---
 
 ## Administrative Reference

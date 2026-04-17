@@ -29,6 +29,9 @@
 18. [v0.2 Roadmap](#18-v02-roadmap)
 19. [New in v0.1 — Feature Reference](#19-new-in-v01--feature-reference)
 
+**Appendices**
+- [Appendix A — Release Feature Index](#appendix-a--release-feature-index)
+
 ---
 
 ## 1. Overview
