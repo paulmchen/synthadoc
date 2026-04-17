@@ -13,6 +13,11 @@ triggers:
     - "look up"
     - "web search"
     - "browse"
+    - "查找"
+    - "搜索"
+    - "网络搜索"
+    - "在网上查"
+    - "查一下"
 requires:
   - httpx
   - beautifulsoup4

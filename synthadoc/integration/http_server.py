@@ -207,14 +207,13 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
     @app.post("/jobs/ingest")
     async def enqueue_ingest(req: IngestRequest):
         from pathlib import Path as _Path
+        from synthadoc.agents.skill_agent import SkillAgent
         source = req.source
-        # Leave URLs and web-search prefixes untouched — only resolve file paths.
-        if not source.startswith(("http://", "https://", "search for:")):
+        if SkillAgent().needs_path_resolution(source):
             p = _Path(source)
             if not p.is_absolute():
-                # Resolve relative paths against the wiki root so that vault-relative
-                # paths sent by the Obsidian plugin (e.g. "raw_sources/file.pdf") work
-                # regardless of the server's working directory.
+                # Resolve vault-relative paths (e.g. "raw_sources/file.pdf") against
+                # wiki root so they work regardless of server working directory.
                 source = str((wiki_root / source).resolve())
         job_id = await app.state.orch.queue.enqueue(
             "ingest", {"source": source, "force": req.force}

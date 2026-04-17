@@ -213,21 +213,8 @@ class IngestAgent:
         return hashlib.sha256(data).hexdigest(), len(data)
 
     def _needs_file_check(self, source: str) -> bool:
-        """Return True when source must exist as a local file before ingestion.
-
-        URL sources (http/https) and intent-matched sources are remote/virtual
-        and must bypass the file-system existence check.
-        """
-        s = source.lower()
-        if s.startswith(("http://", "https://")):
-            return False
-        try:
-            meta = self._skill_agent.detect_skill(source)
-            if any(intent in s for intent in meta.triggers.intents):
-                return False
-        except Exception as exc:
-            logger.debug("Skill detection failed for %r: %s", source, exc)
-        return True
+        """Return True when source must exist as a local file before ingestion."""
+        return self._skill_agent.needs_path_resolution(source)
 
     async def ingest(self, source: str, force: bool = False, bust_cache: bool = False) -> IngestResult:
         result = IngestResult(source=source)

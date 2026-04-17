@@ -161,3 +161,21 @@ class SkillAgent:
     async def extract(self, source: str) -> ExtractedContent:
         meta = self.detect_skill(source)
         return await self.get_skill(meta.name).extract(source)
+
+    def needs_path_resolution(self, source: str) -> bool:
+        """Return True if source should be resolved as a local filesystem path.
+
+        Returns False for http/https URLs and any source matched by a skill
+        intent phrase (e.g. 'search for', '搜索', 'browse').  Adding new
+        intents to a SKILL.md automatically applies here with no code changes.
+        """
+        s = source.lower()
+        if s.startswith(("http://", "https://")):
+            return False
+        try:
+            meta = self.detect_skill(source)
+            if any(intent in s for intent in meta.triggers.intents):
+                return False
+        except Exception:
+            pass
+        return True
