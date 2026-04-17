@@ -53,6 +53,8 @@ vi.mock("./api", () => ({
     api: {
         ingest: vi.fn(), lint: vi.fn(), lintReport: vi.fn(), status: vi.fn(),
         query: vi.fn(), health: vi.fn(), jobs: vi.fn(),
+        retryJob: vi.fn(), purgeJobs: vi.fn(), scaffold: vi.fn(),
+        auditHistory: vi.fn(), auditCosts: vi.fn(),
     },
     setBase: vi.fn(),
 }));
@@ -267,6 +269,49 @@ describe("SynthadocPlugin.ingestAllSources", () => {
     });
 });
 
+describe("SynthadocPlugin command registration", () => {
+    it("registers all 14 expected command IDs on onload", async () => {
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+
+        const ids = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].id);
+        const expected = [
+            "synthadoc-ingest-current",
+            "synthadoc-ingest-all",
+            "synthadoc-query",
+            "synthadoc-jobs",
+            "synthadoc-lint-report",
+            "synthadoc-ingest-url",
+            "synthadoc-web-search",
+            "synthadoc-lint",
+            "synthadoc-lint-auto-resolve",
+            "synthadoc-jobs-retry-dead",
+            "synthadoc-jobs-purge",
+            "synthadoc-scaffold",
+            "synthadoc-audit-history",
+            "synthadoc-audit-costs",
+        ];
+        for (const id of expected) {
+            expect(ids).toContain(id);
+        }
+    });
+
+    it("command names use group prefixes for palette sorting", async () => {
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+
+        const names: string[] = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].name);
+        expect(names.some(n => n.startsWith("Ingest:"))).toBe(true);
+        expect(names.some(n => n.startsWith("Query:"))).toBe(true);
+        expect(names.some(n => n.startsWith("Lint:"))).toBe(true);
+        expect(names.some(n => n.startsWith("Jobs:"))).toBe(true);
+        expect(names.some(n => n.startsWith("Wiki:"))).toBe(true);
+        expect(names.some(n => n.startsWith("Audit:"))).toBe(true);
+    });
+});
+
 describe("SynthadocPlugin lint commands", () => {
     it("Run lint calls api.lint without auto-resolve", async () => {
         const { api } = await import("./api");
@@ -298,5 +343,47 @@ describe("SynthadocPlugin lint commands", () => {
         await cmd[0].callback();
 
         expect(api.lint).toHaveBeenCalledWith("all", true);
+    });
+});
+
+describe("SynthadocPlugin new commands registered", () => {
+    it("retry-dead command is registered", async () => {
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+        const ids = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].id);
+        expect(ids).toContain("synthadoc-jobs-retry-dead");
+    });
+
+    it("purge command is registered", async () => {
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+        const ids = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].id);
+        expect(ids).toContain("synthadoc-jobs-purge");
+    });
+
+    it("scaffold command is registered", async () => {
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+        const ids = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].id);
+        expect(ids).toContain("synthadoc-scaffold");
+    });
+
+    it("audit-history command is registered", async () => {
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+        const ids = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].id);
+        expect(ids).toContain("synthadoc-audit-history");
+    });
+
+    it("audit-costs command is registered", async () => {
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+        const ids = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].id);
+        expect(ids).toContain("synthadoc-audit-costs");
     });
 });
