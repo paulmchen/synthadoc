@@ -28,7 +28,7 @@ export default class SynthadocPlugin extends Plugin {
 
         this.addCommand({
             id: "synthadoc-ingest-current",
-            name: "Ingest current file as source",
+            name: "Ingest: current file",
             callback: () => {
                 const file = this.app.workspace.getActiveFile();
                 if (file) {
@@ -41,43 +41,43 @@ export default class SynthadocPlugin extends Plugin {
 
         this.addCommand({
             id: "synthadoc-ingest-all",
-            name: "Ingest all sources",
+            name: "Ingest: all sources in folder",
             callback: () => this.ingestAllSources(),
         });
 
         this.addCommand({
             id: "synthadoc-query",
-            name: "Query wiki...",
+            name: "Query: ask the wiki...",
             callback: () => new QueryModal(this.app).open(),
         });
 
         this.addCommand({
             id: "synthadoc-jobs",
-            name: "List jobs...",
+            name: "Jobs: list...",
             callback: () => new JobsModal(this.app).open(),
         });
 
         this.addCommand({
             id: "synthadoc-lint-report",
-            name: "Lint report",
+            name: "Lint: report",
             callback: () => new LintReportModal(this.app).open(),
         });
 
         this.addCommand({
             id: "synthadoc-ingest-url",
-            name: "Ingest from URL...",
+            name: "Ingest: from URL...",
             callback: () => new IngestUrlModal(this.app).open(),
         });
 
         this.addCommand({
             id: "synthadoc-web-search",
-            name: "Web search...",
+            name: "Ingest: web search...",
             callback: () => new WebSearchModal(this.app).open(),
         });
 
         this.addCommand({
             id: "synthadoc-lint",
-            name: "Run lint",
+            name: "Lint: run",
             callback: async () => {
                 new Notice("Synthadoc: running lint...");
                 try {
@@ -89,7 +89,7 @@ export default class SynthadocPlugin extends Plugin {
 
         this.addCommand({
             id: "synthadoc-lint-auto-resolve",
-            name: "Run lint with auto-resolve",
+            name: "Lint: run with auto-resolve",
             callback: async () => {
                 new Notice("Synthadoc: running lint with auto-resolve...");
                 try {
@@ -97,6 +97,36 @@ export default class SynthadocPlugin extends Plugin {
                     new Notice(`Synthadoc: lint done — ${r.contradictions_found} contradictions, ${r.orphans?.length ?? 0} orphans`);
                 } catch { new Notice("Synthadoc: server not running — run 'synthadoc serve'"); }
             },
+        });
+
+        this.addCommand({
+            id: "synthadoc-jobs-retry-dead",
+            name: "Jobs: retry dead job...",
+            callback: () => new RetryJobModal(this.app).open(),
+        });
+
+        this.addCommand({
+            id: "synthadoc-jobs-purge",
+            name: "Jobs: purge old completed/dead...",
+            callback: () => new PurgeJobsModal(this.app).open(),
+        });
+
+        this.addCommand({
+            id: "synthadoc-scaffold",
+            name: "Wiki: regenerate scaffold...",
+            callback: () => new ScaffoldModal(this.app).open(),
+        });
+
+        this.addCommand({
+            id: "synthadoc-audit-history",
+            name: "Audit: ingest history...",
+            callback: () => new AuditHistoryModal(this.app).open(),
+        });
+
+        this.addCommand({
+            id: "synthadoc-audit-costs",
+            name: "Audit: cost summary...",
+            callback: () => new AuditCostsModal(this.app).open(),
         });
 
         this.addRibbonIcon("book-open", "Synthadoc status", async () => {
@@ -464,6 +494,280 @@ class WebSearchModal extends Modal {
         btn.onclick = submit;
         input.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit(); });
         setTimeout(() => input.focus(), 50);
+    }
+    onClose() { this.contentEl.empty(); }
+}
+
+class RetryJobModal extends Modal {
+    onOpen() {
+        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
+        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
+
+        const { contentEl } = this;
+        contentEl.createEl("h3", { text: "Synthadoc: Retry dead job" });
+
+        const out = contentEl.createEl("div");
+        out.createEl("p", { text: "Loading dead jobs…", cls: "synthadoc-muted" });
+
+        api.jobs("dead").then((jobs: any[]) => {
+            out.empty();
+            if (!jobs.length) {
+                out.createEl("p", { text: "No dead jobs." });
+                return;
+            }
+            const table = out.createEl("table");
+            table.style.cssText = "width:100%;border-collapse:collapse;font-size:13px";
+            const hrow = table.createEl("thead").createEl("tr");
+            for (const h of ["Job ID", "Operation", "Source", "Error", ""]) {
+                const th = hrow.createEl("th", { text: h });
+                th.style.cssText = "text-align:left;padding:4px 8px;border-bottom:1px solid var(--background-modifier-border)";
+            }
+            const tbody = table.createEl("tbody");
+            for (const job of jobs) {
+                const tr = tbody.createEl("tr");
+                const source = job.payload?.source
+                    ? job.payload.source.split(/[\\/]/).pop()
+                    : job.operation;
+                for (const text of [job.id, job.operation, source, job.error ?? "—"]) {
+                    const td = tr.createEl("td", { text });
+                    td.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle)";
+                }
+                const btnTd = tr.createEl("td");
+                btnTd.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle)";
+                const btn = btnTd.createEl("button", { text: "Retry" });
+                btn.onclick = async () => {
+                    btn.disabled = true;
+                    btn.setText("…");
+                    try {
+                        await api.retryJob(job.id);
+                        new Notice(`Synthadoc: job ${job.id} re-queued`);
+                        tr.remove();
+                    } catch {
+                        new Notice("Synthadoc: retry failed — is the server running?");
+                        btn.disabled = false;
+                        btn.setText("Retry");
+                    }
+                };
+            }
+        }).catch(() => {
+            out.empty();
+            out.createEl("p", { text: "Error: is synthadoc serve running?" });
+        });
+    }
+    onClose() { this.contentEl.empty(); }
+}
+
+class PurgeJobsModal extends Modal {
+    onOpen() {
+        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
+        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
+
+        const { contentEl } = this;
+        contentEl.createEl("h3", { text: "Synthadoc: Purge old jobs" });
+        contentEl.createEl("p", {
+            text: "Removes completed and dead jobs older than the specified number of days.",
+            cls: "synthadoc-muted",
+        }).style.cssText = "font-size:12px;margin-bottom:12px";
+
+        const row = contentEl.createEl("div");
+        row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px";
+        row.createEl("label", { text: "Older than (days):" });
+        const input = row.createEl("input", { type: "number" }) as HTMLInputElement;
+        input.value = "7";
+        input.style.cssText = "width:70px;padding:4px 8px";
+        const btn = row.createEl("button", { text: "Purge" });
+
+        const out = contentEl.createEl("p");
+
+        btn.onclick = async () => {
+            const days = parseInt(input.value) || 7;
+            btn.disabled = true;
+            out.setText("Purging…");
+            try {
+                const r = await api.purgeJobs(days) as any;
+                out.setText(`Purged ${r.purged} job(s) older than ${days} day(s).`);
+                new Notice(`Synthadoc: purged ${r.purged} job(s)`);
+            } catch {
+                out.setText("Error: is synthadoc serve running?");
+            } finally { btn.disabled = false; }
+        };
+    }
+    onClose() { this.contentEl.empty(); }
+}
+
+class ScaffoldModal extends Modal {
+    onOpen() {
+        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
+        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
+
+        const { contentEl } = this;
+        contentEl.createEl("h3", { text: "Synthadoc: Regenerate scaffold" });
+        contentEl.createEl("p", {
+            text: "Rewrites index.md, AGENTS.md, and purpose.md for your wiki domain using the LLM. Existing wiki pages are preserved.",
+            cls: "synthadoc-muted",
+        }).style.cssText = "font-size:12px;margin-bottom:12px";
+
+        const row = contentEl.createEl("div");
+        row.style.cssText = "display:flex;gap:8px;margin-bottom:12px";
+        const input = row.createEl("input", { type: "text", placeholder: "e.g. Canadian tax law" });
+        input.style.cssText = "flex:1;padding:4px 8px";
+        const btn = row.createEl("button", { text: "Scaffold" });
+
+        const out = contentEl.createEl("p");
+
+        // Pre-fill domain from status if available
+        api.status().then((s: any) => {
+            if (s?.wiki) {
+                const parts = s.wiki.replace(/\\/g, "/").split("/");
+                input.value = parts[parts.length - 1].replace(/-/g, " ");
+            }
+        }).catch(() => {/* ignore */});
+
+        const submit = async () => {
+            const domain = input.value.trim();
+            if (!domain) return;
+            btn.disabled = true;
+            out.setText("Queuing scaffold job…");
+            try {
+                const r = await api.scaffold(domain) as any;
+                out.setText(`Queued — job ${r.job_id}. index.md, AGENTS.md, and purpose.md will be updated shortly.`);
+                new Notice(`Synthadoc: scaffold queued (job ${r.job_id})`);
+            } catch {
+                out.setText("Error: is synthadoc serve running?");
+            } finally { btn.disabled = false; }
+        };
+
+        btn.onclick = submit;
+        input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+        setTimeout(() => input.focus(), 50);
+    }
+    onClose() { this.contentEl.empty(); }
+}
+
+class AuditHistoryModal extends Modal {
+    onOpen() {
+        this.modalEl.style.width = "clamp(520px, 65vw, 900px)";
+        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
+        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
+
+        const { contentEl } = this;
+        contentEl.createEl("h3", { text: "Synthadoc: Ingest history" });
+
+        const row = contentEl.createEl("div");
+        row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px";
+        row.createEl("label", { text: "Last" });
+        const input = row.createEl("input", { type: "number" }) as HTMLInputElement;
+        input.value = "50";
+        input.style.cssText = "width:60px;padding:4px 8px";
+        row.createEl("span", { text: "records" });
+        const btn = row.createEl("button", { text: "Load" });
+
+        const tableEl = contentEl.createEl("div");
+
+        const load = async () => {
+            const limit = parseInt(input.value) || 50;
+            tableEl.setText("Loading…");
+            try {
+                const r = await api.auditHistory(limit) as any;
+                tableEl.empty();
+                if (!r.records.length) {
+                    tableEl.createEl("p", { text: "No ingest records yet." });
+                    return;
+                }
+                const table = tableEl.createEl("table");
+                table.style.cssText = "width:100%;border-collapse:collapse;font-size:12px";
+                const hrow = table.createEl("thead").createEl("tr");
+                for (const h of ["Source", "Wiki page", "Tokens", "Cost (USD)", "Ingested at"]) {
+                    const th = hrow.createEl("th", { text: h });
+                    th.style.cssText = "text-align:left;padding:4px 8px;border-bottom:1px solid var(--background-modifier-border)";
+                }
+                const tbody = table.createEl("tbody");
+                for (const rec of r.records) {
+                    const tr = tbody.createEl("tr");
+                    const src = rec.source_path.split(/[\\/]/).pop() ?? rec.source_path;
+                    const ts = rec.ingested_at
+                        ? new Date(rec.ingested_at).toLocaleString()
+                        : "—";
+                    for (const text of [
+                        src,
+                        rec.wiki_page,
+                        (rec.tokens ?? 0).toLocaleString(),
+                        `$${(rec.cost_usd ?? 0).toFixed(4)}`,
+                        ts,
+                    ]) {
+                        const td = tr.createEl("td", { text });
+                        td.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle)";
+                    }
+                }
+            } catch {
+                tableEl.setText("Error: is synthadoc serve running?");
+            }
+        };
+
+        btn.onclick = load;
+        load();
+    }
+    onClose() { this.contentEl.empty(); }
+}
+
+class AuditCostsModal extends Modal {
+    onOpen() {
+        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
+        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
+
+        const { contentEl } = this;
+        contentEl.createEl("h3", { text: "Synthadoc: Cost summary" });
+
+        const row = contentEl.createEl("div");
+        row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px";
+        row.createEl("label", { text: "Last" });
+        const input = row.createEl("input", { type: "number" }) as HTMLInputElement;
+        input.value = "30";
+        input.style.cssText = "width:60px;padding:4px 8px";
+        row.createEl("span", { text: "days" });
+        const btn = row.createEl("button", { text: "Load" });
+
+        const out = contentEl.createEl("div");
+
+        const load = async () => {
+            const days = parseInt(input.value) || 30;
+            out.setText("Loading…");
+            try {
+                const r = await api.auditCosts(days) as any;
+                out.empty();
+
+                const summary = out.createEl("div");
+                summary.style.cssText = "margin-bottom:16px";
+                summary.createEl("p", {
+                    text: `Total: ${(r.total_tokens ?? 0).toLocaleString()} tokens · $${(r.total_cost_usd ?? 0).toFixed(4)} USD`,
+                }).style.cssText = "font-weight:bold";
+
+                if (r.daily?.length) {
+                    const table = out.createEl("table");
+                    table.style.cssText = "width:100%;border-collapse:collapse;font-size:13px";
+                    const hrow = table.createEl("thead").createEl("tr");
+                    for (const h of ["Day", "Cost (USD)"]) {
+                        const th = hrow.createEl("th", { text: h });
+                        th.style.cssText = "text-align:left;padding:4px 8px;border-bottom:1px solid var(--background-modifier-border)";
+                    }
+                    const tbody = table.createEl("tbody");
+                    for (const d of r.daily) {
+                        const tr = tbody.createEl("tr");
+                        for (const text of [d.day, `$${(d.cost_usd ?? 0).toFixed(4)}`]) {
+                            const td = tr.createEl("td", { text });
+                            td.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle)";
+                        }
+                    }
+                } else {
+                    out.createEl("p", { text: "No cost data for this period.", cls: "synthadoc-muted" });
+                }
+            } catch {
+                out.setText("Error: is synthadoc serve running?");
+            }
+        };
+
+        btn.onclick = load;
+        load();
     }
     onClose() { this.contentEl.empty(); }
 }

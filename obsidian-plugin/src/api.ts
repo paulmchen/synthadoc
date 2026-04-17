@@ -23,11 +23,16 @@ async function call(path: string, method = "GET", body?: object) {
 }
 
 export const api = {
-    health:      ()                    => call("/health"),
-    status:      ()                    => call("/status"),
-    query:       (question: string)    => call("/query",        "POST", { question }),
-    ingest:      (source: string)      => call("/jobs/ingest",  "POST", { source }),
-    lint:        (scope = "all", autoResolve = false) => call("/jobs/lint", "POST", { scope, auto_resolve: autoResolve }),
-    lintReport:  ()                    => call("/lint/report"),
-    jobs:        (status?: string)     => call(status ? `/jobs?status=${encodeURIComponent(status)}` : "/jobs"),
+    health:       ()                          => call("/health"),
+    status:       ()                          => call("/status"),
+    query:        (question: string)          => call("/query",           "POST", { question }),
+    ingest:       (source: string)            => call("/jobs/ingest",     "POST", { source }),
+    lint:         (scope = "all", autoResolve = false) => call("/jobs/lint", "POST", { scope, auto_resolve: autoResolve }),
+    lintReport:   ()                          => call("/lint/report"),
+    jobs:         (status?: string)           => call(status ? `/jobs?status=${encodeURIComponent(status)}` : "/jobs"),
+    retryJob:     (jobId: string)             => call(`/jobs/${jobId}/retry`, "POST"),
+    purgeJobs:    (olderThan: number)         => call(`/jobs?older_than=${olderThan}`, "DELETE"),
+    scaffold:     (domain: string)            => call("/jobs/scaffold",   "POST", { domain }),
+    auditHistory: (limit = 50)               => call(`/audit/history?limit=${limit}`),
+    auditCosts:   (days = 30)               => call(`/audit/costs?days=${days}`),
 };

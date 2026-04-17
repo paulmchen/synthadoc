@@ -58,6 +58,17 @@ class LintRequest(BaseModel):
     auto_resolve: bool = False
 
 
+class ScaffoldRequest(BaseModel):
+    domain: str
+
+    @field_validator("domain")
+    @classmethod
+    def domain_not_empty(cls, v):
+        if not v.strip():
+            raise ValueError("domain must not be empty")
+        return v
+
+
 class AnalyseRequest(BaseModel):
     source: str
 
@@ -84,6 +95,9 @@ async def _worker_loop(orch) -> None:
                     scope = job.payload.get("scope", "all")
                     auto_resolve = job.payload.get("auto_resolve", False)
                     await orch._run_lint(job.id, scope=scope, auto_resolve=auto_resolve)
+                elif job.operation == "scaffold":
+                    domain = job.payload.get("domain", "")
+                    await orch._run_scaffold(job.id, domain=domain)
         except Exception:
             logger.exception("Worker loop error — job recorded in jobs.db; continuing")
 
@@ -292,5 +306,34 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
     async def delete_job(job_id: str):
         await app.state.orch.queue.delete(job_id, app.state.orch._audit)
         return {"deleted": job_id}
+
+    @app.post("/jobs/{job_id}/retry")
+    async def retry_job(job_id: str):
+        jobs = await app.state.orch.queue.list_jobs()
+        if not any(j.id == job_id for j in jobs):
+            raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+        await app.state.orch.queue.retry(job_id)
+        return {"retried": job_id}
+
+    @app.delete("/jobs")
+    async def purge_jobs(older_than: int = 7):
+        count = await app.state.orch.queue.purge(older_than_days=older_than)
+        return {"purged": count, "older_than_days": older_than}
+
+    @app.post("/jobs/scaffold")
+    async def enqueue_scaffold(req: ScaffoldRequest):
+        job_id = await app.state.orch.queue.enqueue(
+            "scaffold", {"domain": req.domain}
+        )
+        return {"job_id": job_id}
+
+    @app.get("/audit/history")
+    async def audit_history(limit: int = 50):
+        records = await app.state.orch._audit.list_ingests(limit=limit)
+        return {"records": records, "count": len(records)}
+
+    @app.get("/audit/costs")
+    async def audit_costs(days: int = 30):
+        return await app.state.orch._audit.cost_summary(days=days)
 
     return app

@@ -943,3 +943,58 @@ export TAVILY_API_KEY="tvly-your-key-here"
 
 If this key is not set, the server starts normally but web search jobs will fail with
 `[ERR-SKILL-004]`. All other features work without it.
+
+---
+
+## Appendix A — Obsidian Plugin Command Reference
+
+All commands are accessible via the Command Palette (`Ctrl/Cmd+P`). Type **Synthadoc** to filter.
+Commands are grouped by prefix for easy navigation.
+
+### Ingest
+
+| Command | What it does |
+|---------|-------------|
+| **Ingest: current file** | Ingests the currently open note as a source. If no file is open, shows a file picker filtered to the configured raw sources folder. |
+| **Ingest: all sources in folder** | Scans the `raw_sources` folder and queues every supported file (md, txt, pdf, docx, xlsx, csv, images) for ingestion. |
+| **Ingest: from URL...** | Opens a modal — paste any URL and queue it for fetch and ingestion. |
+| **Ingest: web search...** | Opens a modal — type a topic and Synthadoc searches the web and compiles results directly into the wiki. `Ctrl/Cmd+Enter` to submit. |
+
+### Query
+
+| Command | What it does |
+|---------|-------------|
+| **Query: ask the wiki...** | Opens a query panel — ask a natural language question and get a markdown answer with clickable `[[wikilinks]]` to source pages. `Ctrl/Cmd+Enter` to submit. |
+
+### Lint
+
+| Command | What it does |
+|---------|-------------|
+| **Lint: run** | Runs lint in the background. A notification shows contradiction and orphan counts when complete. |
+| **Lint: run with auto-resolve** | Same as above but automatically resolves contradictions above the 80% confidence threshold. |
+| **Lint: report** | Opens a report listing all contradicted pages (requiring manual resolution) and orphan pages (no inbound links) with suggested index entries. |
+
+### Jobs
+
+| Command | What it does |
+|---------|-------------|
+| **Jobs: list...** | Opens a job table showing all ingest/lint/scaffold operations with status, source, and timestamps. Filterable by status: `pending`, `in_progress`, `completed`, `failed`, `skipped`, `dead`. |
+| **Jobs: retry dead job...** | Lists all dead jobs and provides a Retry button per job to re-queue it with a fresh retry counter. |
+| **Jobs: purge old completed/dead...** | Removes completed and dead jobs older than a specified number of days (default: 7). |
+
+### Wiki
+
+| Command | What it does |
+|---------|-------------|
+| **Wiki: regenerate scaffold...** | Rewrites `index.md`, `AGENTS.md`, and `purpose.md` for the wiki's domain using the LLM. All existing wiki pages are preserved. |
+
+### Audit
+
+| Command | What it does |
+|---------|-------------|
+| **Audit: ingest history...** | Shows a table of the last N ingest records — source file, wiki page created/updated, token count, cost, and timestamp. |
+| **Audit: cost summary...** | Shows total tokens and USD cost for the last N days with a daily breakdown. |
+
+### Ribbon icon
+
+The **book** icon in the Obsidian left ribbon shows a quick status notice: whether the Synthadoc server is online and how many wiki pages currently exist.

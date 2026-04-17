@@ -173,6 +173,28 @@ class Orchestrator:
         """Enqueue a lint job. The server worker loop executes it."""
         return await self._queue.enqueue("lint", {"scope": scope, "auto_resolve": auto_resolve})
 
+    async def _run_scaffold(self, job_id: str, domain: str) -> None:
+        from synthadoc.agents.scaffold_agent import ScaffoldAgent
+        try:
+            wiki_dir = self._root / "wiki"
+            protected_slugs = [p.stem for p in wiki_dir.glob("*.md")]
+            result = await ScaffoldAgent(
+                provider=make_provider("ingest", self._cfg)
+            ).scaffold(domain=domain, protected_slugs=protected_slugs or None)
+            (self._root / "wiki" / "index.md").write_text(
+                result.index_md, encoding="utf-8", newline="\n")
+            (self._root / "AGENTS.md").write_text(
+                result.agents_md, encoding="utf-8", newline="\n")
+            (self._root / "wiki" / "purpose.md").write_text(
+                result.purpose_md, encoding="utf-8", newline="\n")
+            await self._queue.complete(job_id, result={
+                "domain": domain,
+                "categories": len(result.index_md.splitlines()),
+            })
+        except Exception as e:
+            await self._queue.fail(job_id, str(e))
+            raise
+
     async def _run_lint(self, job_id: str, scope: str = "all", auto_resolve: bool = False) -> None:
         from synthadoc.agents.lint_agent import LintAgent
         try:
