@@ -366,6 +366,7 @@ class IngestAgent:
                 if page:
                     page.status = "contradicted"
                     self._store.write_page(target, page)
+                    self._search.invalidate_index()
             result.pages_flagged.append(target)
 
         elif action == "update" and target and self._store.page_exists(target):
@@ -375,6 +376,7 @@ class IngestAgent:
                     section = update_content or f"## From {p.name}\n\n{text[:1000]}"
                     page.content = page.content.rstrip() + f"\n\n{section}"
                     self._store.write_page(target, page)
+                    self._search.invalidate_index()
             result.pages_updated.append(target)
 
         else:  # "create" or fallback
@@ -397,6 +399,7 @@ class IngestAgent:
                             section = f"## From {p.name}\n\n{text[:1500]}"
                             page.content = page.content.rstrip() + f"\n\n{section}"
                             self._store.write_page(slug, page)
+                            self._search.invalidate_index()
                     result.pages_updated.append(slug)
                 else:
                     body = page_content.strip() if page_content.strip() else f"# {title}\n\n{text[:4000]}"
@@ -408,6 +411,7 @@ class IngestAgent:
                     )
                     with self._store.page_lock(slug):
                         self._store.write_page(slug, new_page)
+                        self._search.invalidate_index()
                     result.pages_created.append(slug)
                     self._store.append_to_index(slug, new_page.title)
 

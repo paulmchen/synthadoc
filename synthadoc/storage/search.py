@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 from rank_bm25 import BM25Okapi
 
@@ -20,29 +21,36 @@ class SearchResult:
 
 
 class HybridSearch:
-    """BM25 full-text search. Vector re-ranking added in a future task."""
+    """BM25 full-text search with in-memory corpus cache. Vector re-ranking added in a future task."""
 
     def __init__(self, store: WikiStorage, index_path: Path) -> None:
         self._store = store
         self._index_path = index_path
+        self._cached_corpus: Optional[tuple[list[str], list[list[str]]]] = None
 
     @staticmethod
     def _tokenize(text: str) -> list[str]:
-        """Split into BM25 tokens. ASCII words + individual CJK characters (no word boundaries in CJK)."""
         ascii_tokens = re.findall(r"[a-z0-9]+", text.lower())
         cjk_tokens = re.findall(
             r"[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]", text
         )
         return ascii_tokens + cjk_tokens
 
+    def invalidate_index(self) -> None:
+        """Drop the in-memory corpus cache. Call after any page write."""
+        self._cached_corpus = None
+
     def _corpus(self) -> tuple[list[str], list[list[str]]]:
+        if self._cached_corpus is not None:
+            return self._cached_corpus
         slugs = self._store.list_pages()
         tokenized = []
         for slug in slugs:
             page = self._store.read_page(slug)
             text = f"{page.title} {' '.join(page.tags)} {page.content}" if page else ""
             tokenized.append(self._tokenize(text))
-        return slugs, tokenized
+        self._cached_corpus = (slugs, tokenized)
+        return self._cached_corpus
 
     def bm25_search(self, query_terms: list[str], top_n: int = 10) -> list[SearchResult]:
         slugs, corpus = self._corpus()
