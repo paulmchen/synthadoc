@@ -14,7 +14,7 @@
       '-+###############+-'
 
        S Y N T H A D O C
-    Community Edition  v0.1.0
+    Community Edition  v0.2.0
   ────────────────────────────────
   Domain-agnostic LLM wiki engine
 ```
@@ -25,7 +25,9 @@
 [![Skills](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Faxoviq-ai%2Fsynthadoc%2Fmain%2Fdocs%2Fbadges.json&query=%24.skills&label=Skills&color=purple)](https://github.com/axoviq-ai/synthadoc/tree/main/synthadoc/skills)
 [![CLI](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Faxoviq-ai%2Fsynthadoc%2Fmain%2Fdocs%2Fbadges.json&query=%24.cli_commands&label=CLI%20commands&color=darkblue)](https://github.com/axoviq-ai/synthadoc)
 [![Obsidian](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Faxoviq-ai%2Fsynthadoc%2Fmain%2Fdocs%2Fbadges.json&query=%24.obsidian_commands&label=Obsidian%20commands&color=blueviolet)](https://github.com/axoviq-ai/synthadoc/tree/main/obsidian-plugin)
-[![Version](https://img.shields.io/badge/Community%20Edition-v0.1.0-lightgrey.svg)](https://github.com/axoviq-ai/synthadoc/releases/tag/v0.1.0)
+[![Version](https://img.shields.io/badge/Community%20Edition-v0.2.0--dev-orange.svg)](https://github.com/axoviq-ai/synthadoc)
+
+**Document version: v0.2.0 (in progress — not yet released)**
 
 **Engineered for solo users and enterprises alike, providing a domain-specific knowledge base that scales seamlessly while maintaining accuracy through autonomous self-optimization.**
 
@@ -947,21 +949,6 @@ on_ingest_complete = { cmd = "python hooks/auto_commit.py", blocking = true }
 ### Per-wiki AGENTS.md
 
 Edit `<wiki-root>/AGENTS.md` to give the LLM domain-specific instructions — what to emphasize, how to name pages, what to cross-reference. This is the highest-priority instruction source for every agent run against this wiki.
-
----
-
-## What's Coming in v0.2
-
-Target: week of 2026-04-25.
-
-| Feature | Notes |
-|---------|-------|
-| **Web UI** | Browser-based dashboard — view pages, run jobs, inspect contradictions and orphans without Obsidian |
-| **Vector search + re-ranking** | Hybrid BM25 + `fastembed` local vectors; better recall on semantically related queries |
-| **Graph-aware retrieval** | Multi-hop wikilink traversal for queries like "What connects Turing to von Neumann?" |
-| **Larger corpus support** | Sharded index, incremental embedding updates, streaming ingest for very large documents |
-| **Obsidian plugin: web search live view** | Watch pages appear as results stream in — job polling and live result panel (basic modal already in v0.1) |
-| **Mistral + Bedrock providers** | Additional OpenAI-compatible and AWS-native LLM backends |
 
 ---
 

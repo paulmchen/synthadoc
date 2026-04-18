@@ -1,6 +1,6 @@
 # Synthadoc — Design Document
 
-**Version:** 0.1 (updated 2026-04-12)  
+**Version:** 0.2.0 (in progress — not yet released; updated 2026-04-18)  
 **Audience:** Product users who want to understand how the system works; developers adding features, skills, and plugins.
 
 **Document owners:** Paul Chen, William Johnason
@@ -26,7 +26,7 @@
 15. [Observability and Logging](#15-observability-and-logging)
 16. [Security](#16-security)
 17. [Plugin Development Guide](#17-plugin-development-guide)
-18. [v0.2 Roadmap](#18-v02-roadmap)
+18. [v0.2.0 — In Progress](#18-v020--in-progress)
 19. [New in v0.1 — Feature Reference](#19-new-in-v01--feature-reference)
 
 **Appendices**
@@ -1170,7 +1170,7 @@ echo "Event $event fired on wiki $wiki" | mail -s "Synthadoc notification" you@e
 
 ---
 
-## 18. v0.2 Roadmap
+## 18. v0.2.0 — In Progress
 
 Target: week of 2026-04-25.
 

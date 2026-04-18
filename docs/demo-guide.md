@@ -1,5 +1,7 @@
 # Synthadoc Demo Guide — History of Computing
 
+**Document version: v0.2.0 (in progress — not yet released)**
+
 ---
 
 ## Part 1 — Setup
