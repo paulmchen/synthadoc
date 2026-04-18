@@ -102,6 +102,28 @@ def test_retry_job_endpoint(tmp_wiki):
     mock_retry.assert_awaited_once_with("dead-1")
 
 
+def test_query_post_provider_unavailable_returns_502(tmp_wiki):
+    """If the LLM provider raises a connection error, POST /query must return 502."""
+    from synthadoc.integration.http_server import create_app
+    with patch("synthadoc.core.orchestrator.Orchestrator.query",
+               new=AsyncMock(side_effect=Exception("Connection refused"))):
+        with TestClient(create_app(wiki_root=tmp_wiki)) as client:
+            resp = client.post("/query", json={"question": "What is Moore's Law?"})
+    assert resp.status_code == 502
+    assert "unavailable" in resp.json()["detail"].lower()
+
+
+def test_query_get_provider_unavailable_returns_502(tmp_wiki):
+    """If the LLM provider raises, GET /query must also return 502."""
+    from synthadoc.integration.http_server import create_app
+    with patch("synthadoc.core.orchestrator.Orchestrator.query",
+               new=AsyncMock(side_effect=Exception("timeout"))):
+        with TestClient(create_app(wiki_root=tmp_wiki)) as client:
+            resp = client.get("/query", params={"q": "test"})
+    assert resp.status_code == 502
+    assert "unavailable" in resp.json()["detail"].lower()
+
+
 def test_retry_job_not_found(tmp_wiki):
     """POST /jobs/{id}/retry returns 404 for unknown job IDs."""
     from synthadoc.integration.http_server import create_app
