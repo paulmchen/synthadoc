@@ -174,12 +174,20 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
     async def query(q: str):
         if not q.strip():
             raise HTTPException(status_code=400, detail="q must not be empty")
-        result = await app.state.orch.query(q)
+        try:
+            result = await app.state.orch.query(q)
+        except Exception as exc:
+            logger.exception("Query failed")
+            raise HTTPException(status_code=502, detail="LLM provider unavailable") from exc
         return {"answer": result.answer, "citations": result.citations}
 
     @app.post("/query")
     async def query_post(req: QueryRequest):
-        result = await app.state.orch.query(req.question)
+        try:
+            result = await app.state.orch.query(req.question)
+        except Exception as exc:
+            logger.exception("Query failed")
+            raise HTTPException(status_code=502, detail="LLM provider unavailable") from exc
         return {"answer": result.answer, "citations": result.citations}
 
     @app.post("/analyse")
@@ -334,5 +342,10 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
     @app.get("/audit/costs")
     async def audit_costs(days: int = 30):
         return await app.state.orch._audit.cost_summary(days=days)
+
+    @app.get("/audit/queries")
+    async def audit_queries(limit: int = 50):
+        records = await app.state.orch._audit.list_queries(limit=limit)
+        return {"records": records, "count": len(records)}
 
     return app

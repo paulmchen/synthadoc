@@ -86,6 +86,40 @@ def cost_cmd(
         console.print(table)
 
 
+@audit_app.command("queries")
+def queries_cmd(
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w"),
+    limit: int = typer.Option(50, "--limit", "-n"),
+    as_json: bool = typer.Option(False, "--json", help="Output raw JSON"),
+):
+    """Show recent query history."""
+    db = _get_audit_db(wiki)
+
+    async def _fetch():
+        await db.init()
+        return await db.list_queries(limit=limit)
+
+    records = asyncio.run(_fetch())
+    if as_json:
+        typer.echo(json.dumps(records, indent=2))
+        return
+    table = Table(title=f"Query History (last {limit})")
+    table.add_column("Timestamp", style="dim")
+    table.add_column("Question")
+    table.add_column("Sub-Qs", justify="right")
+    table.add_column("Tokens", justify="right")
+    table.add_column("Cost (USD)", justify="right")
+    for r in records:
+        table.add_row(
+            r.get("queried_at", "")[:16],
+            r.get("question", "")[:80],
+            str(r.get("sub_questions_count") or 1),
+            str(r.get("tokens") or 0),
+            f"${r.get('cost_usd') or 0:.4f}",
+        )
+    console.print(table)
+
+
 @audit_app.command("events")
 def events_cmd(
     wiki: Optional[str] = typer.Option(None, "--wiki", "-w"),

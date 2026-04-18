@@ -178,3 +178,91 @@ def test_config_rejects_unknown_provider():
             load_config(project_config=path)
     finally:
         os.unlink(path)
+
+
+from synthadoc.providers.openai import OpenAIProvider
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_complete():
+    """OpenAIProvider.complete() must return a correctly populated CompletionResponse."""
+    cfg = AgentConfig(provider="openai", model="gpt-4o-mini")
+    provider = OpenAIProvider(api_key="test-key", config=cfg)
+
+    mock_choice = MagicMock()
+    mock_choice.message.content = "The answer is 42."
+    mock_resp = MagicMock()
+    mock_resp.choices = [mock_choice]
+    mock_resp.usage.prompt_tokens = 15
+    mock_resp.usage.completion_tokens = 8
+
+    with patch.object(provider._client.chat.completions, "create",
+                      new=AsyncMock(return_value=mock_resp)):
+        result = await provider.complete(
+            messages=[Message(role="user", content="What is the answer?")]
+        )
+    assert result.text == "The answer is 42."
+    assert result.input_tokens == 15
+    assert result.output_tokens == 8
+    assert result.total_tokens == 23
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_includes_system_message():
+    """If a system message is provided, it must be prepended to the messages list."""
+    cfg = AgentConfig(provider="openai", model="gpt-4o-mini")
+    provider = OpenAIProvider(api_key="test-key", config=cfg)
+
+    mock_choice = MagicMock()
+    mock_choice.message.content = "ok"
+    mock_resp = MagicMock()
+    mock_resp.choices = [mock_choice]
+    mock_resp.usage.prompt_tokens = 10
+    mock_resp.usage.completion_tokens = 2
+
+    captured: dict = {}
+
+    async def capture(*args, **kwargs):
+        captured["messages"] = kwargs.get("messages", [])
+        return mock_resp
+
+    with patch.object(provider._client.chat.completions, "create", side_effect=capture):
+        await provider.complete(
+            messages=[Message(role="user", content="hello")],
+            system="You are a helpful assistant.",
+        )
+    assert captured["messages"][0] == {"role": "system", "content": "You are a helpful assistant."}
+    assert captured["messages"][1]["role"] == "user"
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_empty_content_returns_empty_string():
+    """If the model returns None content, CompletionResponse.text must be empty string, not None."""
+    cfg = AgentConfig(provider="openai", model="gpt-4o-mini")
+    provider = OpenAIProvider(api_key="test-key", config=cfg)
+
+    mock_choice = MagicMock()
+    mock_choice.message.content = None
+    mock_resp = MagicMock()
+    mock_resp.choices = [mock_choice]
+    mock_resp.usage.prompt_tokens = 5
+    mock_resp.usage.completion_tokens = 0
+
+    with patch.object(provider._client.chat.completions, "create",
+                      new=AsyncMock(return_value=mock_resp)):
+        result = await provider.complete(
+            messages=[Message(role="user", content="hi")]
+        )
+    assert result.text == ""
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_uses_custom_base_url():
+    """Providers like Groq and Gemini pass a base_url — verify it is forwarded to AsyncOpenAI."""
+    cfg = AgentConfig(provider="groq", model="llama3-8b-8192",
+                      base_url="https://api.groq.com/openai/v1")
+    with patch("synthadoc.providers.openai.AsyncOpenAI") as mock_client_cls:
+        OpenAIProvider(api_key="test-key", config=cfg)
+    mock_client_cls.assert_called_once_with(
+        api_key="test-key", base_url="https://api.groq.com/openai/v1"
+    )

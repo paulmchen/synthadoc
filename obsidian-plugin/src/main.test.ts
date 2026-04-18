@@ -54,7 +54,7 @@ vi.mock("./api", () => ({
         ingest: vi.fn(), lint: vi.fn(), lintReport: vi.fn(), status: vi.fn(),
         query: vi.fn(), health: vi.fn(), jobs: vi.fn(),
         retryJob: vi.fn(), purgeJobs: vi.fn(), scaffold: vi.fn(),
-        auditHistory: vi.fn(), auditCosts: vi.fn(),
+        auditHistory: vi.fn(), auditCosts: vi.fn(), queryHistory: vi.fn(),
     },
     setBase: vi.fn(),
 }));
@@ -270,7 +270,7 @@ describe("SynthadocPlugin.ingestAllSources", () => {
 });
 
 describe("SynthadocPlugin command registration", () => {
-    it("registers all 14 expected command IDs on onload", async () => {
+    it("registers all 15 expected command IDs on onload", async () => {
         const { default: SynthadocPlugin } = await import("./main");
         const plugin = new SynthadocPlugin();
         await plugin.onload();
@@ -291,6 +291,7 @@ describe("SynthadocPlugin command registration", () => {
             "synthadoc-scaffold",
             "synthadoc-audit-history",
             "synthadoc-audit-costs",
+            "synthadoc-audit-queries",
         ];
         for (const id of expected) {
             expect(ids).toContain(id);
@@ -385,5 +386,13 @@ describe("SynthadocPlugin new commands registered", () => {
         await plugin.onload();
         const ids = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].id);
         expect(ids).toContain("synthadoc-audit-costs");
+    });
+
+    it("audit-queries command is registered", async () => {
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+        const ids = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].id);
+        expect(ids).toContain("synthadoc-audit-queries");
     });
 });

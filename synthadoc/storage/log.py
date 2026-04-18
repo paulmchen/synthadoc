@@ -39,6 +39,16 @@ class LogWriter:
             f"- Resolved: {resolved} | Flagged: {flagged} | Orphans: {orphans}\n"
         )
 
+    def log_query(self, question: str, sub_questions: int,
+                  citations: list, tokens: int, cost_usd: float) -> None:
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+        self._append(
+            f"\n## {ts} | QUERY\n"
+            f"- Question: {question[:120]}\n"
+            f"- Sub-questions: {sub_questions} | Citations: {citations or 'none'}\n"
+            f"- Tokens: {tokens:,} | Cost: ${cost_usd:.4f}\n"
+        )
+
 
 class AuditDB:
     def __init__(self, db_path: Path) -> None:
@@ -65,6 +75,15 @@ class AuditDB:
                     event TEXT NOT NULL,
                     timestamp TEXT NOT NULL,
                     metadata TEXT
+                )""")
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS queries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    question TEXT NOT NULL,
+                    sub_questions_count INTEGER NOT NULL DEFAULT 1,
+                    tokens INTEGER,
+                    cost_usd REAL,
+                    queried_at TEXT NOT NULL
                 )""")
             await db.commit()
 
@@ -132,17 +151,42 @@ class AuditDB:
                 rows = await cur.fetchall()
         return [dict(r) for r in rows]
 
+    async def record_query(self, question: str, sub_questions_count: int,
+                           tokens: int, cost_usd: float) -> None:
+        ts = datetime.now(timezone.utc).isoformat()
+        async with aiosqlite.connect(self._path) as db:
+            await db.execute(
+                "INSERT INTO queries (question,sub_questions_count,tokens,cost_usd,queried_at)"
+                " VALUES (?,?,?,?,?)",
+                (question, sub_questions_count, tokens, cost_usd, ts),
+            )
+            await db.commit()
+
+    async def list_queries(self, limit: int = 50) -> list[dict]:
+        async with aiosqlite.connect(self._path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT question, sub_questions_count, tokens, cost_usd, queried_at"
+                " FROM queries ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ) as cur:
+                rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
     async def cost_summary(self, days: int = 30) -> dict:
         from datetime import timedelta
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         async with aiosqlite.connect(self._path) as db:
             db.row_factory = aiosqlite.Row
-            async with db.execute(
-                "SELECT DATE(ingested_at) as day, "
-                "SUM(tokens) as day_tokens, SUM(cost_usd) as day_cost "
-                "FROM ingests WHERE ingested_at >= ? GROUP BY day ORDER BY day DESC",
-                (cutoff,),
-            ) as cur:
+            async with db.execute("""
+                SELECT day, SUM(day_tokens) as day_tokens, SUM(day_cost) as day_cost FROM (
+                    SELECT DATE(ingested_at) as day, tokens as day_tokens, cost_usd as day_cost
+                    FROM ingests WHERE ingested_at >= ?
+                    UNION ALL
+                    SELECT DATE(queried_at) as day, tokens as day_tokens, cost_usd as day_cost
+                    FROM queries WHERE queried_at >= ?
+                ) GROUP BY day ORDER BY day DESC
+            """, (cutoff, cutoff)) as cur:
                 rows = await cur.fetchall()
 
         total_tokens = 0

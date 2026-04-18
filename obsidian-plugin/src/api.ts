@@ -33,6 +33,7 @@ export const api = {
     retryJob:     (jobId: string)             => call(`/jobs/${jobId}/retry`, "POST"),
     purgeJobs:    (olderThan: number)         => call(`/jobs?older_than=${olderThan}`, "DELETE"),
     scaffold:     (domain: string)            => call("/jobs/scaffold",   "POST", { domain }),
-    auditHistory: (limit = 50)               => call(`/audit/history?limit=${limit}`),
-    auditCosts:   (days = 30)               => call(`/audit/costs?days=${days}`),
+    auditHistory:  (limit = 50)               => call(`/audit/history?limit=${limit}`),
+    auditCosts:    (days = 30)                => call(`/audit/costs?days=${days}`),
+    queryHistory:  (limit = 50)               => call(`/audit/queries?limit=${limit}`),
 };

@@ -2,13 +2,19 @@
 # Copyright (C) 2026 Paul Chen / axoviq.com
 from __future__ import annotations
 
+import asyncio
 import json
-from dataclasses import dataclass, field
+import logging
+from dataclasses import dataclass
 
-from synthadoc.core.cache import CacheManager
 from synthadoc.providers.base import LLMProvider, Message
 from synthadoc.storage.search import HybridSearch
 from synthadoc.storage.wiki import WikiStorage
+
+logger = logging.getLogger(__name__)
+
+_MAX_SUB_QUESTIONS = 4
+_MAX_QUESTION_CHARS = 4000
 
 
 @dataclass
@@ -21,26 +27,63 @@ class QueryResult:
 
 class QueryAgent:
     def __init__(self, provider: LLMProvider, store: WikiStorage,
-                 search: HybridSearch, cache: CacheManager, top_n: int = 8) -> None:
+                 search: HybridSearch, top_n: int = 8) -> None:
         self._provider = provider
         self._store = store
         self._search = search
-        self._cache = cache
         self._top_n = top_n
 
-    async def query(self, question: str) -> QueryResult:
-        resp = await self._provider.complete(
-            messages=[Message(role="user",
-                content=f"Extract 5-8 key search terms from: {question}\n"
-                        "Return JSON array of strings only.")],
-            temperature=0.0,
-        )
-        try:
-            terms = json.loads(resp.text)
-        except json.JSONDecodeError:
-            terms = question.split()
+    async def decompose(self, question: str) -> list[str]:
+        """Break a question into focused sub-questions for independent retrieval.
 
-        candidates = self._search.bm25_search(terms, top_n=self._top_n)
+        Returns [question] on any failure so callers always get a usable list.
+        """
+        truncated = question[:_MAX_QUESTION_CHARS]
+        try:
+            resp = await self._provider.complete(
+                messages=[Message(role="user",
+                    content=(
+                        f"Break this question into focused sub-questions for a knowledge base lookup.\n"
+                        f"Simple questions should return a single-element list.\n"
+                        f"Return a JSON array of strings only. No explanation.\n\n"
+                        f"Question: {truncated}"
+                    ))],
+                temperature=0.0,
+            )
+            text = resp.text.strip()
+            if text.startswith("```"):
+                # Strip markdown code fences that some models add despite instructions
+                lines = text.splitlines()
+                text = "\n".join(
+                    l for l in lines
+                    if not l.strip().startswith("```")
+                ).strip()
+            parts = json.loads(text)
+            if isinstance(parts, list) and parts:
+                filtered = [str(q) for q in parts[:_MAX_SUB_QUESTIONS] if str(q).strip()]
+                if filtered:
+                    logger.info("query decomposed into %d sub-question(s)", len(filtered))
+                    logger.debug("sub-questions: %s", filtered)
+                    return filtered
+        except Exception:
+            logger.warning("decompose failed — falling back to original question", exc_info=True)
+        return [question]
+
+    async def query(self, question: str) -> QueryResult:
+        sub_questions = await self.decompose(question)
+
+        async def _search_one(sub_q: str):
+            return self._search.bm25_search(sub_q.lower().split(), top_n=self._top_n)
+
+        results_per_sub = await asyncio.gather(*[_search_one(q) for q in sub_questions])
+
+        best: dict[str, object] = {}
+        for results in results_per_sub:
+            for r in results:
+                if r.slug not in best or r.score > best[r.slug].score:
+                    best[r.slug] = r
+        candidates = sorted(best.values(), key=lambda r: r.score, reverse=True)[:self._top_n]
+
         citations = [r.slug for r in candidates]
         context = "\n\n".join(
             f"### {p.title}\n{p.content[:1000]}"
@@ -54,5 +97,11 @@ class QueryAgent:
                         f"Question: {question}\n\nPages:\n{context}")],
             temperature=0.0,
         )
-        return QueryResult(question=question, answer=resp2.text, citations=citations,
-                           tokens_used=resp.total_tokens + resp2.total_tokens)
+        logger.info("query answered — %d page(s) cited, %d tokens",
+                    len(citations), resp2.total_tokens)
+        return QueryResult(
+            question=question,
+            answer=resp2.text,
+            citations=citations,
+            tokens_used=resp2.total_tokens,
+        )

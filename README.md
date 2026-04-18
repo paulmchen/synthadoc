@@ -709,7 +709,7 @@ synthadoc audit events -w my-wiki           # table: timestamp, job_id, event ty
 synthadoc audit events --json -w my-wiki    # raw JSON
 ```
 
-> **Note:** `cost_usd` is always `$0.0000` in v0.1 — per-model pricing is not yet implemented. Token counts are accurate.
+> **Note:** In v0.1, `cost_usd` for ingest was always `$0.0000`. In v0.2, query costs are tracked using an approximate rate. Per-model pricing tables are planned for a future release — token counts are always accurate.
 
 ### Cache management
 
@@ -949,6 +949,15 @@ on_ingest_complete = { cmd = "python hooks/auto_commit.py", blocking = true }
 ### Per-wiki AGENTS.md
 
 Edit `<wiki-root>/AGENTS.md` to give the LLM domain-specific instructions — what to emphasize, how to name pages, what to cross-reference. This is the highest-priority instruction source for every agent run against this wiki.
+
+---
+
+## What's New in v0.2.0
+
+| Feature | Notes |
+|---------|-------|
+| **Query decomposition** | Complex questions automatically split into focused sub-queries, each retrieved independently then synthesised — compound and comparative questions answered correctly |
+| **Query audit trail** | Every query recorded in `audit.db`; `synthadoc audit queries` and `GET /audit/queries` show question history, sub-question counts, and token costs; `audit cost` now aggregates both ingest and query spend |
 
 ---
 

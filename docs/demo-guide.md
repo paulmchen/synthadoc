@@ -247,6 +247,24 @@ synthadoc query "How did Unix influence the open source movement?" -w history-of
 
 Each answer cites `[[wikilinks]]` pointing to the source pages.
 
+#### Compound and multi-part queries
+
+Synthadoc automatically decomposes complex questions into focused sub-queries,
+retrieves pages for each part independently, then synthesises a single answer:
+
+```
+# Two-part question — retrieves pages for each part separately
+synthadoc query "Who invented FORTRAN and what influence did it have on later languages?" -w history-of-computing
+
+# Comparative — fetches two independent topics in parallel
+synthadoc query "Compare Alan Turing's theoretical contributions with Von Neumann's architectural contributions." -w history-of-computing
+
+# Causal / multi-hop
+synthadoc query "How did Moore's Law shape both hardware design and software expectations over time?" -w history-of-computing
+```
+
+Simple questions produce a single sub-question — behaviour is identical to before.
+
 You can also query from Obsidian: open the command palette (`Ctrl/Cmd+P`) →
 `Synthadoc: Query wiki...` → type your question → press **Ask**.
 
@@ -348,6 +366,7 @@ Verify with queries that use the new content:
 synthadoc query "What was the Bombe machine and who built it?" -w history-of-computing
 synthadoc query "Who invented FORTRAN and when?" -w history-of-computing
 synthadoc query "When did the modern internet begin?" -w history-of-computing
+synthadoc query "What was the Bombe machine, and how did it contribute to the Allied victory in WWII?" -w history-of-computing
 ```
 
 ---
@@ -606,7 +625,7 @@ The modal prepends `search for:` automatically — just type the topic, no prefi
 
 ### Step 10 — Audit commands
 
-The `synthadoc audit` commands query the append-only `audit.db` without needing `sqlite3`. Use them to review what was ingested, how much it cost, and what events occurred.
+The `synthadoc audit` commands query the append-only `audit.db` without needing `sqlite3`. Use them to review what was ingested, what questions were asked, how much it all cost, and what events occurred.
 
 **Ingest history** — last 20 source records:
 
@@ -634,6 +653,14 @@ Avg cost/source  : $0.032
 
 Pass `--days 7` for a weekly view.
 
+**Query history** — questions asked, sub-question counts, and per-query costs:
+
+```
+synthadoc audit queries -w history-of-computing
+```
+
+Pass `--json` for machine-readable output, `-n N` to limit the number of records.
+
 **Audit events** — contradiction detections, auto-resolutions, cost gate triggers:
 
 ```
@@ -647,7 +674,7 @@ Expected output:
 2026-04-11 14:37  auto_resolved         grace-hopper (confidence: 0.91)
 ```
 
-These three commands replace the need to run raw `sqlite3` queries and are safe to run while the server is active.
+These commands replace the need to run raw `sqlite3` queries and are safe to run while the server is active.
 
 ---
 
@@ -985,6 +1012,7 @@ Commands are grouped by prefix for easy navigation.
 |------------------|------------------|--------------|
 | `Synthadoc: Audit: ingest history...` | View ingest history | Shows a table of the last N ingest records — source file, wiki page created/updated, token count, cost, and timestamp. |
 | `Synthadoc: Audit: cost summary...` | View LLM cost breakdown | Shows total tokens and USD cost for the last N days with a daily breakdown. |
+| `Synthadoc: Audit: query history...` | View recent query history | Shows a table of recent questions asked, sub-question counts, token usage, and cost per query. |
 
 ### Ribbon icon
 

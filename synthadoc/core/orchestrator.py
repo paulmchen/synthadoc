@@ -164,10 +164,25 @@ class Orchestrator:
 
     async def query(self, question: str):
         from synthadoc.agents.query_agent import QueryAgent
-        return await QueryAgent(
+        result = await QueryAgent(
             provider=make_provider("query", self._cfg),
-            store=self._store, search=self._search, cache=self._cache,
+            store=self._store, search=self._search,
         ).query(question)
+        cost_usd = result.tokens_used * 0.000003
+        await self._audit.record_query(
+            question=question,
+            sub_questions_count=len(result.citations) or 1,
+            tokens=result.tokens_used,
+            cost_usd=cost_usd,
+        )
+        self._log.log_query(
+            question=question,
+            sub_questions=len(result.citations) or 1,
+            citations=result.citations,
+            tokens=result.tokens_used,
+            cost_usd=cost_usd,
+        )
+        return result
 
     async def lint(self, scope: str = "all", auto_resolve: bool = False) -> str:
         """Enqueue a lint job. The server worker loop executes it."""

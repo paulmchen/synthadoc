@@ -129,6 +129,12 @@ export default class SynthadocPlugin extends Plugin {
             callback: () => new AuditCostsModal(this.app).open(),
         });
 
+        this.addCommand({
+            id: "synthadoc-audit-queries",
+            name: "Audit: query history...",
+            callback: () => new QueryHistoryModal(this.app).open(),
+        });
+
         this.addRibbonIcon("book-open", "Synthadoc status", async () => {
             const [healthRes, statusRes] = await Promise.allSettled([
                 api.health(),
@@ -763,6 +769,71 @@ class AuditCostsModal extends Modal {
                 }
             } catch {
                 out.setText("Error: is synthadoc serve running?");
+            }
+        };
+
+        btn.onclick = load;
+        load();
+    }
+    onClose() { this.contentEl.empty(); }
+}
+
+class QueryHistoryModal extends Modal {
+    onOpen() {
+        this.modalEl.style.width = "clamp(520px, 65vw, 900px)";
+        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
+        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
+
+        const { contentEl } = this;
+        contentEl.createEl("h3", { text: "Synthadoc: Query history" });
+
+        const row = contentEl.createEl("div");
+        row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px";
+        row.createEl("label", { text: "Last" });
+        const input = row.createEl("input", { type: "number" }) as HTMLInputElement;
+        input.value = "50";
+        input.style.cssText = "width:60px;padding:4px 8px";
+        row.createEl("span", { text: "records" });
+        const btn = row.createEl("button", { text: "Load" });
+
+        const tableEl = contentEl.createEl("div");
+
+        const load = async () => {
+            const limit = parseInt(input.value) || 50;
+            tableEl.setText("Loading…");
+            try {
+                const r = await api.queryHistory(limit) as any;
+                tableEl.empty();
+                if (!r.records.length) {
+                    tableEl.createEl("p", { text: "No queries recorded yet." });
+                    return;
+                }
+                const table = tableEl.createEl("table");
+                table.style.cssText = "width:100%;border-collapse:collapse;font-size:12px";
+                const hrow = table.createEl("thead").createEl("tr");
+                for (const h of ["Question", "Sub-Qs", "Tokens", "Cost (USD)", "Asked at"]) {
+                    const th = hrow.createEl("th", { text: h });
+                    th.style.cssText = "text-align:left;padding:4px 8px;border-bottom:1px solid var(--background-modifier-border)";
+                }
+                const tbody = table.createEl("tbody");
+                for (const rec of r.records) {
+                    const tr = tbody.createEl("tr");
+                    const ts = rec.queried_at
+                        ? new Date(rec.queried_at).toLocaleString()
+                        : "—";
+                    for (const text of [
+                        rec.question.length > 80 ? rec.question.slice(0, 77) + "…" : rec.question,
+                        String(rec.sub_questions_count ?? 1),
+                        (rec.tokens ?? 0).toLocaleString(),
+                        `$${(rec.cost_usd ?? 0).toFixed(4)}`,
+                        ts,
+                    ]) {
+                        const td = tr.createEl("td", { text });
+                        td.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle)";
+                    }
+                }
+            } catch {
+                tableEl.setText("Error: is synthadoc serve running?");
             }
         };
 
