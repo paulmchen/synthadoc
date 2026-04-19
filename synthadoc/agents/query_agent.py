@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from synthadoc.agents.search_decompose_agent import SearchDecomposeAgent
 from synthadoc.providers.base import LLMProvider, Message
 from synthadoc.storage.search import HybridSearch
 from synthadoc.storage.wiki import WikiStorage
@@ -16,6 +17,19 @@ logger = logging.getLogger(__name__)
 _MAX_SUB_QUESTIONS = 4
 _MAX_QUESTION_CHARS = 4000
 
+# Stopwords excluded when extracting key terms for the content-overlap gap check.
+# Keep this list lean — a false positive (treating a content word as a stopword)
+# suppresses gap detection; a false negative (missing a stopword) is harmless.
+_STOPWORDS = frozenset({
+    "what", "when", "where", "which", "who", "whom", "whose", "why", "how",
+    "should", "would", "could", "will", "does", "have", "with", "that", "this",
+    "they", "them", "their", "there", "then", "than", "also", "well", "just",
+    "some", "more", "very", "much", "many", "most", "from", "into", "onto",
+    "about", "after", "before", "between", "during", "through",
+    "these", "those", "each", "both", "your", "mine", "ours",
+    "start", "grow", "good", "best", "make", "need", "want",
+})
+
 
 @dataclass
 class QueryResult:
@@ -23,15 +37,21 @@ class QueryResult:
     answer: str
     citations: list[str]
     tokens_used: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    knowledge_gap: bool = False
+    suggested_searches: list[str] = field(default_factory=list)
 
 
 class QueryAgent:
     def __init__(self, provider: LLMProvider, store: WikiStorage,
-                 search: HybridSearch, top_n: int = 8) -> None:
+                 search: HybridSearch, top_n: int = 8,
+                 gap_score_threshold: float = 2.0) -> None:
         self._provider = provider
         self._store = store
         self._search = search
         self._top_n = top_n
+        self._gap_score_threshold = gap_score_threshold
 
     async def decompose(self, question: str) -> list[str]:
         """Break a question into focused sub-questions for independent retrieval.
@@ -62,11 +82,20 @@ class QueryAgent:
             if isinstance(parts, list) and parts:
                 filtered = [str(q) for q in parts[:_MAX_SUB_QUESTIONS] if str(q).strip()]
                 if filtered:
-                    logger.info("query decomposed into %d sub-question(s)", len(filtered))
-                    logger.debug("sub-questions: %s", filtered)
+                    if len(filtered) == 1:
+                        logger.info("query is simple — no decomposition (1 sub-question)")
+                    else:
+                        logger.info(
+                            "query decomposed into %d sub-question(s): %s",
+                            len(filtered),
+                            " | ".join(f'"{q}"' for q in filtered),
+                        )
                     return filtered
-        except Exception:
-            logger.warning("decompose failed — falling back to original question", exc_info=True)
+        except Exception as exc:
+            logger.warning(
+                "decompose failed (%s: %s) — falling back to original question",
+                type(exc).__name__, exc,
+            )
         return [question]
 
     async def query(self, question: str) -> QueryResult:
@@ -83,6 +112,95 @@ class QueryAgent:
                 if r.slug not in best or r.score > best[r.slug].score:
                     best[r.slug] = r
         candidates = sorted(best.values(), key=lambda r: r.score, reverse=True)[:self._top_n]
+
+        # ── Knowledge gap detection ────────────────────────────────────────────
+        # Three independent signals; any one triggers the gap:
+        #
+        #   1. Page count < 3  — wiki has almost nothing on the topic.
+        #
+        #   2. Max BM25 score < gap_score_threshold  — pages exist but their
+        #      keyword overlap with the query is weak (tunable via
+        #      [query] gap_score_threshold in synthadoc.toml; default 2.0).
+        #
+        #   3. Content overlap < 2  — BM25 scores are corpus-relative and can
+        #      be inflated by shared vocabulary even when pages are off-topic
+        #      (e.g. spring-flower pages match a vegetables query because both
+        #      use words like "spring", "planting", "Canada").  This check
+        #      counts how many retrieved pages actually contain at least one
+        #      key noun from the question.  Key terms = question words longer
+        #      than 4 chars that are not in _STOPWORDS, stem-truncated by 2
+        #      chars for basic suffix matching (vegetable → vegetabl).
+        #      If fewer than 2 pages pass this test, the wiki lacks on-topic
+        #      content regardless of BM25 scores.
+        #
+        # Set gap_score_threshold = 0 to disable gap detection entirely.
+        _max_score = max((r.score for r in candidates), default=0.0)
+
+        # Extract meaningful content words from the question for the overlap check.
+        # Strip 1 char for basic plural/suffix matching ("vegetables" → "vegetable",
+        # "indoors" → "indoor"). Stripping 2 chars was too aggressive — it turned
+        # "Canadian" into "canadi", which still matched every page in a Canada-focused
+        # wiki and made the check useless as a discriminator.
+        _key_terms = {
+            w.lower().rstrip("s?!.,")        # strip plural/punctuation only
+            for w in question.split()
+            if len(w) > 4 and w.lower().rstrip("s?!.,") not in _STOPWORDS
+        }
+
+        # Signal 3: pick the RAREST key term among the retrieved pages as the
+        # discriminating signal.  Generic terms ("spring", "canadian") appear in
+        # almost every page of a topic-specific wiki and inflate the count; the
+        # rarest term (e.g. "vegetable" in a flower-heavy wiki) tells us whether
+        # the wiki actually has DEDICATED content on the question's main topic.
+        #
+        # A page "covers" the topic if the discriminating term appears ≥ 3 times —
+        # a single mention in a bullet list is different from a dedicated section.
+        _MIN_TERM_FREQ = 3
+        if _key_terms and candidates:
+            # Count how many candidates contain each key term at all (doc frequency).
+            _term_doc_freq = {
+                t: sum(
+                    1 for r in candidates
+                    if (p := self._store.read_page(r.slug)) and t in p.content.lower()
+                )
+                for t in _key_terms
+            }
+            # Prefer the rarest term that appears in at least one page.
+            # Zero-freq terms are often synonym mismatches (e.g. "backyard" vs "garden")
+            # rather than evidence of missing content.  Only fall back to a zero-freq
+            # term when ALL key terms are absent — that is an unambiguous content gap.
+            _covered = {t: f for t, f in _term_doc_freq.items() if f > 0}
+            if _covered:
+                _discriminating_term = min(_covered, key=lambda t: _covered[t])
+            else:
+                _discriminating_term = min(_term_doc_freq, key=lambda t: _term_doc_freq[t])
+
+            # Count pages where the discriminating term appears with meaningful frequency.
+            _pages_with_overlap = sum(
+                1 for r in candidates
+                if (p := self._store.read_page(r.slug)) and
+                   p.content.lower().count(_discriminating_term) >= _MIN_TERM_FREQ
+            )
+        else:
+            _discriminating_term = ""
+            _pages_with_overlap = len(candidates)   # no key terms → skip check
+
+        _gap = self._gap_score_threshold > 0 and (
+            len(candidates) < 3                          # signal 1: too few pages
+            or _max_score < self._gap_score_threshold    # signal 2: low BM25 scores
+            or _pages_with_overlap < 2                   # signal 3: no dedicated coverage
+        )
+
+        # Always log retrieval quality so operators can tune gap_score_threshold.
+        logger.info(
+            "query retrieval — pages=%d, max_score=%.2f, "
+            "discriminating_term=%r, on_topic_pages=%d, gap=%s",
+            len(candidates), _max_score, _discriminating_term, _pages_with_overlap, _gap,
+        )
+        if _gap:
+            _suggested = await SearchDecomposeAgent(self._provider).decompose(question)
+        else:
+            _suggested = []
 
         citations = [r.slug for r in candidates]
         context = "\n\n".join(
@@ -104,4 +222,8 @@ class QueryAgent:
             answer=resp2.text,
             citations=citations,
             tokens_used=resp2.total_tokens,
+            input_tokens=resp2.input_tokens,
+            output_tokens=resp2.output_tokens,
+            knowledge_gap=_gap,
+            suggested_searches=_suggested,
         )

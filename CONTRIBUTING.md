@@ -43,6 +43,16 @@ A CLA bot will automatically request a signature when you open your first pull r
 - TypeScript: follow the existing eslint/prettier config in `obsidian-plugin/`.
 - Keep commits focused; one logical change per commit.
 
+## Release checklist
+
+- [ ] Update `synthadoc/providers/pricing.py` — verify rates against provider pricing pages, update `_LAST_UPDATED`
+
+Pricing sources to check:
+- Anthropic: https://docs.anthropic.com/en/docs/about-claude/pricing
+- OpenAI: https://openai.com/api/pricing/
+- Gemini: https://ai.google.dev/gemini-api/docs/pricing
+- Groq: https://groq.com/pricing
+
 ## Reporting Bugs
 
 Use [GitHub Issues](../../issues). Include steps to reproduce, the full error message, and your OS / Python version.

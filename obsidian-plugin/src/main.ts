@@ -893,6 +893,27 @@ class QueryModal extends Modal {
                     cite.style.cssText = "font-size:11px;color:var(--text-muted);margin-top:8px";
                     cite.setText("Sources: " + r.citations.join(", "));
                 }
+                if (r.knowledge_gap && r.suggested_searches?.length) {
+                    const searchCmds = (r.suggested_searches as string[])
+                        .map((s: string) => `synthadoc ingest "search for: ${s}"`)
+                        .join("\n");
+                    const callout = [
+                        "> [!tip] Knowledge Gap Detected",
+                        "> Your wiki doesn't have enough on this topic yet. Enrich it with a web search:",
+                        ">",
+                        "> **From Obsidian:** Open Command Palette (`Cmd+P` / `Ctrl+P`) → **Synthadoc: Ingest: web search**",
+                        ">",
+                        "> **From the terminal:**",
+                        "> ```bash",
+                        ...searchCmds.split("\n").map((cmd: string) => `> ${cmd}`),
+                        "> ```",
+                        ">",
+                        "> After ingesting, re-run your query to get a richer answer.",
+                    ].join("\n");
+                    const gapEl = out.createEl("div");
+                    gapEl.style.cssText = "margin-top:16px";
+                    await MarkdownRenderer.render(this.app, callout, gapEl, "", this);
+                }
             } catch {
                 out.empty();
                 out.createEl("p", { text: "Error: is synthadoc serve running?" });

@@ -78,6 +78,11 @@ class IngestConfig:
 
 
 @dataclass
+class QueryConfig:
+    gap_score_threshold: float = 2.0   # BM25 score below which gap is detected
+
+
+@dataclass
 class QueueConfig:
     max_parallel_ingest: int = 4
     max_retries: int = 3
@@ -131,6 +136,7 @@ class Config:
     cache: CacheConfig = field(default_factory=CacheConfig)
     cost: CostConfig = field(default_factory=CostConfig)
     ingest: IngestConfig = field(default_factory=IngestConfig)
+    query: QueryConfig = field(default_factory=QueryConfig)
     queue: QueueConfig = field(default_factory=QueueConfig)
     logs: LogsConfig = field(default_factory=LogsConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
@@ -244,6 +250,12 @@ def _raw_to_config(raw: dict, source_has_agents: bool) -> Config:
         chunk_overlap=ig.get("chunk_overlap", 150),
     )
 
+    # --- query ---
+    q_section = raw.get("query", {})
+    query = QueryConfig(
+        gap_score_threshold=q_section.get("gap_score_threshold", 2.0),
+    )
+
     # --- queue ---
     q = raw.get("queue", {})
     queue = QueueConfig(
@@ -300,6 +312,7 @@ def _raw_to_config(raw: dict, source_has_agents: bool) -> Config:
         cache=cache,
         cost=cost,
         ingest=ingest,
+        query=query,
         queue=queue,
         logs=logs,
         server=server,

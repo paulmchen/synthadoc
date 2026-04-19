@@ -194,10 +194,82 @@ def _slugify(title: str) -> str:
 
 ### QueryAgent
 
-1. Extract search terms from the natural language question
-2. BM25 search against wiki
-3. LLM synthesizes answer from retrieved pages, citing `[[page-name]]` sources
-4. Optional: save answer as a new wiki page
+**Pipeline (v0.2.0 — query decomposition):**
+
+```
+Question
+ → Call 1: decompose() — LLM splits question into 1–N sub-questions (cap=4)
+   └─ on any LLM error: fall back to [question]          graceful degradation
+ → parallel BM25 search per sub-question                 asyncio.gather()
+ → merge candidates — best score wins per slug           deduplication
+ → Call 2: LLM synthesises answer from merged context    unchanged from v0.1
+ → record_query() in audit.db                            cost + history tracking
+ → log_query() in activity log                           operator visibility
+```
+
+**Decomposition behaviour:**
+- Simple questions decompose to a single sub-question — identical behaviour to v0.1
+- Compound questions (e.g. "Who invented FORTRAN and what was the Bombe machine?") decompose into one sub-question per part — each part retrieved independently, pages merged before synthesis
+- Comparative questions (e.g. "Compare Turing's contributions with Von Neumann's") retrieve both subjects in parallel
+- The LLM returns a JSON array of strings. Markdown code fences (` ```json ``` `) are stripped before parsing — required for cross-model robustness (some providers wrap JSON in fences despite instructions)
+- On any failure during decomposition (network error, invalid JSON, empty list, non-array response), the agent falls back silently to `[question]` — the query always completes
+
+**Logging (INFO level):**
+```
+query is simple — no decomposition (1 sub-question)
+query decomposed into 2 sub-question(s): "Who invented FORTRAN?" | "What was the Bombe machine?"
+```
+
+**BM25 corpus cache:** `HybridSearch` builds the BM25 corpus once per server session and caches it in memory (`_cached_corpus`). The cache is invalidated by `invalidate_index()` after every `write_page()` call in IngestAgent, so queries always see current wiki content without redundant disk reads.
+
+**Knowledge gap detection:**
+
+After the BM25 merge step, if `len(candidates) < 3` OR `max_score < gap_score_threshold` (default: `2.0`, configurable via `[query] gap_score_threshold` in `synthadoc.toml`), a knowledge gap is detected:
+
+1. `SearchDecomposeAgent.decompose(question)` is called to generate 1–4 focused keyword search strings
+2. `QueryResult.knowledge_gap = True` and `QueryResult.suggested_searches = [...]` are set
+3. The CLI appends a `[!tip] Knowledge Gap Detected` Obsidian callout with:
+   - Obsidian Command Palette path (primary)
+   - `synthadoc ingest "search for: ..."` terminal commands (with `-w`)
+4. The API response includes `knowledge_gap` and `suggested_searches` fields
+5. The Obsidian `QueryModal` renders the same callout using `MarkdownRenderer.render()`
+
+When no gap is detected, `suggested_searches` is `[]` and no callout is shown.
+
+---
+
+### Web Search Decomposition (v0.2.0)
+
+> **Note:** Implementation is in `docs/plans/web-search-decomposition-v0.2.md`. This section describes the delivered behavior.
+
+**Motivation:** The v0.1 web search feature (`synthadoc ingest "search for: <topic>"`) fired a single Tavily API call for the entire input phrase. Decomposing the search intent into multiple focused keyword queries before fetching produces richer, more targeted pages — each sub-query targets a different aspect of the topic.
+
+**Pipeline:**
+
+```
+User input: "search for: yard gardening in Canadian climate zones"
+ → IngestAgent detects web_search skill
+ → strip intent prefix → "yard gardening in Canadian climate zones"
+ → SearchDecomposeAgent.decompose() — LLM returns terse keyword strings
+   e.g. ["Canada hardiness zones map",
+         "planting guide by province Canada",
+         "frost dates Canadian cities"]
+ → asyncio.gather() — N parallel Tavily API calls
+ → deduplicate URLs across results (first-seen wins, order preserved)
+ → merged child_sources → existing fan-out unchanged
+```
+
+**Key design decisions:**
+- Uses a **separate prompt** from `QueryAgent.decompose()` — query decomposition asks "what distinct *questions* does this ask?" (natural-language sub-questions) while search decomposition asks "what distinct *search strings* would find the best authoritative sources?" (terse keyword phrases). The outputs are fundamentally different — they must not share a prompt.
+- Implemented as `SearchDecomposeAgent` in `synthadoc/agents/search_decompose_agent.py` — kept separate to avoid coupling the two decomposition strategies.
+- Cap: 4 search strings maximum — prevents runaway Tavily API spend.
+- Fallback: if LLM call fails, JSON is invalid, or all entries are whitespace, use the original phrase as a single search query — the ingest always completes.
+
+**Logging (INFO level):**
+```
+web search is simple — no decomposition (1 query)
+web search decomposed into 3 queries: "Canada hardiness zones map" | "frost dates Canadian cities" | "planting guide by province Canada"
+```
 
 ### LintAgent
 
@@ -902,7 +974,45 @@ Enforces per-operation budget limits. Evaluated before every LLM call.
 | `soft_warn_usd` | $0.50 | Log warning; auto-continue |
 | `hard_gate_usd` | $2.00 | Prompt user `Proceed? [y/N]`; block if N; skip prompt if `auto_confirm=True` or `--yes` flag |
 
-> **Cost tracking note.** In v0.1, `cost_usd` for ingest was always `$0.0000` — no per-model pricing table was implemented. In v0.2, query costs are estimated using an approximate per-token rate; ingest cost tracking remains approximate. Per-model pricing tables are planned for a future release. Token counts are always accurate. As a result, `soft_warn_usd` and `hard_gate_usd` do not yet trigger reliably. `auto_resolve_confidence_threshold` is unaffected — it uses LLM confidence scores, not cost.
+### Cost Tracking and Pricing
+
+**How cost is computed (v0.2.0+):**
+
+```
+LLM call → CompletionResponse(input_tokens, output_tokens)
+             ↓
+         estimate_cost(model, input_tokens, output_tokens, is_local)
+             ↓
+         pricing table lookup in synthadoc/providers/pricing.py
+             ↓
+         IngestResult.cost_usd  or  audit.db queries.cost_usd
+```
+
+**Pricing table (`synthadoc/providers/pricing.py`):**
+
+A static Python dict maps model name → `(input_usd_per_token, output_usd_per_token)`.
+Separate input and output rates reflect real-world API pricing (output tokens cost 3–5× more than input tokens for most models).
+
+| Provider | Example model | Input (per token) | Output (per token) |
+|---|---|---|---|
+| Anthropic | claude-haiku-4-5-20251001 | $0.000001 | $0.000005 |
+| Anthropic | claude-sonnet-4-6 | $0.000003 | $0.000015 |
+| OpenAI | gpt-4o-mini | $0.00000015 | $0.0000006 |
+| Gemini | gemini-2.0-flash | $0.0000003 | $0.0000025 |
+| Groq | llama-3.3-70b-versatile | $0.00000059 | $0.00000079 |
+
+**Special cases:**
+- **Ollama (local inference):** Always `$0.00` regardless of token count — `is_local=True` short-circuits the calculation.
+- **Unknown models:** Use a conservative fallback rate (`$0.000003` per token for both input and output) rather than crashing or silently reporting `$0.00`.
+
+**Token propagation:**
+
+- `CompletionResponse` (already in v0.1) carries `input_tokens` and `output_tokens` from every provider.
+- `QueryResult` gains `input_tokens` and `output_tokens` fields (v0.2.0); `Orchestrator.query()` calls `estimate_cost()` to compute `cost_usd` before writing to `audit.db`.
+- `IngestResult` gains `input_tokens` and `output_tokens` fields (v0.2.0); `Orchestrator._run_ingest()` calls `estimate_cost()` after ingest completes.
+- The vision call and analysis call in `IngestAgent` also accumulate tokens; the analysis call only has a total (split not available due to internal caching).
+
+**Refresh cadence:** The pricing table is refreshed at each major release. `_LAST_UPDATED` in `pricing.py` records the date of last review. See `CONTRIBUTING.md` for the release checklist.
 
 ### API
 
@@ -1194,6 +1304,7 @@ Target: week of 2026-04-25.
 | **BM25 corpus caching** | ✅ v0.2.0 | In-memory corpus cache in `HybridSearch`; invalidated on write; eliminates redundant disk reads on decomposed queries |
 | **OpenAIProvider contract tests** | ✅ v0.2.0 | Covers OpenAI, Gemini, Groq, Ollama (all share `OpenAIProvider`) |
 | **HTTP 502 on LLM failure** | ✅ v0.2.0 | `/query` GET and POST return 502 Bad Gateway (not raw 500) when the LLM provider is unreachable |
+| **Web search decomposition** | ✅ v0.2.0 | `SearchDecomposeAgent` decomposes search intent into N keyword search strings; parallel Tavily API calls via `asyncio.gather`; URL deduplication across results; fallback to single query on LLM error |
 
 ### Planned
 
@@ -1307,3 +1418,4 @@ synthadoc schedule add --op "scaffold" --cron "0 4 * * 0" -w my-wiki
 - **OpenAIProvider contract tests** — 4 tests covering happy path, system message, null content, and custom `base_url` forwarding; applies to OpenAI, Gemini, Groq, and Ollama (all use `OpenAIProvider`)
 - **HTTP 502 on LLM failure** — `/query` GET and POST return 502 Bad Gateway (not raw 500) when the LLM provider is unreachable
 - **Obsidian plugin: 15 commands** — added `Audit: query history...` command with `QueryHistoryModal`
+- **Web search decomposition** — `SearchDecomposeAgent` breaks a web search intent into 1–4 focused keyword search strings (separate prompt from query decomposition); parallel Tavily searches; URL deduplication; graceful fallback on LLM error; integrated into `IngestAgent` at the web search fan-out point

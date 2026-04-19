@@ -227,3 +227,55 @@ def test_audit_costs_endpoint(tmp_wiki):
     data = resp.json()
     assert data["total_tokens"] == 1200
     assert data["total_cost_usd"] == pytest.approx(0.0024)
+
+
+def test_query_response_includes_knowledge_gap_fields(tmp_wiki):
+    """GET /query must include knowledge_gap and suggested_searches in response."""
+    from synthadoc.integration.http_server import create_app
+    from synthadoc.agents.query_agent import QueryResult
+    with patch("synthadoc.core.orchestrator.Orchestrator.query",
+               new=AsyncMock(return_value=QueryResult(
+                   question="q", answer="answer", citations=[],
+                   knowledge_gap=False, suggested_searches=[],
+               ))):
+        with TestClient(create_app(wiki_root=tmp_wiki)) as client:
+            resp = client.get("/query", params={"q": "test question"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "knowledge_gap" in data
+    assert "suggested_searches" in data
+
+
+def test_query_response_gap_true_includes_suggestions(tmp_wiki):
+    """When knowledge_gap=True, suggested_searches must be a non-empty list."""
+    from synthadoc.integration.http_server import create_app
+    from synthadoc.agents.query_agent import QueryResult
+    with patch("synthadoc.core.orchestrator.Orchestrator.query",
+               new=AsyncMock(return_value=QueryResult(
+                   question="q", answer="No info found.", citations=[],
+                   knowledge_gap=True,
+                   suggested_searches=["canadian vegetable spring planting", "frost dates Canada"],
+               ))):
+        with TestClient(create_app(wiki_root=tmp_wiki)) as client:
+            resp = client.get("/query", params={"q": "vegetables in Canada?"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["knowledge_gap"] is True
+    assert data["suggested_searches"] == ["canadian vegetable spring planting", "frost dates Canada"]
+
+
+def test_query_post_response_includes_gap_fields(tmp_wiki):
+    """POST /query must also include knowledge_gap and suggested_searches."""
+    from synthadoc.integration.http_server import create_app
+    from synthadoc.agents.query_agent import QueryResult
+    with patch("synthadoc.core.orchestrator.Orchestrator.query",
+               new=AsyncMock(return_value=QueryResult(
+                   question="q", answer="answer", citations=[],
+                   knowledge_gap=True, suggested_searches=["search string"],
+               ))):
+        with TestClient(create_app(wiki_root=tmp_wiki)) as client:
+            resp = client.post("/query", json={"question": "test"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "knowledge_gap" in data
+    assert "suggested_searches" in data

@@ -2,6 +2,7 @@
 # Copyright (C) 2026 Paul Chen / axoviq.com
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -12,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from synthadoc.agents.search_decompose_agent import SearchDecomposeAgent
 from synthadoc.agents.skill_agent import SkillAgent
 from synthadoc.core.cache import CACHE_VERSION, CacheManager, make_cache_key
 from synthadoc.providers.base import LLMProvider, Message
@@ -20,6 +22,12 @@ from synthadoc.storage.search import HybridSearch
 from synthadoc.storage.wiki import WikiPage, WikiStorage
 
 logger = logging.getLogger(__name__)
+
+import re as _re
+_WEB_INTENT_RE = _re.compile(
+    r"^(search\s+for|find\s+on\s+the\s+web|look\s+up|web\s+search|browse):?\s*",
+    _re.IGNORECASE,
+)
 
 
 @dataclass
@@ -30,6 +38,8 @@ class IngestResult:
     pages_flagged: list[str] = field(default_factory=list)
     child_sources: list[str] = field(default_factory=list)
     tokens_used: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
     cost_usd: float = 0.0
     cache_hits: int = 0
     skipped: bool = False
@@ -261,7 +271,35 @@ class IngestAgent:
             src_hash = hashlib.sha256(source.encode()).hexdigest()
             src_size = len(source.encode())
 
-        extracted = await self._skill_agent.extract(source)
+        # Web search decomposition: detect intent, decompose into keyword sub-queries,
+        # fire N parallel Tavily searches, deduplicate URLs across results.
+        try:
+            _skill_meta = self._skill_agent.detect_skill(source)
+            _is_web_search = _skill_meta.name == "web_search"
+        except Exception:
+            _is_web_search = False
+
+        if _is_web_search:
+            _bare_query = _WEB_INTENT_RE.sub("", source).strip() or source
+            _sub_queries = await SearchDecomposeAgent(self._provider).decompose(_bare_query)
+            _sub_results = await asyncio.gather(*[
+                self._skill_agent.extract(f"search for: {q}") for q in _sub_queries
+            ])
+            _seen: set[str] = set()
+            _merged_urls: list[str] = []
+            for _r in _sub_results:
+                for _url in _r.metadata.get("child_sources", []):
+                    if _url not in _seen:
+                        _seen.add(_url)
+                        _merged_urls.append(_url)
+            from synthadoc.skills.base import ExtractedContent as _EC
+            extracted = _EC(
+                text="", source_path=source,
+                metadata={"child_sources": _merged_urls, "query": _bare_query,
+                          "results_count": len(_merged_urls)},
+            )
+        else:
+            extracted = await self._skill_agent.extract(source)
 
         # Web search fan-out: return child sources; orchestrator enqueues them as jobs
         if extracted.metadata.get("child_sources"):
@@ -282,6 +320,8 @@ class IngestAgent:
                 temperature=0.0,
             )
             result.tokens_used += vision_resp.total_tokens
+            result.input_tokens += vision_resp.input_tokens
+            result.output_tokens += vision_resp.output_tokens
             text = vision_resp.text[:8000]
         else:
             text = extracted.text[:8000]
@@ -289,6 +329,7 @@ class IngestAgent:
         # Step 1: analysis pass (cached separately from decision)
         analysis = await self._analyse(text, bust_cache=bust_cache)
         result.tokens_used += analysis.pop("_tokens", 0)
+        # input/output split not available for the analyse call (cached via _analyse)
 
         entities = analysis.get("entities", [])
         tags = analysis.get("tags", [])
@@ -344,6 +385,8 @@ class IngestAgent:
                 temperature=0.0,
             )
             result.tokens_used += resp2.total_tokens
+            result.input_tokens += resp2.input_tokens
+            result.output_tokens += resp2.output_tokens
             decisions = _parse_json_response(resp2.text)
             await self._cache.set(ck2, decisions)
 
