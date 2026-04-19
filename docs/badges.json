@@ -1,5 +1,7 @@
 {
   "cli_commands": 25,
   "obsidian_commands": 15,
-  "skills": 8
+  "skills": 8,
+  "coverage": "83%",
+  "coverage_color": "brightgreen"
 }

@@ -22,6 +22,31 @@ jobs:
       - run: python scripts/update_badges.py --check
       - run: pytest --cov=synthadoc --cov-report=term-missing -v
 
+  coverage-badge:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pytest --cov=synthadoc --cov-report=json -q
+      - run: python scripts/update_badges.py --coverage-json coverage.json
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet docs/badges.json || (
+            git add docs/badges.json &&
+            git commit -m "ci: update coverage badge" &&
+            git push
+          )
+
   build-plugin:
     runs-on: ubuntu-latest
     steps:
