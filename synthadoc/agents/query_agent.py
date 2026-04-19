@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from synthadoc.agents.search_decompose_agent import SearchDecomposeAgent
 from synthadoc.providers.base import LLMProvider, Message
 from synthadoc.storage.search import HybridSearch
 from synthadoc.storage.wiki import WikiStorage
@@ -25,6 +26,8 @@ class QueryResult:
     tokens_used: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
+    knowledge_gap: bool = False
+    suggested_searches: list[str] = field(default_factory=list)
 
 
 class QueryAgent:
@@ -97,6 +100,20 @@ class QueryAgent:
                     best[r.slug] = r
         candidates = sorted(best.values(), key=lambda r: r.score, reverse=True)[:self._top_n]
 
+        # Knowledge gap detection (disabled when gap_score_threshold <= 0)
+        _max_score = max((r.score for r in candidates), default=0.0)
+        _gap = self._gap_score_threshold > 0 and (
+            len(candidates) < 3 or _max_score < self._gap_score_threshold
+        )
+        if _gap:
+            logger.info(
+                "knowledge gap detected — max_score=%.2f, pages=%d, threshold=%.2f",
+                _max_score, len(candidates), self._gap_score_threshold,
+            )
+            _suggested = await SearchDecomposeAgent(self._provider).decompose(question)
+        else:
+            _suggested = []
+
         citations = [r.slug for r in candidates]
         context = "\n\n".join(
             f"### {p.title}\n{p.content[:1000]}"
@@ -119,4 +136,6 @@ class QueryAgent:
             tokens_used=resp2.total_tokens,
             input_tokens=resp2.input_tokens,
             output_tokens=resp2.output_tokens,
+            knowledge_gap=_gap,
+            suggested_searches=_suggested,
         )

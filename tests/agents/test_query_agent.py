@@ -20,6 +20,12 @@ def _make_agent(tmp_wiki, answer_text="The answer.", decompose_json='["term"]'):
     return store, search, provider
 
 
+def _make_agent_no_gap(tmp_wiki, **kw):
+    """Like _make_agent but disables gap detection (gap_score_threshold=0.0)."""
+    store, search, provider = _make_agent(tmp_wiki, **kw)
+    return store, search, provider
+
+
 # ── decompose() unit tests ────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -141,7 +147,8 @@ async def test_decompose_single_item_list(tmp_wiki):
         CompletionResponse(text="Moore's Law states transistor count doubles.",
                            input_tokens=100, output_tokens=20),
     ]
-    agent = QueryAgent(provider=provider, store=store, search=search)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
     result = await agent.query("What is Moore's Law?")
     assert isinstance(result, QueryResult)
     assert result.answer
@@ -174,7 +181,8 @@ async def test_query_deduplicates_pages_across_sub_questions(tmp_wiki):
         ),
         CompletionResponse(text="Moore's Law answer.", input_tokens=100, output_tokens=20),
     ]
-    agent = QueryAgent(provider=provider, store=store, search=search)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
     result = await agent.query("How does Moore's Law relate to hardware?")
     assert result.citations.count("moores-law") == 1
 
@@ -197,7 +205,8 @@ async def test_query_merged_results_respect_top_n(tmp_wiki):
         ),
         CompletionResponse(text="answer", input_tokens=100, output_tokens=10),
     ]
-    agent = QueryAgent(provider=provider, store=store, search=search, top_n=5)
+    agent = QueryAgent(provider=provider, store=store, search=search, top_n=5,
+                       gap_score_threshold=0.0)
     result = await agent.query("alpha gamma question?")
     assert len(result.citations) <= 5
 
@@ -214,7 +223,8 @@ async def test_query_all_sub_searches_return_empty(tmp_wiki):
                            input_tokens=10, output_tokens=5),
         CompletionResponse(text="I don't know.", input_tokens=50, output_tokens=10),
     ]
-    agent = QueryAgent(provider=provider, store=store, search=search)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
     result = await agent.query("something not in wiki?")
     assert result.answer == "I don't know."
     assert result.citations == []
@@ -224,7 +234,8 @@ async def test_query_all_sub_searches_return_empty(tmp_wiki):
 async def test_query_result_preserves_original_question(tmp_wiki):
     """QueryResult.question must be the original full question, not any sub-question."""
     store, search, provider = _make_agent(tmp_wiki)
-    agent = QueryAgent(provider=provider, store=store, search=search)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
     original = "Who invented FORTRAN and what influence did it have?"
     result = await agent.query(original)
     assert result.question == original
@@ -238,7 +249,8 @@ async def test_query_tokens_used_is_answer_call_tokens(tmp_wiki):
         CompletionResponse(text='["term"]', input_tokens=10, output_tokens=5),   # decompose
         CompletionResponse(text="Answer.", input_tokens=100, output_tokens=25),  # answer
     ]
-    agent = QueryAgent(provider=provider, store=store, search=search)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
     result = await agent.query("test question")
     assert result.tokens_used == 125  # answer call only: 100 + 25
 
@@ -255,7 +267,8 @@ async def test_query_returns_answer(tmp_wiki):
     provider = AsyncMock()
     provider.complete.return_value = CompletionResponse(
         text="Transformers use self-attention.", input_tokens=200, output_tokens=30)
-    agent = QueryAgent(provider=provider, store=store, search=search)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
     result = await agent.query("How do transformers work?")
     assert isinstance(result, QueryResult)
     assert result.answer
@@ -264,7 +277,8 @@ async def test_query_returns_answer(tmp_wiki):
 @pytest.mark.asyncio
 async def test_query_empty_wiki_returns_answer(tmp_wiki):
     store, search, provider = _make_agent(tmp_wiki, answer_text="I don't know.")
-    agent = QueryAgent(provider=provider, store=store, search=search)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
     result = await agent.query("What is the meaning of life?")
     assert isinstance(result, QueryResult)
     assert result.answer == "I don't know."
@@ -288,7 +302,8 @@ async def test_query_citations_match_search_results(tmp_wiki):
         CompletionResponse(text='["chlorine pool algae"]', input_tokens=10, output_tokens=5),
         CompletionResponse(text="Use chlorine shock.", input_tokens=100, output_tokens=20),
     ]
-    agent = QueryAgent(provider=provider, store=store, search=search)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
     result = await agent.query("How do I treat algae?")
     assert "pool-chemicals" in result.citations
 
@@ -311,7 +326,8 @@ async def test_query_multiple_pages_all_cited(tmp_wiki):
         CompletionResponse(text="Balance pH, chlorine, and alkalinity.",
                            input_tokens=200, output_tokens=30),
     ]
-    agent = QueryAgent(provider=provider, store=store, search=search)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
     result = await agent.query("How do I balance pool chemistry?")
     assert len(result.citations) >= 1
     for slug in result.citations:
@@ -348,7 +364,8 @@ async def test_compound_query_retrieves_both_parts(tmp_wiki):
             input_tokens=200, output_tokens=30,
         ),
     ]
-    agent = QueryAgent(provider=provider, store=store, search=search)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
     result = await agent.query("Who invented FORTRAN and what was the Bombe machine?")
     assert "fortran-history" in result.citations
     assert "bombe-machine" in result.citations
@@ -380,7 +397,8 @@ async def test_subquestions_retrieved_in_parallel(tmp_wiki):
 
     import unittest.mock
     with unittest.mock.patch("synthadoc.agents.query_agent.asyncio.gather", spy_gather):
-        agent = QueryAgent(provider=provider, store=store, search=search)
+        agent = QueryAgent(provider=provider, store=store, search=search,
+                           gap_score_threshold=0.0)
         await agent.query("Who invented FORTRAN at IBM?")
 
     assert len(gather_calls) == 1, "asyncio.gather must be called exactly once per query"
@@ -463,7 +481,8 @@ async def test_decompose_called_exactly_once_per_query(tmp_wiki):
                            input_tokens=10, output_tokens=10),
         CompletionResponse(text="answer", input_tokens=100, output_tokens=20),
     ]
-    agent = QueryAgent(provider=provider, store=store, search=search)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
 
     decompose_calls = []
     original_decompose = agent.decompose
@@ -488,7 +507,8 @@ async def test_gather_arity_matches_sub_question_count(tmp_wiki):
                            input_tokens=10, output_tokens=10),
         CompletionResponse(text="answer", input_tokens=100, output_tokens=20),
     ]
-    agent = QueryAgent(provider=provider, store=store, search=search)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
 
     gather_arities: list[int] = []
     original_gather = asyncio.gather
@@ -515,7 +535,8 @@ async def test_simple_question_uses_single_gather_coroutine(tmp_wiki):
                            input_tokens=5, output_tokens=5),
         CompletionResponse(text="AI is ...", input_tokens=80, output_tokens=15),
     ]
-    agent = QueryAgent(provider=provider, store=store, search=search)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
 
     gather_arities: list[int] = []
     original_gather = asyncio.gather
@@ -541,7 +562,8 @@ async def test_query_result_carries_input_and_output_tokens(tmp_wiki):
         CompletionResponse(text='["term"]', input_tokens=10, output_tokens=5),
         CompletionResponse(text="The answer.", input_tokens=120, output_tokens=40),
     ]
-    agent = QueryAgent(provider=provider, store=store, search=search)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
     result = await agent.query("What is the answer?")
     assert result.input_tokens == 120
     assert result.output_tokens == 40
@@ -556,7 +578,134 @@ async def test_query_result_input_output_tokens_nonzero_for_real_call(tmp_wiki):
         CompletionResponse(text='["sub"]', input_tokens=8, output_tokens=3),
         CompletionResponse(text="Answer here.", input_tokens=200, output_tokens=50),
     ]
-    agent = QueryAgent(provider=provider, store=store, search=search)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
     result = await agent.query("Any question?")
     assert result.input_tokens > 0
     assert result.output_tokens > 0
+
+
+# ── knowledge gap detection ───────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_query_result_has_knowledge_gap_fields(tmp_wiki):
+    """QueryResult must expose knowledge_gap and suggested_searches."""
+    store, search, provider = _make_agent(tmp_wiki)
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
+    result = await agent.query("What is AI?")
+    assert hasattr(result, "knowledge_gap")
+    assert hasattr(result, "suggested_searches")
+    assert isinstance(result.suggested_searches, list)
+
+
+@pytest.mark.asyncio
+async def test_no_gap_when_pages_found_with_high_scores(tmp_wiki):
+    """knowledge_gap must be False when enough pages with high BM25 scores are found."""
+    from synthadoc.storage.wiki import WikiPage
+    store = WikiStorage(tmp_wiki / "wiki")
+    # Write 5 pages that will match the query well
+    for i in range(5):
+        store.write_page(f"ai-page-{i}", WikiPage(
+            title=f"AI page {i}", tags=["ai"],
+            content=f"Artificial intelligence machine learning deep learning neural network {i}.",
+            status="active", confidence="high", sources=[],
+        ))
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    provider = AsyncMock()
+    provider.complete.side_effect = [
+        CompletionResponse(text='["What is AI?"]', input_tokens=5, output_tokens=5),
+        CompletionResponse(text="AI is...", input_tokens=100, output_tokens=20),
+    ]
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)  # disabled — never triggers
+    result = await agent.query("What is artificial intelligence?")
+    assert result.knowledge_gap is False
+    assert result.suggested_searches == []
+
+
+@pytest.mark.asyncio
+async def test_gap_detected_when_empty_wiki(tmp_wiki):
+    """knowledge_gap must be True when no pages are found (empty wiki)."""
+    store, search, provider = _make_agent(tmp_wiki)
+    provider.complete.side_effect = [
+        CompletionResponse(text='["What is AI?"]', input_tokens=5, output_tokens=5),
+        # SearchDecomposeAgent call for suggestions:
+        CompletionResponse(text='["artificial intelligence overview", "machine learning basics"]',
+                           input_tokens=8, output_tokens=8),
+        # Answer synthesis call:
+        CompletionResponse(text="No relevant pages found.", input_tokens=50, output_tokens=10),
+    ]
+    agent = QueryAgent(provider=provider, store=store, search=search)
+    result = await agent.query("What is AI?")
+    assert result.knowledge_gap is True
+    assert len(result.suggested_searches) >= 1
+
+
+@pytest.mark.asyncio
+async def test_gap_detected_when_max_score_below_threshold(tmp_wiki):
+    """knowledge_gap must be True when pages exist but max BM25 score is below threshold."""
+    from synthadoc.storage.wiki import WikiPage
+    store = WikiStorage(tmp_wiki / "wiki")
+    # Write pages that are barely related (low BM25 score for the query)
+    store.write_page("unrelated", WikiPage(
+        title="Cooking Recipes", tags=["food"],
+        content="How to bake bread. Mix flour and water.",
+        status="active", confidence="high", sources=[],
+    ))
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    provider = AsyncMock()
+    provider.complete.side_effect = [
+        CompletionResponse(text='["quantum computing"]', input_tokens=5, output_tokens=5),
+        CompletionResponse(text='["quantum computing basics", "quantum gates explained"]',
+                           input_tokens=8, output_tokens=8),
+        CompletionResponse(text="I don't know.", input_tokens=50, output_tokens=10),
+    ]
+    # High threshold so even marginal matches trigger gap
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=999.0)
+    result = await agent.query("What is quantum computing?")
+    assert result.knowledge_gap is True
+    assert len(result.suggested_searches) >= 1
+
+
+@pytest.mark.asyncio
+async def test_gap_suggested_searches_come_from_search_decompose_agent(tmp_wiki):
+    """suggested_searches must be the keyword strings from SearchDecomposeAgent.decompose()."""
+    store, search, provider = _make_agent(tmp_wiki)
+    provider.complete.side_effect = [
+        CompletionResponse(text='["What is quantum computing?"]', input_tokens=5, output_tokens=5),
+        CompletionResponse(text='["quantum computing basics", "qubit explained"]',
+                           input_tokens=8, output_tokens=8),
+        CompletionResponse(text="Answer.", input_tokens=50, output_tokens=10),
+    ]
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=999.0)
+    result = await agent.query("What is quantum computing?")
+    assert "quantum computing basics" in result.suggested_searches
+    assert "qubit explained" in result.suggested_searches
+
+
+@pytest.mark.asyncio
+async def test_no_gap_search_decompose_not_called(tmp_wiki):
+    """SearchDecomposeAgent must NOT be called when no gap is detected."""
+    from synthadoc.storage.wiki import WikiPage
+    store = WikiStorage(tmp_wiki / "wiki")
+    for i in range(5):
+        store.write_page(f"page-{i}", WikiPage(
+            title=f"Page {i}", tags=["ai"],
+            content=f"Artificial intelligence AI machine learning {i}.",
+            status="active", confidence="high", sources=[],
+        ))
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    provider = AsyncMock()
+    provider.complete.side_effect = [
+        CompletionResponse(text='["What is AI?"]', input_tokens=5, output_tokens=5),
+        CompletionResponse(text="AI is...", input_tokens=100, output_tokens=20),
+    ]
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)  # never triggers
+    result = await agent.query("What is AI?")
+    # Only 2 provider calls: decompose + answer. No SearchDecomposeAgent call.
+    assert provider.complete.call_count == 2
+    assert result.knowledge_gap is False
