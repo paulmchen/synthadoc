@@ -65,18 +65,19 @@ def count_skills() -> int:
     )
 
 
-def read_coverage(coverage_json: Path) -> str:
-    """Return total coverage as a percentage string, e.g. '87%'.
+def read_coverage(coverage_json: Path) -> int:
+    """Return total coverage as an integer (e.g. 87).
+
+    Stored as a plain integer so shields.io can display it without
+    misinterpreting the '%' character. The badge URL adds the suffix.
 
     Reads the JSON report produced by: pytest --cov=synthadoc --cov-report=json
     """
     data = json.loads(coverage_json.read_text(encoding="utf-8"))
-    pct = data["totals"]["percent_covered_display"]
-    return f"{pct}%"
+    return round(data["totals"]["percent_covered"])
 
 
-def _coverage_color(pct_str: str) -> str:
-    pct = float(pct_str.rstrip("%"))
+def _coverage_color(pct: int) -> str:
     if pct >= 80:
         return "brightgreen"
     if pct >= 60:
@@ -130,9 +131,9 @@ def main() -> None:
             print(f"ERROR: coverage file not found: {cov_path}")
             sys.exit(1)
         pct = read_coverage(cov_path)
-        data["coverage"] = pct
+        data["coverage"] = pct                          # integer, e.g. 83
         data["coverage_color"] = _coverage_color(pct)
-        print(f"Coverage: {pct}")
+        print(f"Coverage: {pct}%")
 
     badges_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     print(f"Updated docs/badges.json: {data}")
