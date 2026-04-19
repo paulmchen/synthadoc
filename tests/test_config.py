@@ -78,3 +78,24 @@ def test_invalid_provider_name_raises(tmp_path):
     cfg_file.write_text('[agents]\ndefault = { provider = "notareal", model = "x" }\n')
     with pytest.raises(ValueError, match="Unknown provider"):
         load_config(global_config=cfg_file)
+
+
+def test_query_config_defaults():
+    """Config must expose query.gap_score_threshold with default 2.0."""
+    cfg = load_config()
+    assert hasattr(cfg, "query")
+    assert cfg.query.gap_score_threshold == 2.0
+
+
+def test_query_config_can_be_set_from_toml():
+    import tempfile, os
+    from pathlib import Path
+    toml = b'[agents.default]\nprovider = "anthropic"\nmodel = "claude-haiku-4-5-20251001"\n[query]\ngap_score_threshold = 1.5\n'
+    with tempfile.NamedTemporaryFile(suffix=".toml", delete=False) as f:
+        f.write(toml)
+        path = Path(f.name)
+    try:
+        cfg = load_config(project_config=path)
+        assert cfg.query.gap_score_threshold == 1.5
+    finally:
+        os.unlink(path)

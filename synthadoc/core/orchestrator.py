@@ -13,6 +13,8 @@ from synthadoc.core.hooks import HookExecutor
 from synthadoc.core.queue import JobQueue
 from synthadoc.observability.telemetry import get_tracer, setup_telemetry
 from synthadoc.providers import make_provider
+from synthadoc.providers.ollama import OllamaProvider
+from synthadoc.providers.pricing import estimate_cost
 from synthadoc.storage.log import AuditDB, LogWriter
 from synthadoc.storage.search import HybridSearch
 from synthadoc.storage.wiki import WikiStorage
@@ -70,6 +72,13 @@ class Orchestrator:
                 cache_version=self._cfg.cache.version,
             )
             result = await agent.ingest(source, force=force, bust_cache=force)
+            _agent_cfg = self._cfg.agents.resolve("ingest")
+            result.cost_usd = estimate_cost(
+                _agent_cfg.model,
+                result.input_tokens,
+                result.output_tokens,
+                is_local=(_agent_cfg.provider == "ollama"),
+            )
             # Fan out web search child sources — batch insert in one transaction
             if result.child_sources:
                 await self._queue.enqueue_many(
@@ -167,8 +176,16 @@ class Orchestrator:
         result = await QueryAgent(
             provider=make_provider("query", self._cfg),
             store=self._store, search=self._search,
+            gap_score_threshold=self._cfg.query.gap_score_threshold,
         ).query(question)
-        cost_usd = result.tokens_used * 0.000003
+        _provider = make_provider("query", self._cfg)
+        _model = self._cfg.agents.resolve("query").model
+        cost_usd = estimate_cost(
+            _model,
+            result.input_tokens,
+            result.output_tokens,
+            is_local=isinstance(_provider, OllamaProvider),
+        )
         await self._audit.record_query(
             question=question,
             sub_questions_count=len(result.citations) or 1,

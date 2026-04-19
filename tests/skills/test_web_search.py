@@ -100,9 +100,10 @@ def test_ingest_result_has_child_sources_field():
 
 @pytest.mark.asyncio
 async def test_ingest_agent_returns_child_sources_for_web_search(tmp_wiki, monkeypatch):
-    """When extract() returns child_sources, ingest() returns them with no LLM calls."""
+    """When extract() returns child_sources, ingest() returns them after decomposition."""
     from unittest.mock import AsyncMock, patch
     from synthadoc.agents.ingest_agent import IngestAgent
+    from synthadoc.providers.base import CompletionResponse
     from synthadoc.skills.base import ExtractedContent
     from synthadoc.storage.wiki import WikiStorage
     from synthadoc.storage.search import HybridSearch
@@ -110,6 +111,10 @@ async def test_ingest_agent_returns_child_sources_for_web_search(tmp_wiki, monke
     from synthadoc.core.cache import CacheManager
 
     provider = AsyncMock()
+    # SearchDecomposeAgent falls back to single query when decompose returns 1 item
+    provider.complete.return_value = CompletionResponse(
+        text='["test"]', input_tokens=5, output_tokens=5,
+    )
     store = WikiStorage(tmp_wiki / "wiki")
     search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
     log = LogWriter(tmp_wiki / "wiki" / "log.md")
@@ -131,7 +136,8 @@ async def test_ingest_agent_returns_child_sources_for_web_search(tmp_wiki, monke
         result = await agent.ingest("search for: test")
 
     assert result.child_sources == child_urls
-    provider.complete.assert_not_called()
+    # provider.complete is called once by SearchDecomposeAgent (decomposition step)
+    assert provider.complete.call_count == 1
 
 
 @pytest.mark.asyncio

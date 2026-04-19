@@ -179,7 +179,12 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
         except Exception as exc:
             logger.exception("Query failed")
             raise HTTPException(status_code=502, detail="LLM provider unavailable") from exc
-        return {"answer": result.answer, "citations": result.citations}
+        return {
+            "answer": result.answer,
+            "citations": result.citations,
+            "knowledge_gap": result.knowledge_gap,
+            "suggested_searches": result.suggested_searches,
+        }
 
     @app.post("/query")
     async def query_post(req: QueryRequest):
@@ -188,7 +193,12 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
         except Exception as exc:
             logger.exception("Query failed")
             raise HTTPException(status_code=502, detail="LLM provider unavailable") from exc
-        return {"answer": result.answer, "citations": result.citations}
+        return {
+            "answer": result.answer,
+            "citations": result.citations,
+            "knowledge_gap": result.knowledge_gap,
+            "suggested_searches": result.suggested_searches,
+        }
 
     @app.post("/analyse")
     async def analyse_source(req: AnalyseRequest):
