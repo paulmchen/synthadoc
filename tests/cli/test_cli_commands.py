@@ -173,6 +173,66 @@ def test_install_fresh_wiki_calls_scaffold_agent(tmp_path):
     mock_scaffold.assert_called_once()
 
 
+# ---------------------------------------------------------------------------
+# _fmt_ts — pure timestamp formatter in jobs.py
+# ---------------------------------------------------------------------------
+
+def test_fmt_ts_none_returns_dash():
+    from synthadoc.cli.jobs import _fmt_ts
+    assert _fmt_ts(None) == "—"
+
+
+def test_fmt_ts_empty_string_returns_dash():
+    from synthadoc.cli.jobs import _fmt_ts
+    assert _fmt_ts("") == "—"
+
+
+def test_fmt_ts_valid_utc_timestamp():
+    from synthadoc.cli.jobs import _fmt_ts
+    result = _fmt_ts("2026-04-19 10:30:00")
+    assert "2026" in result
+    assert ":" in result
+
+
+def test_fmt_ts_invalid_string_returns_original():
+    from synthadoc.cli.jobs import _fmt_ts
+    assert _fmt_ts("not-a-date") == "not-a-date"
+
+
+# ---------------------------------------------------------------------------
+# jobs status command (HTTP client path)
+# ---------------------------------------------------------------------------
+
+def test_jobs_status_shows_all_fields():
+    with patch("synthadoc.cli.jobs.get", return_value={
+        "id": "job-123",
+        "status": "completed",
+        "operation": "ingest",
+        "created_at": "2026-04-19 10:00:00",
+        "error": None,
+        "result": {"pages_created": ["alan-turing"], "tokens_used": 500},
+    }):
+        result = runner.invoke(app, ["jobs", "status", "job-123"])
+    assert result.exit_code == 0
+    assert "job-123" in result.output
+    assert "alan-turing" in result.output
+    assert "500" in result.output
+
+
+def test_jobs_status_shows_error_field():
+    with patch("synthadoc.cli.jobs.get", return_value={
+        "id": "job-999",
+        "status": "dead",
+        "operation": "ingest",
+        "created_at": None,
+        "error": "Something went wrong",
+        "result": {},
+    }):
+        result = runner.invoke(app, ["jobs", "status", "job-999"])
+    assert result.exit_code == 0
+    assert "Something went wrong" in result.output
+
+
 def test_install_fresh_wiki_falls_back_when_no_api_key(tmp_path):
     """install must fall back to static templates when scaffold returns None."""
     import synthadoc.cli.install as install_mod

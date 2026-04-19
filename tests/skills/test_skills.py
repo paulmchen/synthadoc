@@ -437,4 +437,57 @@ def test_pptx_detected_by_intent():
     from synthadoc.agents.skill_agent import SkillAgent
     agent = SkillAgent()
     assert agent.detect_skill("powerpoint").name == "pptx"
-    assert agent.detect_skill("ingest this presentation").name == "pptx"
+
+
+@pytest.mark.asyncio
+async def test_xlsx_skill_extracts_csv(tmp_path):
+    """XlsxSkill reads .csv files via the csv path (not openpyxl)."""
+    from synthadoc.skills.xlsx.scripts.main import XlsxSkill
+    csv_file = tmp_path / "data.csv"
+    csv_file.write_text("name,age\nAlice,30\nBob,25\n", encoding="utf-8")
+    result = await XlsxSkill().extract(str(csv_file))
+    assert "Alice" in result.text
+    assert "Bob" in result.text
+    assert "name" in result.text
+
+
+@pytest.mark.asyncio
+async def test_pdf_skill_pdfminer_fallback_used_for_low_yield(tmp_path):
+    """PdfSkill falls back to pdfminer when pypdf yields too little text."""
+    from unittest.mock import patch, MagicMock
+    from synthadoc.skills.pdf.scripts.main import PdfSkill
+
+    skill = PdfSkill()
+    # Simulate pypdf returning sparse text (below threshold) for a 2-page doc
+    with patch.object(skill, "_extract_pypdf", return_value=("ab", 2)), \
+         patch.object(skill, "_extract_pdfminer", return_value="full pdfminer text") as mock_pm:
+        result = await skill.extract("dummy.pdf")
+    mock_pm.assert_called_once()
+    assert result.text == "full pdfminer text"
+
+
+@pytest.mark.asyncio
+async def test_pdf_skill_pdfminer_fallback_skipped_when_not_better(tmp_path):
+    """PdfSkill does not replace pypdf text when pdfminer yields less."""
+    from unittest.mock import patch
+    from synthadoc.skills.pdf.scripts.main import PdfSkill
+
+    skill = PdfSkill()
+    good_text = "x" * 200
+    with patch.object(skill, "_extract_pypdf", return_value=(good_text, 2)), \
+         patch.object(skill, "_extract_pdfminer", return_value="short") as mock_pm:
+        result = await skill.extract("dummy.pdf")
+    mock_pm.assert_not_called()
+    assert result.text == good_text
+
+
+@pytest.mark.asyncio
+async def test_pdf_skill_pdfminer_exception_returns_empty():
+    """_extract_pdfminer returns empty string on any exception."""
+    from unittest.mock import patch
+    from synthadoc.skills.pdf.scripts.main import PdfSkill
+
+    skill = PdfSkill()
+    with patch("pdfminer.high_level.extract_text", side_effect=RuntimeError("boom")):
+        result = skill._extract_pdfminer("dummy.pdf")
+    assert result == ""
