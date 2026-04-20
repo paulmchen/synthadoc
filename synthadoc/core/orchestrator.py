@@ -182,7 +182,17 @@ class Orchestrator:
             import httpx
             import logging
             from synthadoc.errors import DomainBlockedException
-            if isinstance(e, DomainBlockedException):
+            # Check for LLM rate limits (openai SDK used by Groq/Gemini, and Anthropic SDK)
+            _status = getattr(e, "status_code", None) or getattr(
+                getattr(e, "response", None), "status_code", None)
+            if _status == 429:
+                # Rate limit — requeue without burning a retry; worker will sleep
+                logging.getLogger(__name__).warning(
+                    "LLM rate limit for job %s — requeued without retry penalty", job_id
+                )
+                await self._queue.requeue(job_id, f"rate_limit: {e}")
+                raise
+            elif isinstance(e, DomainBlockedException):
                 await self._auto_block_domain(e)
                 await self._queue.skip(job_id, str(e))
             elif isinstance(e, (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.PoolTimeout)):

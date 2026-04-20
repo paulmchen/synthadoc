@@ -61,6 +61,8 @@ class JobQueue:
                 await db.execute("ALTER TABLE jobs ADD COLUMN progress TEXT")
             except Exception:
                 pass  # column already exists
+            # Reset any jobs left in_progress from a previous crashed session
+            await db.execute("UPDATE jobs SET status='pending' WHERE status='in_progress'")
             await db.commit()
 
     async def enqueue(self, operation: str, payload: dict) -> str:
@@ -130,6 +132,19 @@ class JobQueue:
             await db.execute(
                 "UPDATE jobs SET status=?,retries=?,error=? WHERE id=?",
                 (new_status, retries, error, job_id),
+            )
+            await db.commit()
+
+    async def requeue(self, job_id: str, error: str = "") -> None:
+        """Reset a job to pending without incrementing the retry counter.
+
+        Used for transient infrastructure errors (rate limits, server overload)
+        that should not count against the job's retry budget.
+        """
+        async with aiosqlite.connect(self._path) as db:
+            await db.execute(
+                "UPDATE jobs SET status='pending', error=? WHERE id=?",
+                (error or None, job_id),
             )
             await db.commit()
 
