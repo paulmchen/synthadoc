@@ -20,7 +20,13 @@ _MAX_BODY_BYTES = 10 * 1024 * 1024  # 10 MB
 
 def _classify_llm_error(exc: Exception) -> "HTTPException | None":
     """Return a meaningful HTTPException for known LLM API error codes, or None."""
+    # openai/anthropic SDKs set status_code directly on the exception;
+    # httpx.HTTPStatusError (used by OllamaProvider) stores it on exc.response.
     code = getattr(exc, "status_code", None)
+    if code is None:
+        resp = getattr(exc, "response", None)
+        code = getattr(resp, "status_code", None)
+
     if code == 429:
         msg = str(exc)
         if "generativelanguage.googleapis.com" in msg or "gemini" in msg.lower():
@@ -29,6 +35,8 @@ def _classify_llm_error(exc: Exception) -> "HTTPException | None":
             hint = "Groq rate limit hit. Wait a moment and retry."
         elif "anthropic" in msg.lower():
             hint = "Anthropic rate limit hit. Wait a moment and retry."
+        elif "openai" in msg.lower():
+            hint = "OpenAI rate limit hit. Wait a moment and retry."
         else:
             hint = "LLM provider rate limit hit. Wait a moment and retry."
         return HTTPException(

@@ -7,7 +7,10 @@ import anthropic as anthropic_lib
 from synthadoc.config import AgentConfig
 from synthadoc.providers.base import CompletionResponse, LLMProvider, Message
 
-_RETRYABLE = (anthropic_lib.RateLimitError, anthropic_lib.InternalServerError)
+# RateLimitError (429) is not retried — quota exhaustion needs a provider switch or wait.
+# InternalServerError covers transient 500/529 overload; retry with backoff.
+_RETRYABLE = (anthropic_lib.InternalServerError,)
+_RATE_LIMIT = (anthropic_lib.RateLimitError,)
 _MAX_RETRIES = 3
 
 
@@ -34,10 +37,12 @@ class AnthropicProvider(LLMProvider):
                 return CompletionResponse(text=text,
                                          input_tokens=resp.usage.input_tokens,
                                          output_tokens=resp.usage.output_tokens)
+            except _RATE_LIMIT:
+                raise  # quota exhaustion — propagate immediately, no retry
             except _RETRYABLE as exc:
                 last_exc = exc
                 if attempt < _MAX_RETRIES - 1:
-                    await asyncio.sleep(0)  # yield; real backoff added in orchestrator
+                    await asyncio.sleep(2 ** attempt)  # 0 s, 1 s, 2 s backoff
                 continue
             except Exception:
                 raise
