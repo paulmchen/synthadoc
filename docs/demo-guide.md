@@ -95,7 +95,7 @@ plus a human-readable Markdown body for documentation.
 If you followed the README, you should already have:
 
 - **Demo wiki installed** — `synthadoc install history-of-computing --target ... --demo`
-- **LLM API key set** — at least one of `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`
+- **LLM API key set** — `GROQ_API_KEY` (default, free) or `GEMINI_API_KEY` / `ANTHROPIC_API_KEY`
 - **Engine running** — `synthadoc serve -w history-of-computing`
 
 If any of these are missing, complete [README Steps 4–6](../README.md#step-4--set-your-api-keys) first, then come back here.
@@ -935,21 +935,18 @@ The directory and registry entry are both removed. There is no `--yes` flag — 
 
 ## Appendix — Switching LLM providers
 
-Synthadoc supports five LLM providers. The demo uses Anthropic by default, but
-**Gemini Flash is a great free-tier alternative** — 15 requests per minute and 1 million
-tokens per day at no cost, which is more than enough for demos and personal wikis.
-
-You can switch at any time by changing the `provider` line in
-`<wiki-root>/.synthadoc/config.toml` and restarting the server. The wiki, cache, and
-audit trail are provider-agnostic — switching does not require re-ingesting anything.
+Synthadoc supports five LLM providers and defaults to **Groq** — free, no credit card,
+and fast. You can switch at any time by editing `<wiki-root>/.synthadoc/config.toml` and
+restarting the server. The wiki, cache, and audit trail are provider-agnostic — switching
+never requires re-ingesting anything.
 
 | Provider    | Key env var         | Free tier                  |
 | ----------- | ------------------- | -------------------------- |
-| `anthropic` | `ANTHROPIC_API_KEY` | No — pay-per-token                            |
-| `openai`    | `OPENAI_API_KEY`    | No — pay-per-token                            |
-| `gemini`    | `GEMINI_API_KEY`    | Yes — 15 RPM / 1M tokens per day             |
-| `groq`      | `GROQ_API_KEY`      | Yes — fast Llama models, generous daily quota |
-| `ollama`    | _(none)_            | Yes — fully local, no rate limits             |
+| `groq`      | `GROQ_API_KEY`      | **Yes — default** · fast Llama models, generous daily quota |
+| `gemini`    | `GEMINI_API_KEY`    | Yes — 15 RPM / 1M tokens per day                           |
+| `ollama`    | _(none)_            | Yes — fully local, no rate limits                           |
+| `anthropic` | `ANTHROPIC_API_KEY` | No — pay-per-token, highest quality                         |
+| `openai`    | `OPENAI_API_KEY`    | No — pay-per-token                                          |
 
 > **Hit a quota limit?** Gemini free tier enforces a per-minute token cap that can be
 > exhausted during a long ingest session. If you see a `429 RateLimitError`, either wait

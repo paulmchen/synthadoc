@@ -217,22 +217,30 @@ cd ..
 
 ### Step 4 — Set your API keys
 
-The demo wiki defaults to using **Anthropic** (`ANTHROPIC_API_KEY`) as the LLM provider. Web search uses **Tavily** (`TAVILY_API_KEY`). You can switch to a free-tier provider (Gemini Flash or Groq) by editing `<wiki-root>/.synthadoc/config.toml` after installation.
+Synthadoc defaults to **Groq** as the LLM provider — it's free, fast, and requires no
+credit card. Get a key at **console.groq.com** (API Keys → Create key).
+
+Web search uses **Tavily** (`TAVILY_API_KEY`) — optional, only needed for
+`synthadoc ingest "search for: …"` jobs.
 
 ```bash
 # macOS / Linux — add to ~/.bashrc or ~/.zshrc to persist
-export ANTHROPIC_API_KEY=sk-ant-…    # default LLM provider for the demo
-export GEMINI_API_KEY=AIza…          # free-tier alternative — 15 RPM / 1M tokens/day
-export TAVILY_API_KEY=tvly-…         # web search (synthadoc ingest "search for: …")
+export GROQ_API_KEY=gsk_…            # default — free tier, fast Llama models
+export GEMINI_API_KEY=AIza…          # alternative free tier — 15 RPM / 1M tokens/day
+export ANTHROPIC_API_KEY=sk-ant-…    # paid alternative — highest quality
+export TAVILY_API_KEY=tvly-…         # web search (optional)
 
-# Windows cmd — current session
-set ANTHROPIC_API_KEY=sk-ant-…
+# Windows cmd — current session only
+set GROQ_API_KEY=gsk_…
 set TAVILY_API_KEY=tvly-…
 
 # Windows cmd — permanent (open a new cmd window after running)
-setx ANTHROPIC_API_KEY sk-ant-…
+setx GROQ_API_KEY gsk_…
 setx TAVILY_API_KEY tvly-…
 ```
+
+To switch provider, edit `[agents]` in `<wiki-root>/.synthadoc/config.toml` and restart
+`synthadoc serve`. See [Appendix — Switching LLM providers](docs/demo-guide.md#appendix--switching-llm-providers) for step-by-step instructions.
 
 ### Step 5 — Verify
 

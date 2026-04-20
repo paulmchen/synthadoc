@@ -22,6 +22,8 @@ _NO_BANNER_ENV = "_SYNTHADOC_NO_BANNER"
 _PROVIDER_HOSTS = {
     "anthropic": ("api.anthropic.com", 443),
     "openai":    ("api.openai.com", 443),
+    "gemini":    ("generativelanguage.googleapis.com", 443),
+    "groq":      ("api.groq.com", 443),
 }
 
 
