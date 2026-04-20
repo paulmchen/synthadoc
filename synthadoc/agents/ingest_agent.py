@@ -352,8 +352,8 @@ class IngestAgent:
         result.tokens_used += analysis.pop("_tokens", 0)
         # input/output split not available for the analyse call (cached via _analyse)
 
-        entities = analysis.get("entities", [])
-        tags = analysis.get("tags", [])
+        entities = _coerce_str_list(analysis.get("entities", []))
+        tags = _coerce_str_list(analysis.get("tags", []))
         summary = analysis.get("summary", text[:1500])
 
         # Fallback: if LLM entity extraction returned nothing, extract key phrases
