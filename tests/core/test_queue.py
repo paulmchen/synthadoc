@@ -208,3 +208,76 @@ async def test_purge_keeps_recent_jobs(tmp_wiki):
     assert removed == 0
     all_jobs = await q.list_jobs()
     assert any(j.id == job_id for j in all_jobs)
+
+
+@pytest.mark.asyncio
+async def test_update_progress_persists(tmp_wiki):
+    q = JobQueue(tmp_wiki / ".synthadoc" / "jobs.db")
+    await q.init()
+    job_id = await q.enqueue("ingest", {"source": "search for: housing"})
+    await q.update_progress(job_id, {"phase": "searching"})
+    jobs = await q.list_jobs()
+    job = next(j for j in jobs if j.id == job_id)
+    assert job.progress == {"phase": "searching"}
+
+@pytest.mark.asyncio
+async def test_update_progress_overwrites(tmp_wiki):
+    q = JobQueue(tmp_wiki / ".synthadoc" / "jobs.db")
+    await q.init()
+    job_id = await q.enqueue("ingest", {"source": "search for: housing"})
+    await q.update_progress(job_id, {"phase": "searching"})
+    await q.update_progress(job_id, {"phase": "found_urls", "total": 5})
+    jobs = await q.list_jobs()
+    job = next(j for j in jobs if j.id == job_id)
+    assert job.progress["phase"] == "found_urls"
+    assert job.progress["total"] == 5
+
+@pytest.mark.asyncio
+async def test_progress_is_none_for_new_jobs(tmp_wiki):
+    q = JobQueue(tmp_wiki / ".synthadoc" / "jobs.db")
+    await q.init()
+    job_id = await q.enqueue("ingest", {"source": "file.pdf"})
+    jobs = await q.list_jobs()
+    job = next(j for j in jobs if j.id == job_id)
+    assert job.progress is None
+
+@pytest.mark.asyncio
+async def test_progress_migration_adds_column_to_existing_db(tmp_wiki):
+    """Simulates a v0.1.0 DB that lacks the progress column."""
+    import aiosqlite
+    db_path = tmp_wiki / ".synthadoc" / "jobs.db"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute("""
+            CREATE TABLE jobs (
+                id TEXT PRIMARY KEY,
+                operation TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                retries INTEGER NOT NULL DEFAULT 0,
+                error TEXT,
+                result TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        await db.execute(
+            "INSERT INTO jobs (id, operation, payload) VALUES ('old1', 'ingest', '{}')"
+        )
+        await db.commit()
+    q = JobQueue(db_path)
+    await q.init()
+    jobs = await q.list_jobs()
+    assert any(j.id == "old1" for j in jobs)
+    job = next(j for j in jobs if j.id == "old1")
+    assert job.progress is None
+
+@pytest.mark.asyncio
+async def test_dequeued_job_has_progress_field(tmp_wiki):
+    """Dequeued Job object must expose progress field."""
+    q = JobQueue(tmp_wiki / ".synthadoc" / "jobs.db")
+    await q.init()
+    job_id = await q.enqueue("ingest", {"source": "file.pdf"})
+    await q.update_progress(job_id, {"phase": "searching"})
+    job = await q.dequeue()
+    assert job is not None
+    assert job.progress == {"phase": "searching"}

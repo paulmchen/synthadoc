@@ -298,3 +298,34 @@ def test_query_post_response_includes_gap_fields(tmp_wiki):
     data = resp.json()
     assert "knowledge_gap" in data
     assert "suggested_searches" in data
+
+
+def test_job_response_includes_progress_field(tmp_wiki):
+    """GET /jobs/{id} must include a progress field (may be null)."""
+    from synthadoc.integration.http_server import create_app
+    from synthadoc.core.queue import Job, JobStatus
+    fake_job = Job(id="job-p1", operation="ingest", payload={"source": "search for: housing"},
+                   status=JobStatus.PENDING, retries=0, error=None, progress=None)
+    with patch("synthadoc.core.queue.JobQueue.list_jobs",
+               new=AsyncMock(return_value=[fake_job])):
+        with TestClient(create_app(wiki_root=tmp_wiki)) as client:
+            resp = client.get("/jobs/job-p1")
+    assert resp.status_code == 200
+    assert "progress" in resp.json()
+
+
+def test_list_jobs_includes_progress_field(tmp_wiki):
+    """GET /jobs must include progress field on each job."""
+    from synthadoc.integration.http_server import create_app
+    from synthadoc.core.queue import Job, JobStatus
+    fake_job = Job(id="job-p2", operation="ingest", payload={"source": "file.pdf"},
+                   status=JobStatus.PENDING, retries=0, error=None, progress=None)
+    with patch("synthadoc.core.queue.JobQueue.list_jobs",
+               new=AsyncMock(return_value=[fake_job])):
+        with TestClient(create_app(wiki_root=tmp_wiki)) as client:
+            resp = client.get("/jobs")
+    assert resp.status_code == 200
+    jobs = resp.json()
+    assert len(jobs) >= 1
+    for job in jobs:
+        assert "progress" in job

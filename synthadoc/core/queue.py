@@ -28,6 +28,7 @@ class Job:
     error: Optional[str]
     created_at: Optional[str] = None
     result: Optional[dict] = None
+    progress: Optional[dict] = None
 
 
 class JobQueue:
@@ -53,6 +54,11 @@ class JobQueue:
             # Migrate existing DBs that predate the result column
             try:
                 await db.execute("ALTER TABLE jobs ADD COLUMN result TEXT")
+            except Exception:
+                pass  # column already exists
+            # Migrate existing DBs that predate the progress column
+            try:
+                await db.execute("ALTER TABLE jobs ADD COLUMN progress TEXT")
             except Exception:
                 pass  # column already exists
             await db.commit()
@@ -95,13 +101,22 @@ class JobQueue:
                            status=JobStatus.IN_PROGRESS,
                            retries=row["retries"], error=row["error"],
                            created_at=row["created_at"],
-                           result=json.loads(row["result"]) if row["result"] else None)
+                           result=json.loads(row["result"]) if row["result"] else None,
+                           progress=json.loads(row["progress"]) if row["progress"] else None)
 
     async def complete(self, job_id: str, result: Optional[dict] = None) -> None:
         async with aiosqlite.connect(self._path) as db:
             await db.execute(
                 "UPDATE jobs SET status='completed', result=? WHERE id=?",
                 (json.dumps(result) if result else None, job_id),
+            )
+            await db.commit()
+
+    async def update_progress(self, job_id: str, data: dict) -> None:
+        async with aiosqlite.connect(self._path) as db:
+            await db.execute(
+                "UPDATE jobs SET progress=? WHERE id=?",
+                (json.dumps(data), job_id),
             )
             await db.commit()
 
@@ -180,4 +195,5 @@ class JobQueue:
                         retries=r["retries"], error=r["error"],
                         created_at=r["created_at"],
                         result=json.loads(r["result"]) if r["result"] else None,
+                        progress=json.loads(r["progress"]) if r["progress"] else None,
                         ) for r in rows]

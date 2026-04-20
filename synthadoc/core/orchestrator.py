@@ -116,7 +116,11 @@ class Orchestrator:
         # auto_confirm is reserved for when cost gate is wired to the ingest flow (v0.2+).
         # Cost tracking returns $0.0000 in v0.1, so cost_guard.check() is not called here yet.
         from synthadoc.agents.ingest_agent import IngestAgent
+        from synthadoc.skills.web_search.scripts.main import _INTENT_RE as _WEB_SEARCH_RE
         try:
+            _is_web_search = bool(_WEB_SEARCH_RE.match(source))
+            if _is_web_search:
+                await self._queue.update_progress(job_id, {"phase": "searching"})
             agent = IngestAgent(
                 provider=make_provider("ingest", self._cfg),
                 store=self._store, search=self._search,
@@ -132,18 +136,26 @@ class Orchestrator:
                 result.output_tokens,
                 is_local=(_agent_cfg.provider == "ollama"),
             )
+            if _is_web_search and result.child_sources:
+                await self._queue.update_progress(job_id, {
+                    "phase": "found_urls",
+                    "total": len(result.child_sources),
+                })
             # Fan out web search child sources — batch insert in one transaction
             if result.child_sources:
-                await self._queue.enqueue_many(
+                child_ids = await self._queue.enqueue_many(
                     "ingest",
                     [{"source": s, "force": False} for s in result.child_sources],
                 )
+            else:
+                child_ids = []
 
             await self._queue.complete(job_id, result={
                 "pages_created": result.pages_created,
                 "pages_updated": result.pages_updated,
                 "pages_flagged": result.pages_flagged,
                 "child_sources_enqueued": len(result.child_sources),
+                "child_job_ids": child_ids,
                 "tokens_used": result.tokens_used,
                 "cost_usd": result.cost_usd,
             })

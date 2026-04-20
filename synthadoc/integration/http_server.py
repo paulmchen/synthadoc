@@ -377,7 +377,7 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
         jobs = await app.state.orch.queue.list_jobs(status=job_status)
         return [{"id": j.id, "status": j.status, "operation": j.operation,
                  "created_at": str(j.created_at), "payload": j.payload,
-                 "error": j.error, "result": j.result} for j in jobs]
+                 "error": j.error, "result": j.result, "progress": j.progress} for j in jobs]
 
     @app.get("/jobs/{job_id}")
     async def get_job(job_id: str):
@@ -386,7 +386,7 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
             if j.id == job_id:
                 return {"id": j.id, "status": j.status, "operation": j.operation,
                         "created_at": str(j.created_at), "error": j.error,
-                        "result": j.result}
+                        "result": j.result, "progress": j.progress}
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
 
     @app.delete("/jobs/{job_id}")
