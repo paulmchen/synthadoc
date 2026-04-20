@@ -101,6 +101,27 @@ _VISION_PROMPT = (
 )
 
 
+def _coerce_str_list(lst: object) -> list[str]:
+    """Ensure every item in an LLM-returned list is a plain string.
+
+    Some models return entities as dicts ({"name": "Canada", "type": "location"})
+    instead of strings.  Extract the most useful field or fall back to str().
+    """
+    if not isinstance(lst, list):
+        return []
+    result = []
+    for item in lst:
+        if isinstance(item, str):
+            result.append(item)
+        elif isinstance(item, dict):
+            value = item.get("name") or item.get("value") or item.get("label") or item.get("text") or ""
+            if value:
+                result.append(str(value))
+        else:
+            result.append(str(item))
+    return [s for s in result if s.strip()]
+
+
 def _parse_json_response(text: str) -> dict:
     """Parse a JSON object from an LLM response, handling markdown code fences."""
     text = text.strip()
@@ -169,8 +190,8 @@ class IngestAgent:
             temperature=0.0,
         )
         data = _parse_json_response(resp.text)
-        data.setdefault("entities", [])
-        data.setdefault("tags", [])
+        data["entities"] = _coerce_str_list(data.get("entities", []))
+        data["tags"] = _coerce_str_list(data.get("tags", []))
         data.setdefault("summary", text[:200])
         data.setdefault("relevant", True)
         data["_tokens"] = resp.total_tokens

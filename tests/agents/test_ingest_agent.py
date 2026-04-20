@@ -4,7 +4,7 @@ import hashlib
 import pytest
 import aiosqlite
 from unittest.mock import AsyncMock
-from synthadoc.agents.ingest_agent import IngestAgent, IngestResult, _slugify
+from synthadoc.agents.ingest_agent import IngestAgent, IngestResult, _slugify, _coerce_str_list
 from synthadoc.providers.base import CompletionResponse
 from synthadoc.storage.wiki import WikiStorage
 from synthadoc.storage.search import HybridSearch
@@ -609,3 +609,70 @@ async def test_ingest_preserves_wikilinks_in_update_content(tmp_wiki):
     page = store.read_page("alan-turing")
     assert "[[enigma]]" in page.content
     assert "[[bletchley-park]]" in page.content
+
+
+# ── _coerce_str_list ──────────────────────────────────────────────────────────
+
+def test_coerce_str_list_plain_strings_unchanged():
+    assert _coerce_str_list(["AI", "Canada"]) == ["AI", "Canada"]
+
+
+def test_coerce_str_list_dict_entities_extracted():
+    """Some LLMs return entities as dicts with a 'name' field."""
+    result = _coerce_str_list([
+        {"name": "Canada", "type": "location"},
+        {"name": "Llama 3", "type": "model"},
+    ])
+    assert result == ["Canada", "Llama 3"]
+
+
+def test_coerce_str_list_mixed_str_and_dict():
+    result = _coerce_str_list(["AI", {"name": "OpenAI", "type": "org"}, "safety"])
+    assert result == ["AI", "OpenAI", "safety"]
+
+
+def test_coerce_str_list_fallback_fields():
+    """Falls back to 'value', 'label', 'text' if 'name' is absent."""
+    assert _coerce_str_list([{"value": "machine learning"}]) == ["machine learning"]
+    assert _coerce_str_list([{"label": "NLP"}]) == ["NLP"]
+    assert _coerce_str_list([{"text": "deep learning"}]) == ["deep learning"]
+
+
+def test_coerce_str_list_drops_empty_strings():
+    assert _coerce_str_list(["", "AI", "  "]) == ["AI"]
+
+
+def test_coerce_str_list_non_list_input_returns_empty():
+    assert _coerce_str_list(None) == []
+    assert _coerce_str_list("not a list") == []
+    assert _coerce_str_list(42) == []
+
+
+@pytest.mark.asyncio
+async def test_analyse_coerces_dict_entities_to_strings(tmp_wiki):
+    """_analyse() must return entities as strings even if the LLM returns dicts."""
+    provider = AsyncMock()
+    provider.complete = AsyncMock(return_value=CompletionResponse(
+        text='{"entities":[{"name":"Canada","type":"location"},{"name":"Gardening"}],'
+             '"tags":[{"name":"plants"}],"summary":"Canadian gardening.","relevant":true}',
+        input_tokens=40, output_tokens=15))
+
+    store = WikiStorage(tmp_wiki / "wiki")
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    audit = AuditDB(tmp_wiki / ".synthadoc" / "audit.db")
+    await audit.init()
+    cache = CacheManager(tmp_wiki / ".synthadoc" / "cache.db")
+    await cache.init()
+
+    agent = IngestAgent(provider=provider, store=store, search=search,
+                        log_writer=log, audit_db=audit, cache=cache,
+                        max_pages=15, wiki_root=tmp_wiki)
+    result = await agent._analyse("Canadian gardening content", bust_cache=True)
+
+    assert all(isinstance(e, str) for e in result["entities"]), \
+        f"entities must all be strings, got: {result['entities']}"
+    assert all(isinstance(t, str) for t in result["tags"]), \
+        f"tags must all be strings, got: {result['tags']}"
+    assert "Canada" in result["entities"]
+    assert "plants" in result["tags"]
