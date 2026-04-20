@@ -25,6 +25,8 @@ class CompletionResponse:
 
 
 class LLMProvider(ABC):
+    supports_vision: bool = True  # override to False for text-only providers
+
     @abstractmethod
     async def complete(self, messages: list[Message], system: Optional[str] = None,
                        temperature: float = 0.0, max_tokens: int = 4096) -> CompletionResponse: ...

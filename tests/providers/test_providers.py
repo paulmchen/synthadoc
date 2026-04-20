@@ -141,6 +141,7 @@ def test_make_provider_gemini_uses_openai_provider_with_base_url(monkeypatch):
     provider = make_provider("ingest", _make_cfg("gemini", "gemini-2.0-flash"))
     assert isinstance(provider, OpenAIProvider)
     assert "generativelanguage" in str(provider._client.base_url)
+    assert provider.supports_vision is True
 
 
 def test_make_provider_groq_uses_openai_provider_with_base_url(monkeypatch):
@@ -150,6 +151,7 @@ def test_make_provider_groq_uses_openai_provider_with_base_url(monkeypatch):
     provider = make_provider("ingest", _make_cfg("groq", "llama-3.3-70b-versatile"))
     assert isinstance(provider, OpenAIProvider)
     assert "groq" in str(provider._client.base_url)
+    assert provider.supports_vision is False
 
 
 def test_unknown_provider_raises_value_error(capsys):

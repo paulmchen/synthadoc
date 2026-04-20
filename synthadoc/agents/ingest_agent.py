@@ -329,6 +329,12 @@ class IngestAgent:
 
         # Pass 0: Vision extraction for image files
         if extracted.metadata.get("is_image"):
+            if not getattr(self._provider, "supports_vision", True):
+                raise NotImplementedError(
+                    "Image ingest requires a vision-capable model. "
+                    f"Current provider/model does not support vision. "
+                    "Switch to anthropic (claude-*) or gemini (gemini-*) for image sources."
+                )
             b64 = extracted.metadata.get("base64", "")
             media_type = extracted.metadata.get("media_type", "image/png")
             vision_resp = await self._provider.complete(

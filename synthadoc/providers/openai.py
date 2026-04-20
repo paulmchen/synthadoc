@@ -7,6 +7,9 @@ from synthadoc.config import AgentConfig
 from synthadoc.providers.base import CompletionResponse, LLMProvider, Message
 
 
+_NO_VISION_HOSTS = ("groq.com",)
+
+
 class OpenAIProvider(LLMProvider):
     def __init__(self, api_key: str, config: AgentConfig) -> None:
         kwargs: dict = {"api_key": api_key}
@@ -14,6 +17,8 @@ class OpenAIProvider(LLMProvider):
             kwargs["base_url"] = config.base_url
         self._client = AsyncOpenAI(**kwargs)
         self._config = config
+        base = str(config.base_url or "")
+        self.supports_vision = not any(host in base for host in _NO_VISION_HOSTS)
 
     @staticmethod
     def _to_openai_content(content):
