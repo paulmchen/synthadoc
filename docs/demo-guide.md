@@ -977,6 +977,17 @@ setx ANTHROPIC_API_KEY sk-ant-your-key-here
 export ANTHROPIC_API_KEY="sk-ant-your-key-here"
 ```
 
+3. Update the wiki config:
+
+Open `<wiki-root>/.synthadoc/config.toml` and set:
+
+```toml
+[agents]
+default = { provider = "anthropic", model = "claude-sonnet-4-6" }
+```
+
+Restart `synthadoc serve`. The banner will confirm `LLM: anthropic/claude-sonnet-4-6`.
+
 ### Option B — Google Gemini (free tier)
 
 1. Go to **aistudio.google.com/app/apikey** → create a key (free, no credit card)
