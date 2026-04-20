@@ -29,7 +29,8 @@ async def test_anthropic_provider_complete():
 
 
 @pytest.mark.asyncio
-async def test_anthropic_provider_retries_on_rate_limit():
+async def test_anthropic_provider_propagates_rate_limit_immediately():
+    """RateLimitError must not be retried — it should propagate on the first attempt."""
     import anthropic
     cfg = AgentConfig(provider="anthropic", model="claude-haiku-4-5-20251001")
     provider = AnthropicProvider(api_key="test-key", config=cfg)
@@ -38,17 +39,12 @@ async def test_anthropic_provider_retries_on_rate_limit():
     async def flaky(*args, **kwargs):
         nonlocal call_count
         call_count += 1
-        if call_count < 3:
-            raise anthropic.RateLimitError(response=MagicMock(status_code=429), body={}, message="rate limit")
-        m = AsyncMock()
-        m.content = [AsyncMock(text="ok")]
-        m.usage = AsyncMock(input_tokens=5, output_tokens=2)
-        return m
+        raise anthropic.RateLimitError(response=MagicMock(status_code=429), body={}, message="rate limit")
 
     with patch.object(provider._client.messages, "create", side_effect=flaky):
-        result = await provider.complete(messages=[Message(role="user", content="hi")])
-    assert result.text == "ok"
-    assert call_count == 3
+        with pytest.raises(anthropic.RateLimitError):
+            await provider.complete(messages=[Message(role="user", content="hi")])
+    assert call_count == 1  # raised immediately, no retries
 
 
 @pytest.mark.asyncio

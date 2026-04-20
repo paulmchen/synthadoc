@@ -95,7 +95,7 @@ plus a human-readable Markdown body for documentation.
 If you followed the README, you should already have:
 
 - **Demo wiki installed** — `synthadoc install history-of-computing --target ... --demo`
-- **LLM API key set** — `GROQ_API_KEY` (default, free) or `GEMINI_API_KEY` / `ANTHROPIC_API_KEY`
+- **LLM API key set** — `GEMINI_API_KEY` (default, free) or `GROQ_API_KEY` / `ANTHROPIC_API_KEY`
 - **Engine running** — `synthadoc serve -w history-of-computing`
 
 If any of these are missing, complete [README Steps 4–6](../README.md#step-4--set-your-api-keys) first, then come back here.
@@ -105,7 +105,7 @@ If any of these are missing, complete [README Steps 4–6](../README.md#step-4--
 > required when you ingest new sources or run lint. Web search (Step 9) additionally
 > requires `TAVILY_API_KEY` — see [Appendix — Tavily web search key](#appendix--tavily-web-search-key).
 >
-> Want to use a different LLM provider (e.g. free-tier Gemini Flash)? See
+> Want to use a different LLM provider (e.g. Groq or Anthropic)? See
 > [Appendix — Switching LLM providers](#appendix--switching-llm-providers) at the bottom
 > of this guide.
 
@@ -935,23 +935,22 @@ The directory and registry entry are both removed. There is no `--yes` flag — 
 
 ## Appendix — Switching LLM providers
 
-Synthadoc supports five LLM providers and defaults to **Groq** — free, no credit card,
-and fast. You can switch at any time by editing `<wiki-root>/.synthadoc/config.toml` and
-restarting the server. The wiki, cache, and audit trail are provider-agnostic — switching
-never requires re-ingesting anything.
+Synthadoc supports five LLM providers and defaults to **Gemini Flash** — free, no credit
+card, and 1 million tokens per day. You can switch at any time by editing
+`<wiki-root>/.synthadoc/config.toml` and restarting the server. The wiki, cache, and
+audit trail are provider-agnostic — switching never requires re-ingesting anything.
 
 | Provider    | Key env var         | Free tier                  |
 | ----------- | ------------------- | -------------------------- |
-| `groq`      | `GROQ_API_KEY`      | **Yes — default** · fast Llama models, 100K tokens/day      |
-| `gemini`    | `GEMINI_API_KEY`    | Yes — 15 RPM / 1M tokens per day                           |
+| `gemini`    | `GEMINI_API_KEY`    | **Yes — default** · 15 RPM / 1M tokens per day              |
+| `groq`      | `GROQ_API_KEY`      | Yes — fast Llama models, 100K tokens/day                    |
 | `ollama`    | _(none)_            | Yes — fully local, no rate limits                           |
 | `anthropic` | `ANTHROPIC_API_KEY` | No — pay-per-token, highest quality                         |
 | `openai`    | `OPENAI_API_KEY`    | No — pay-per-token                                          |
 
-> **Hit a quota limit?** Gemini free tier enforces a per-minute token cap that can be
+> **Hit a quota limit?** Gemini free tier enforces a 15 RPM per-minute cap that can be
 > exhausted during a long ingest session. If you see a `429 RateLimitError`, either wait
-> a few minutes and retry, or switch to Groq (Option C below) which has a larger daily
-> free quota and is faster.
+> a minute and retry, or switch to Groq (Option C below) as a fallback.
 
 ### Option A — Anthropic (Claude)
 
@@ -988,7 +987,7 @@ default = { provider = "anthropic", model = "claude-sonnet-4-6" }
 
 Restart `synthadoc serve`. The banner will confirm `LLM: anthropic/claude-sonnet-4-6`.
 
-### Option B — Google Gemini (free tier)
+### Option B — Google Gemini (free tier, default)
 
 1. Go to **aistudio.google.com/app/apikey** → create a key (free, no credit card)
 2. Set the key:
@@ -1017,13 +1016,13 @@ default = { provider = "gemini", model = "gemini-2.0-flash" }
 Restart `synthadoc serve` to pick up the change.
 
 > **Gemini free tier limits:** 15 requests per minute and 1 million input tokens per day.
-> A long batch ingest can exhaust the per-minute token cap — if you see a `429` error,
-> wait 60 seconds and retry, or switch to Groq (Option C) which has a higher burst limit.
+> A long batch ingest can exhaust the per-minute cap — if you see a `429` error, wait
+> 60 seconds and retry. For higher burst throughput, switch to Groq (Option C).
 
 ### Option C — Groq (free tier, fast inference)
 
-Groq offers free API access to Llama 3 models with generous daily quotas and very fast
-inference speeds — a good fallback when Gemini quotas are exhausted.
+Groq offers free API access to Llama 3 models with fast inference speeds — a good
+fallback when Gemini's per-minute rate limit is exhausted.
 
 1. Go to **console.groq.com** → sign up (no credit card needed) → **API Keys** → create a key
 2. Set the key:
@@ -1061,9 +1060,8 @@ Restart `synthadoc serve`. The banner will confirm `LLM: groq/llama-3.3-70b-vers
 
 > **Groq free tier limits:** 100,000 tokens per day for `llama-3.3-70b-versatile`. A
 > web search ingest fans out to ~20 URLs, each costing ~1,200 tokens — four web searches
-> can exhaust the daily quota. For heavier use, switch to Gemini (1M tokens/day) or add
-> a Groq billing method at console.groq.com. The server backs off automatically when the
-> quota is hit and resumes processing once the window resets.
+> can exhaust the daily quota. For heavier sustained use, switch back to Gemini (1M
+> tokens/day). The server backs off automatically when the quota is hit.
 
 ---
 

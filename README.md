@@ -217,25 +217,26 @@ cd ..
 
 ### Step 4 — Set your API keys
 
-Synthadoc defaults to **Groq** as the LLM provider — it's free, fast, and requires no
-credit card. Get a key at **console.groq.com** (API Keys → Create key).
+Synthadoc defaults to **Gemini Flash** as the LLM provider — it's free, requires no
+credit card, and offers 1 million tokens per day. Get a key at
+**aistudio.google.com/app/apikey** (click "Create API key").
 
 Web search uses **Tavily** (`TAVILY_API_KEY`) — optional, only needed for
 `synthadoc ingest "search for: …"` jobs.
 
 ```bash
 # macOS / Linux — add to ~/.bashrc or ~/.zshrc to persist
-export GROQ_API_KEY=gsk_…            # default — free tier, fast Llama models
-export GEMINI_API_KEY=AIza…          # alternative free tier — 15 RPM / 1M tokens/day
+export GEMINI_API_KEY=AIza…          # default — free tier, 1M tokens/day
+export GROQ_API_KEY=gsk_…            # alternative free tier — 100K tokens/day
 export ANTHROPIC_API_KEY=sk-ant-…    # paid alternative — highest quality
 export TAVILY_API_KEY=tvly-…         # web search (optional)
 
 # Windows cmd — current session only
-set GROQ_API_KEY=gsk_…
+set GEMINI_API_KEY=AIza…
 set TAVILY_API_KEY=tvly-…
 
 # Windows cmd — permanent (open a new cmd window after running)
-setx GROQ_API_KEY gsk_…
+setx GEMINI_API_KEY AIza…
 setx TAVILY_API_KEY tvly-…
 ```
 

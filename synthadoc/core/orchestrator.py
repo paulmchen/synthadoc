@@ -6,6 +6,8 @@ import asyncio
 from pathlib import Path
 from typing import Optional
 
+import logging
+
 from synthadoc.config import Config, load_config
 from synthadoc.core.cache import CacheManager
 from synthadoc.core.cost_guard import CostGuard
@@ -18,6 +20,8 @@ from synthadoc.providers.pricing import estimate_cost
 from synthadoc.storage.log import AuditDB, LogWriter
 from synthadoc.storage.search import HybridSearch
 from synthadoc.storage.wiki import WikiStorage
+
+logger = logging.getLogger(__name__)
 
 
 class Orchestrator:
@@ -44,6 +48,21 @@ class Orchestrator:
         await self._queue.init()
         await self._audit.init()
         await self._cache.init()
+        self._log_agent_config()
+
+    def _log_agent_config(self) -> None:
+        """Log the effective provider/model for each named agent slot at startup."""
+        slots = ["default", "ingest", "query", "lint", "skill"]
+        parts = []
+        seen: dict[str, str] = {}
+        for slot in slots:
+            cfg = self._cfg.agents.resolve(slot)
+            label = f"{cfg.provider}/{cfg.model}"
+            raw = getattr(self._cfg.agents, slot, None)
+            if slot == "default" or raw is not None:
+                parts.append(f"{slot}={label}")
+                seen[slot] = label
+        logger.info("LLM agents — %s", " | ".join(parts))
 
     async def ingest(self, source: str, force: bool = False) -> str:
         """Enqueue an ingest job. The server worker loop executes it."""

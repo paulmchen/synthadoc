@@ -376,7 +376,7 @@ def load_config(
     if not any_file_loaded:
         return Config(
             agents=AgentsConfig(
-                default=AgentConfig(provider="groq", model="llama-3.3-70b-versatile")
+                default=AgentConfig(provider="gemini", model="gemini-2.0-flash")
             ),
             web_search=WebSearchConfig(),
         )
@@ -393,8 +393,8 @@ def load_config(
     # inject built-in defaults so the rest of the build succeeds.
     if "agents" not in raw or "default" not in raw.get("agents", {}):
         raw.setdefault("agents", {})["default"] = {
-            "provider": "groq",
-            "model": "llama-3.3-70b-versatile",
+            "provider": "gemini",
+            "model": "gemini-2.0-flash",
         }
 
     return _raw_to_config(raw, source_has_agents=True)
