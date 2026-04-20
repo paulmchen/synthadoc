@@ -174,11 +174,18 @@ class QueryAgent:
             }
             _covered = {t: f for t, f in _term_doc_freq.items() if f > 0}
 
-            # Drop hyper-generic terms that appear in >60% of candidates.
+            # Drop hyper-generic terms that appear in >80% of candidates.
+            # Using 80% (not 60%) so moderately-common topic words like "partial"
+            # (present in ~60-70% of pages in a shade-focused wiki) are kept as
+            # discriminators rather than being wrongly discarded as generic.
             _n_cands = len(candidates)
-            _specific = {t: f for t, f in _covered.items() if f <= _n_cands * 0.6}
+            _specific = {t: f for t, f in _covered.items() if f <= _n_cands * 0.8}
             if not _specific:
                 _specific = _covered  # all terms are corpus-generic; use full covered set
+            # If every term in _specific appears in only one page it is too rare to
+            # discriminate topic coverage — expand to include all covered terms.
+            elif max(_specific.values()) <= 1:
+                _specific = _covered
 
             # Log the rarest specific term as a representative discriminator.
             if _specific:
