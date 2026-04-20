@@ -213,8 +213,14 @@ def serve_cmd(
         from synthadoc.cli.logo import print_banner
         mode = "MCP (stdio)" if mcp_only else "HTTP" if http_only else "HTTP + MCP"
         _agent_cfg = cfg.agents.resolve("default")
+        _override_count = sum(
+            1 for slot in ("ingest", "query", "lint", "skill")
+            if getattr(cfg.agents, slot, None) is not None
+        )
+        _llm_note = f"(+ {_override_count} override{'s' if _override_count != 1 else ''})" if _override_count else ""
         print_banner(port=effective_port, wiki=str(root), mode=mode,
-                     provider=_agent_cfg.provider, model=_agent_cfg.model)
+                     provider=_agent_cfg.provider, model=_agent_cfg.model,
+                     llm_note=_llm_note)
 
     if background:
         log_path = root / ".synthadoc" / "logs" / "synthadoc.log"

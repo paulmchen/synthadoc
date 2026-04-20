@@ -67,12 +67,15 @@ def print_banner(
     mode: str = "HTTP + MCP",
     provider: str = "",
     model: str = "",
+    llm_note: str = "",
 ) -> None:
     """Print the startup banner to stdout."""
     use_color = _color_supported()
 
     logo_lines = _LOGO.strip("\n").splitlines()
     llm_label = f"{provider}/{model}" if provider and model else provider or model or "unknown"
+    if llm_note:
+        llm_label = f"{llm_label} {llm_note}"
     info_lines = [
         _c(_BOLD + _WHITE,  f"  S Y N T H A D O C  {version}", use_color),
         _c(_DIM,            f"  {'-' * 32}", use_color),
