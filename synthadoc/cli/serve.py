@@ -210,7 +210,9 @@ def serve_cmd(
     if not os.environ.get(_NO_BANNER_ENV):
         from synthadoc.cli.logo import print_banner
         mode = "MCP (stdio)" if mcp_only else "HTTP" if http_only else "HTTP + MCP"
-        print_banner(port=effective_port, wiki=str(root), mode=mode)
+        _agent_cfg = cfg.agents.resolve("default")
+        print_banner(port=effective_port, wiki=str(root), mode=mode,
+                     provider=_agent_cfg.provider, model=_agent_cfg.model)
 
     if background:
         log_path = root / ".synthadoc" / "logs" / "synthadoc.log"

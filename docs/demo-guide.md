@@ -406,7 +406,7 @@ If the wiki doesn't cover a topic yet, Synthadoc detects the gap automatically a
 > After ingesting, re-run your query to get a richer answer.
 ```
 
-The gap is triggered when fewer than 3 pages are retrieved OR the best BM25 match scores below the configured threshold (`gap_score_threshold = 2.0` in `synthadoc.toml`). The suggested search strings are generated automatically by `SearchDecomposeAgent`.
+The gap is triggered when fewer than 3 pages are retrieved OR the best BM25 match scores below the configured threshold (`gap_score_threshold = 2.0` in `.synthadoc/config.toml`). The suggested search strings are generated automatically by `SearchDecomposeAgent`.
 
 ---
 
@@ -945,11 +945,16 @@ audit trail are provider-agnostic — switching does not require re-ingesting an
 
 | Provider    | Key env var         | Free tier                  |
 | ----------- | ------------------- | -------------------------- |
-| `anthropic` | `ANTHROPIC_API_KEY` | No                         |
-| `openai`    | `OPENAI_API_KEY`    | No                         |
-| `gemini`    | `GEMINI_API_KEY`    | Yes (15 RPM, 1M tok/day)   |
-| `groq`      | `GROQ_API_KEY`      | Yes (Llama/Mixtral models) |
-| `ollama`    | _(none)_            | Yes (fully local)          |
+| `anthropic` | `ANTHROPIC_API_KEY` | No — pay-per-token                            |
+| `openai`    | `OPENAI_API_KEY`    | No — pay-per-token                            |
+| `gemini`    | `GEMINI_API_KEY`    | Yes — 15 RPM / 1M tokens per day             |
+| `groq`      | `GROQ_API_KEY`      | Yes — fast Llama models, generous daily quota |
+| `ollama`    | _(none)_            | Yes — fully local, no rate limits             |
+
+> **Hit a quota limit?** Gemini free tier enforces a per-minute token cap that can be
+> exhausted during a long ingest session. If you see a `429 RateLimitError`, either wait
+> a few minutes and retry, or switch to Groq (Option C below) which has a larger daily
+> free quota and is faster.
 
 ### Option A — Anthropic (Claude)
 
@@ -1002,6 +1007,49 @@ default = { provider = "gemini", model = "gemini-2.0-flash" }
 ```
 
 Restart `synthadoc serve` to pick up the change.
+
+> **Gemini free tier limits:** 15 requests per minute and 1 million input tokens per day.
+> A long batch ingest can exhaust the per-minute token cap — if you see a `429` error,
+> wait 60 seconds and retry, or switch to Groq (Option C) which has a higher burst limit.
+
+### Option C — Groq (free tier, fast inference)
+
+Groq offers free API access to Llama 3 models with generous daily quotas and very fast
+inference speeds — a good fallback when Gemini quotas are exhausted.
+
+1. Go to **console.groq.com** → sign up (no credit card needed) → **API Keys** → create a key
+2. Set the key:
+
+**Windows (cmd.exe — current session):**
+
+```cmd
+set GROQ_API_KEY=gsk_your-key-here
+```
+
+**Windows (cmd.exe — permanent, survives reboot):**
+
+```cmd
+setx GROQ_API_KEY gsk_your-key-here
+```
+
+> After `setx`, open a new cmd window for the variable to take effect.
+
+**Linux / macOS:**
+
+```bash
+export GROQ_API_KEY="gsk_your-key-here"
+```
+
+3. Update the wiki config:
+
+Open `<wiki-root>/.synthadoc/config.toml` and set:
+
+```toml
+[agents]
+default = { provider = "groq", model = "llama-3.3-70b-versatile" }
+```
+
+Restart `synthadoc serve`. The banner will confirm `LLM: groq/llama-3.3-70b-versatile`.
 
 ---
 

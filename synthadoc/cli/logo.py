@@ -65,11 +65,14 @@ def print_banner(
     wiki: str,
     version: str = _VERSION,
     mode: str = "HTTP + MCP",
+    provider: str = "",
+    model: str = "",
 ) -> None:
     """Print the startup banner to stdout."""
     use_color = _color_supported()
 
     logo_lines = _LOGO.strip("\n").splitlines()
+    llm_label = f"{provider}/{model}" if provider and model else provider or model or "unknown"
     info_lines = [
         _c(_BOLD + _WHITE,  f"  S Y N T H A D O C  {version}", use_color),
         _c(_DIM,            f"  {'-' * 32}", use_color),
@@ -78,6 +81,7 @@ def print_banner(
         _c(_WHITE,          f"  Mode:  {mode}", use_color),
         _c(_WHITE,          f"  Port:  {port}", use_color),
         _c(_WHITE,          f"  Wiki:  {wiki}", use_color),
+        _c(_WHITE,          f"  LLM:   {llm_label}", use_color),
         _c(_WHITE,          f"  PID:   {os.getpid()}", use_color),
         "",
         _c(_DIM,            f"  http://127.0.0.1:{port}", use_color),
