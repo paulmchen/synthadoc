@@ -29,22 +29,20 @@ def _classify_llm_error(exc: Exception) -> "HTTPException | None":
 
     if code == 429:
         msg = str(exc)
+        _SWITCH = "Switch to another provider by editing [agents] in .synthadoc/config.toml and restarting the server (options: groq, gemini, anthropic, openai, ollama)."
         if "generativelanguage.googleapis.com" in msg or "gemini" in msg.lower():
-            hint = "Gemini free-tier quota exhausted. Wait for the daily reset or switch to Groq."
+            hint = f"Gemini free-tier quota exhausted. Wait for the daily reset or switch providers. {_SWITCH}"
         elif "groq" in msg.lower():
-            hint = "Groq rate limit hit. Wait a moment and retry."
+            hint = f"Groq rate limit hit. Wait for the retry window or switch providers. {_SWITCH}"
         elif "anthropic" in msg.lower():
-            hint = "Anthropic rate limit hit. Wait a moment and retry."
+            hint = f"Anthropic rate limit hit. Wait a moment or switch providers. {_SWITCH}"
         elif "openai" in msg.lower():
-            hint = "OpenAI rate limit hit. Wait a moment and retry."
+            hint = f"OpenAI rate limit hit. Wait a moment or switch providers. {_SWITCH}"
         else:
-            hint = "LLM provider rate limit hit. Wait a moment and retry."
+            hint = f"LLM provider rate limit hit. Wait a moment or switch providers. {_SWITCH}"
         return HTTPException(
             status_code=429,
-            detail=(
-                f"LLM quota exceeded (429). {hint} "
-                "To switch providers, edit [agents] in .synthadoc/config.toml and restart the server."
-            ),
+            detail=f"LLM quota exceeded (429). {hint}",
         )
     if code == 529:
         return HTTPException(
