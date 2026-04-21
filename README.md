@@ -392,7 +392,15 @@ Both features fall back gracefully — if the LLM decomposition call fails, the 
 
 ### Semantic re-ranking (vector search)
 
-By default Synthadoc uses BM25 keyword search. For better recall on conceptually related queries, enable the optional vector search layer — it re-ranks BM25 candidates using `BAAI/bge-small-en-v1.5` cosine similarity:
+By default Synthadoc uses BM25 keyword search. For better recall on conceptually related queries, enable the optional vector search layer — it re-ranks BM25 candidates using `BAAI/bge-small-en-v1.5` cosine similarity.
+
+**Requires:** Python 3.12 or 3.13 and `pip install fastembed`. The `fastembed` package depends on `py-rust-stemmers`, which has no pre-built wheel for Python 3.14 and requires Rust to compile from source.
+
+```bash
+pip install fastembed   # Python 3.12 / 3.13 only
+```
+
+Then enable in config:
 
 ```toml
 # .synthadoc/config.toml
@@ -406,7 +414,7 @@ On first server start with `vector = true`:
 - All existing wiki pages are embedded in the background — BM25 continues serving during migration
 - New and updated pages are embedded automatically after each ingest
 
-BM25 is always used when vector search is disabled (the default). Vector search is purely additive — you can toggle it at any time.
+If `fastembed` is not installed the server starts normally with a warning and falls back to BM25. BM25 is always used when vector search is disabled (the default). Vector search is purely additive — you can toggle it at any time.
 
 ### Knowledge gap workflow
 
