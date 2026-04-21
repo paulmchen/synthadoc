@@ -118,9 +118,6 @@ class Orchestrator:
         from synthadoc.agents.ingest_agent import IngestAgent
         from synthadoc.skills.web_search.scripts.main import _INTENT_RE as _WEB_SEARCH_RE
         try:
-            if max_results is not None:
-                import os as _os
-                _os.environ["SYNTHADOC_WEB_SEARCH_MAX_RESULTS"] = str(max_results)
             _is_web_search = bool(_WEB_SEARCH_RE.match(source))
             if _is_web_search:
                 await self._queue.update_progress(job_id, {"phase": "searching"})
@@ -139,6 +136,8 @@ class Orchestrator:
                 result.output_tokens,
                 is_local=(_agent_cfg.provider == "ollama"),
             )
+            if max_results is not None and result.child_sources:
+                result.child_sources = result.child_sources[:max_results]
             if _is_web_search and result.child_sources:
                 await self._queue.update_progress(job_id, {
                     "phase": "found_urls",
