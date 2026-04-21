@@ -394,10 +394,10 @@ Both features fall back gracefully — if the LLM decomposition call fails, the 
 
 By default Synthadoc uses BM25 keyword search. For better recall on conceptually related queries, enable the optional vector search layer — it re-ranks BM25 candidates using `BAAI/bge-small-en-v1.5` cosine similarity.
 
-**Requires:** Python 3.12 or 3.13 and `pip install fastembed`. The `fastembed` package depends on `py-rust-stemmers`, which has no pre-built wheel for Python 3.14 and requires Rust to compile from source.
+**Requires:** `pip install fastembed`. On Python 3.12/3.13 this installs from a pre-built wheel. On Python 3.14+, pre-built wheels are not yet available — install will succeed once `fastembed` publishes Python 3.14 wheels, or if your environment allows Rust compilation from source.
 
 ```bash
-pip install fastembed   # Python 3.12 / 3.13 only
+pip install fastembed
 ```
 
 Then enable in config:
