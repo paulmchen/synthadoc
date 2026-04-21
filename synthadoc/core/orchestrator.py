@@ -53,6 +53,7 @@ class Orchestrator:
         await self._cache.init()
         self._log_agent_config()
         if self._cfg.search.vector:
+            logger.info("Vector search: enabled (model: BAAI/bge-small-en-v1.5) — initialising…")
             await self._search.init_vector()
             asyncio.create_task(self._run_vector_migration())
 
@@ -65,10 +66,11 @@ class Orchestrator:
         embedded = set(await self._search._vector_store.list_slugs())
         to_embed = [s for s in slugs if s not in embedded]
         if not to_embed:
+            logger.info("Vector search: all %d page(s) already embedded — ready", len(embedded))
             return
         logger.info(
-            "Vector search enabled — embedding %d existing pages in background (BM25 active)",
-            len(to_embed),
+            "Vector search: %d page(s) to embed (%d already done) — running background migration, BM25 active meanwhile",
+            len(to_embed), len(embedded),
         )
         start = time.monotonic()
         for i, slug in enumerate(to_embed, 1):
