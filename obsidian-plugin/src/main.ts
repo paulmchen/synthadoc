@@ -482,6 +482,14 @@ class WebSearchModal extends Modal {
 
         const settingsRow = contentEl.createEl("div");
         settingsRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px";
+        settingsRow.createEl("label", { text: "Max results:" });
+        const maxResultsInput = settingsRow.createEl("input", { type: "number" }) as HTMLInputElement;
+        maxResultsInput.value = "20";
+        maxResultsInput.min = "1";
+        maxResultsInput.max = "50";
+        maxResultsInput.step = "1";
+        maxResultsInput.style.cssText = "width:60px;padding:4px 6px";
+        settingsRow.createEl("span", { text: "URLs" }).style.marginRight = "16px";
         settingsRow.createEl("label", { text: "Poll interval:" });
         const intervalInput = settingsRow.createEl("input", { type: "number" }) as HTMLInputElement;
         intervalInput.value = "2000";
@@ -507,11 +515,12 @@ class WebSearchModal extends Modal {
             btn.disabled = true;
             input.disabled = true;
             this._pollInterval = Math.min(10000, Math.max(500, parseInt(intervalInput.value) || 2000));
+            const maxResults = Math.min(50, Math.max(1, parseInt(maxResultsInput.value) || 20));
             statusEl.setText("Queuing web search…");
             pagesEl.empty();
             errorsEl.empty();
             try {
-                const r = await api.ingest(`search for: ${topic}`) as any;
+                const r = await api.ingest(`search for: ${topic}`, maxResults) as any;
                 const jobId: string = r.job_id;
                 new Notice(`Synthadoc: web search queued (job ${jobId})`);
                 this._startPolling(jobId, statusEl, pagesEl, errorsEl);

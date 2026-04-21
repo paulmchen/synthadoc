@@ -26,7 +26,7 @@ export const api = {
     health:       ()                          => call("/health"),
     status:       ()                          => call("/status"),
     query:        (question: string)          => call("/query",           "POST", { question }),
-    ingest:       (source: string)            => call("/jobs/ingest",     "POST", { source }),
+    ingest:       (source: string, maxResults?: number) => call("/jobs/ingest", "POST", maxResults != null ? { source, max_results: maxResults } : { source }),
     lint:         (scope = "all", autoResolve = false) => call("/jobs/lint", "POST", { scope, auto_resolve: autoResolve }),
     lintReport:   ()                          => call("/lint/report"),
     jobs:         (status?: string)           => call(status ? `/jobs?status=${encodeURIComponent(status)}` : "/jobs"),
