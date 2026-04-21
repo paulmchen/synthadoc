@@ -112,12 +112,15 @@ class Orchestrator:
         return len(jobs)
 
     async def _run_ingest(self, job_id: str, source: str, auto_confirm: bool,
-                          force: bool = False) -> None:
+                          force: bool = False, max_results: int | None = None) -> None:
         # auto_confirm is reserved for when cost gate is wired to the ingest flow (v0.2+).
         # Cost tracking returns $0.0000 in v0.1, so cost_guard.check() is not called here yet.
         from synthadoc.agents.ingest_agent import IngestAgent
         from synthadoc.skills.web_search.scripts.main import _INTENT_RE as _WEB_SEARCH_RE
         try:
+            if max_results is not None:
+                import os as _os
+                _os.environ["SYNTHADOC_WEB_SEARCH_MAX_RESULTS"] = str(max_results)
             _is_web_search = bool(_WEB_SEARCH_RE.match(source))
             if _is_web_search:
                 await self._queue.update_progress(job_id, {"phase": "searching"})

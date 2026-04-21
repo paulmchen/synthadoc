@@ -85,6 +85,7 @@ class QueryRequest(BaseModel):
 class IngestRequest(BaseModel):
     source: str
     force: bool = False
+    max_results: int | None = None
 
 
 class LintRequest(BaseModel):
@@ -134,7 +135,9 @@ async def _worker_loop(orch) -> None:
                 if job.operation == "ingest":
                     source = job.payload.get("source", "")
                     force = job.payload.get("force", False)
-                    await orch._run_ingest(job.id, source, auto_confirm=True, force=force)
+                    max_results = job.payload.get("max_results")
+                    await orch._run_ingest(job.id, source, auto_confirm=True, force=force,
+                                           max_results=max_results)
                 elif job.operation == "lint":
                     scope = job.payload.get("scope", "all")
                     auto_resolve = job.payload.get("auto_resolve", False)
@@ -303,9 +306,10 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
                 # Resolve vault-relative paths (e.g. "raw_sources/file.pdf") against
                 # wiki root so they work regardless of server working directory.
                 source = str((wiki_root / source).resolve())
-        job_id = await app.state.orch.queue.enqueue(
-            "ingest", {"source": source, "force": req.force}
-        )
+        payload: dict = {"source": source, "force": req.force}
+        if req.max_results is not None:
+            payload["max_results"] = req.max_results
+        job_id = await app.state.orch.queue.enqueue("ingest", payload)
         return {"job_id": job_id}
 
     @app.post("/jobs/lint")

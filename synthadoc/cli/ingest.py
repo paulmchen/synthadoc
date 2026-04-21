@@ -48,6 +48,8 @@ def ingest_cmd(
     wiki: str = typer.Option(".", "--wiki", "-w"),
     analyse_only: bool = typer.Option(False, "--analyse-only",
         help="Run analysis pass only; print result without writing wiki pages."),
+    max_results: Optional[int] = typer.Option(None, "--max-results", "-n",
+        help="Max URLs to ingest from a web search (overrides config default of 20)."),
 ):
     """Enqueue a source for ingestion. Requires synthadoc serve to be running."""
     sources = []
@@ -91,6 +93,9 @@ def ingest_cmd(
             result = post(wiki, "/analyse", {"source": abs_source})
             typer.echo(_json.dumps(result, indent=2))
             continue
-        result = post(wiki, "/jobs/ingest", {"source": abs_source, "force": force})
+        body: dict = {"source": abs_source, "force": force}
+        if max_results is not None:
+            body["max_results"] = max_results
+        result = post(wiki, "/jobs/ingest", body)
         typer.echo(f"Enqueued {s} → job {result['job_id']}")
         typer.echo(f"Check status: synthadoc jobs status {result['job_id']} -w {wiki}")
