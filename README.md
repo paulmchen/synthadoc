@@ -398,72 +398,9 @@ See [docs/design.md](docs/design.md) for a full description of how ingest, contr
 
 ## Configuration
 
-> **You do not need to configure anything to run the demo.** The demo wiki
-> ships with its own settings and sensible built-in defaults cover everything
-> else. Set your API key env var, run `synthadoc serve`, and go.
->
-> Read this section when you are ready to run a real wiki or change a default.
+You do not need to configure anything to run the demo. The demo wiki ships with its own settings and sensible built-in defaults cover everything else. Set your API key env var, run `synthadoc serve`, and go.
 
-### How configuration works
-
-Settings are resolved in three layers — later layers win:
-
-```
-1. Built-in defaults          (always applied)
-2. ~/.synthadoc/config.toml   (global — your preferences across all wikis)
-3. <wiki-root>/.synthadoc/config.toml   (per-project — overrides for one wiki)
-```
-
-Neither file is required. If both are absent, the built-in defaults take effect.
-
-### Global config — `~/.synthadoc/config.toml`
-
-**Use this to set preferences that apply to every wiki on your machine** —
-primarily your default LLM provider and the wiki registry.
-
-```toml
-[agents]
-default = { provider = "gemini", model = "gemini-2.0-flash" }  # free tier
-lint    = { provider = "groq",   model = "llama-3.3-70b-versatile" }  # cheaper for lint
-
-[wikis]
-research = "~/wikis/research"
-work     = "~/wikis/work"
-```
-
-Common reason to edit: switching from the Anthropic default to Gemini Flash
-(free tier) so all wikis use it without touching each project config.
-
-### Per-project config — `<wiki-root>/.synthadoc/config.toml`
-
-**Use this when one wiki needs different settings from the global default** —
-a different port, tighter cost limits, wiki-specific hooks, or web search.
-
-```toml
-[server]
-port = 7071          # required if running more than one wiki simultaneously
-
-[cost]
-soft_warn_usd = 0.50
-hard_gate_usd = 2.00
-
-[web_search]
-provider    = "tavily"
-max_results = 20
-
-# Optional: enable semantic re-ranking (downloads ~130 MB model once)
-# [search]
-# vector = true
-# vector_top_candidates = 20   # BM25 candidate pool before cosine re-rank
-
-[hooks]
-on_ingest_complete = "python git-auto-commit.py"
-```
-
-Common reason to edit: each wiki needs its own port when running multiple
-wikis at the same time.
-
-Full config reference including all keys, defaults, and multi-wiki setup: [docs/design.md — Configuration](docs/design.md#configuration).
+For the full configuration reference — layer precedence, global vs. per-project config, all keys and defaults — see [Appendix E — Configuration](docs/user-quick-start-guide.md#appendix-e--configuration) in the Quick-Start Guide, or [docs/design.md — Configuration](docs/design.md#configuration) for the complete technical reference.
 
 ---
 
