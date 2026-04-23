@@ -322,7 +322,7 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
     @app.get("/lint/report")
     async def lint_report():
         import yaml as _yaml
-        _SKIP = {"index", "log", "dashboard", "purpose"}
+        from synthadoc.agents.lint_agent import find_orphan_slugs, LINT_SKIP_SLUGS
         wiki_dir = wiki_root / "wiki"
         pages = list(wiki_dir.glob("*.md"))
 
@@ -330,19 +330,10 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
 
         contradicted = [
             stem for stem, text in page_texts.items()
-            if stem not in _SKIP and "status: contradicted" in text
+            if stem not in LINT_SKIP_SLUGS and "status: contradicted" in text
         ]
 
-        referenced: set[str] = set()
-        for text in page_texts.values():
-            for link in _WIKILINK_RE.findall(text):
-                slug_part = link.split("|")[0].strip()
-                referenced.add(slug_part.lower().replace(" ", "-"))
-
-        orphan_slugs = [
-            stem for stem in page_texts
-            if stem not in referenced and stem not in _SKIP
-        ]
+        orphan_slugs = find_orphan_slugs(page_texts)
 
         orphan_details = []
         for slug in orphan_slugs:

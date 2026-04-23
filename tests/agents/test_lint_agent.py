@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Paul Chen / axoviq.com
 import pytest
 from unittest.mock import AsyncMock
-from synthadoc.agents.lint_agent import LintAgent, LintReport
+from synthadoc.agents.lint_agent import LintAgent, LintReport, find_orphan_slugs, LINT_SKIP_SLUGS
 from synthadoc.providers.base import CompletionResponse
 from synthadoc.storage.wiki import WikiStorage, WikiPage
 from synthadoc.storage.log import LogWriter
@@ -55,3 +55,38 @@ async def test_lint_aliased_wikilink_not_orphan(tmp_wiki):
     agent = LintAgent(provider=AsyncMock(), store=store, log_writer=log)
     report = await agent.lint(scope="orphans")
     assert "quantum-computing" not in report.orphan_slugs
+
+
+def test_find_orphan_slugs_basic():
+    """Pages with no inbound links from content pages are orphans."""
+    page_texts = {
+        "page-a": "See [[page-b]].",
+        "page-b": "No links here.",
+        "page-c": "Standalone page.",
+    }
+    orphans = find_orphan_slugs(page_texts)
+    assert "page-a" in orphans      # nothing links to page-a
+    assert "page-b" not in orphans  # page-a links to page-b
+    assert "page-c" in orphans      # nothing links to page-c
+
+
+def test_find_orphan_slugs_overview_excluded():
+    """Links from overview (and other skip slugs) must not count as real references."""
+    page_texts = {
+        "overview": "[[page-a]] [[page-b]]",
+        "page-a":   "See [[page-b]].",
+        "page-b":   "No links here.",
+    }
+    orphans = find_orphan_slugs(page_texts)
+    assert "overview" not in orphans   # skip slugs never reported
+    assert "page-a" in orphans         # overview link doesn't count; nothing else links to page-a
+    assert "page-b" not in orphans     # page-a links to page-b → not an orphan
+
+
+def test_find_orphan_slugs_skip_slugs_never_reported():
+    """Skip slugs (index, dashboard, …) are never returned as orphans."""
+    page_texts = {slug: "" for slug in LINT_SKIP_SLUGS}
+    page_texts["real-page"] = "content"
+    orphans = find_orphan_slugs(page_texts)
+    for slug in LINT_SKIP_SLUGS:
+        assert slug not in orphans

@@ -20,6 +20,31 @@ class LintReport:
 
 _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 
+# Auto-generated pages excluded from both reference-counting and orphan reporting.
+# A page linked only from overview/index is still an orphan in the human graph.
+LINT_SKIP_SLUGS: frozenset[str] = frozenset(
+    {"index", "log", "dashboard", "purpose", "overview"}
+)
+
+
+def find_orphan_slugs(
+    page_texts: dict[str, str],
+    skip: frozenset[str] = LINT_SKIP_SLUGS,
+) -> list[str]:
+    """Return slugs with no inbound [[wikilinks]] from non-skip pages.
+
+    page_texts maps slug → page text (content body or full raw file).
+    Links from skip pages (overview, index, …) are not counted as real references.
+    """
+    referenced: set[str] = set()
+    for slug, text in page_texts.items():
+        if slug in skip:
+            continue
+        for link in _WIKILINK_RE.findall(text):
+            slug_part = link.split("|")[0].strip()
+            referenced.add(slug_part.lower().replace(" ", "-"))
+    return [s for s in page_texts if s not in referenced and s not in skip]
+
 
 class LintAgent:
     def __init__(self, provider: LLMProvider, store: WikiStorage,
@@ -29,23 +54,13 @@ class LintAgent:
         self._log = log_writer
         self._threshold = confidence_threshold
 
-    # Auto-generated pages whose wikilinks should not count as "real" references.
-    # A page linked only from overview.md is still an orphan in the human graph.
-    _REFERENCE_EXCLUDED = frozenset({"overview", "index", "dashboard", "log", "purpose"})
-
     def _find_orphans(self, slugs: list[str]) -> list[str]:
-        referenced: set[str] = set()
-        for slug in slugs:
-            if slug in self._REFERENCE_EXCLUDED:
-                continue
-            page = self._store.read_page(slug)
-            if page:
-                for link in _WIKILINK_RE.findall(page.content):
-                    # Strip alias (e.g. [[slug|Display Text]]) before normalising
-                    slug_part = link.split("|")[0].strip()
-                    referenced.add(slug_part.lower().replace(" ", "-"))
-        return [s for s in slugs if s not in referenced
-                and s not in ("index", "dashboard", "log", "purpose", "overview")]
+        page_texts = {
+            slug: (self._store.read_page(slug).content
+                   if self._store.read_page(slug) else "")
+            for slug in slugs
+        }
+        return find_orphan_slugs(page_texts)
 
     async def lint(self, scope: str = "all", auto_resolve: bool = False) -> LintReport:
         report = LintReport()

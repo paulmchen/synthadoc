@@ -11,9 +11,8 @@ import typer
 from synthadoc.cli.main import app
 from synthadoc.cli._http import post
 
-_WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
-_SKIP_SLUGS = {"index", "log", "dashboard", "purpose", "overview"}
+from synthadoc.agents.lint_agent import find_orphan_slugs, LINT_SKIP_SLUGS
 
 
 def _parse_frontmatter(text: str) -> dict:
@@ -70,33 +69,16 @@ def lint_report(
 
     pages = list(wiki_dir.glob("*.md"))
 
+    page_texts: dict[str, str] = {p.stem: p.read_text(encoding="utf-8") for p in pages}
+
     # --- Contradictions ---
-    contradicted = []
-    for p in pages:
-        if p.stem in _SKIP_SLUGS:
-            continue
-        raw = p.read_text(encoding="utf-8")
-        if "status: contradicted" in raw:
-            contradicted.append(p.stem)
-
-    # --- Orphans: pages with no inbound [[wikilinks]] from any content page ---
-    # Auto-generated pages (overview, index, etc.) are excluded from contributing
-    # references — a link only from overview.md is not a meaningful inbound link.
-    referenced: set[str] = set()
-    page_texts: dict[str, str] = {}
-    for p in pages:
-        raw = p.read_text(encoding="utf-8")
-        page_texts[p.stem] = raw
-        if p.stem in _SKIP_SLUGS:
-            continue
-        for link in _WIKILINK_RE.findall(raw):
-            slug_part = link.split("|")[0].strip()
-            referenced.add(slug_part.lower().replace(" ", "-"))
-
-    orphans = [
-        p.stem for p in pages
-        if p.stem not in referenced and p.stem not in _SKIP_SLUGS
+    contradicted = [
+        stem for stem, text in page_texts.items()
+        if stem not in LINT_SKIP_SLUGS and "status: contradicted" in text
     ]
+
+    # --- Orphans ---
+    orphans = find_orphan_slugs(page_texts)
 
     # --- Report ---
     has_issues = contradicted or orphans
