@@ -248,6 +248,12 @@ query decomposed into 2 sub-question(s):
 Simple single-topic questions decompose to one sub-question and behave identically to
 a direct query — no extra LLM cost.
 
+> **Slow provider?** Reasoning models (e.g. MiniMax M2.x) can take longer to respond.
+> If you see a timeout error, pass `--timeout 120`:
+> ```bash
+> synthadoc query "How did Moore's Law shape hardware design?" -w history-of-computing --timeout 120
+> ```
+
 ### Knowledge gap detection
 
 If the wiki does not cover a topic, Synthadoc detects the gap automatically:

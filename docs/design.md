@@ -620,7 +620,7 @@ synthadoc
 ├── demo list
 ├── serve [-w wiki] [--port N] [--background] [--mcp-only] [--http-only] [--verbose]
 ├── ingest <source> [-w wiki] [--batch] [--file manifest] [--force] [--analyse-only] [--max-results N]
-├── query "<question>" [-w wiki] [--save]
+├── query "<question>" [-w wiki] [--save] [--timeout N]
 ├── lint
 │   ├── run [-w wiki] [--scope contradictions|orphans|all] [--auto-resolve]
 │   └── report [-w wiki]
@@ -643,6 +643,13 @@ synthadoc
     ├── remove <id> [-w wiki]
     └── apply [-w wiki]
 ```
+
+### `query` options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--save` | off | Save the answer as a new wiki page |
+| `--timeout N` | `30` | Seconds to wait for the LLM response. Increase for slower providers (e.g. `--timeout 120` for MiniMax reasoning models) |
 
 ### `ingest --analyse-only`
 
