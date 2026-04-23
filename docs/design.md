@@ -26,8 +26,6 @@
 15. [Observability and Logging](#15-observability-and-logging)
 16. [Security](#16-security)
 17. [Plugin Development Guide](#17-plugin-development-guide)
-18. [v0.2.0 — What's New](#18-v020--whats-new)
-
 **Appendices**
 - [Appendix A — Release Feature Index](#appendix-a--release-feature-index)
 
@@ -1305,21 +1303,6 @@ event=$(echo "$context" | jq -r '.event')
 wiki=$(echo "$context" | jq -r '.wiki')
 echo "Event $event fired on wiki $wiki" | mail -s "Synthadoc notification" you@example.com
 ```
-
----
-
-## 18. v0.2.0 — What's New
-
-See [Appendix A — Release Feature Index](#appendix-a--release-feature-index) for a full list of delivered v0.2.0 features.
-
-### Planned
-
-| Feature | Motivation |
-|---------|-----------|
-| **Web UI** | Browser-based dashboard — pages, jobs, contradictions, orphans — without requiring Obsidian |
-| **Graph-aware retrieval** | Traverse wikilink adjacency for multi-hop queries (e.g. "What connects Turing to von Neumann?") |
-| **Larger corpus support** | Sharded BM25 index; incremental embedding updates; streaming ingest for very large documents |
-| **Mistral + Bedrock providers** | Additional OpenAI-compatible endpoints; Bedrock for AWS-native deployments |
 
 ---
 
