@@ -11,7 +11,7 @@ from synthadoc.providers.base import CompletionResponse, LLMProvider, Message
 logger = logging.getLogger(__name__)
 
 # Providers whose chat endpoint does not support image inputs
-_NO_VISION_HOSTS = ("groq.com", "minimax.io")
+_NO_VISION_HOSTS = ("groq.com",)
 
 
 class OpenAIProvider(LLMProvider):

@@ -27,7 +27,7 @@ def server_url(wiki: str) -> str:
     return f"http://127.0.0.1:{port}"
 
 
-def get(wiki: str, path: str, timeout: int = 30, **params) -> dict:
+def get(wiki: str, path: str, timeout: int = 60, **params) -> dict:
     url = server_url(wiki)
     try:
         resp = httpx.get(f"{url}{path}", params=params, timeout=timeout)
@@ -47,7 +47,7 @@ def get(wiki: str, path: str, timeout: int = 30, **params) -> dict:
                     f"Server returned {e.response.status_code}: {_detail(e.response)}")
 
 
-def post(wiki: str, path: str, body: dict, timeout: int = 30) -> dict:
+def post(wiki: str, path: str, body: dict, timeout: int = 60) -> dict:
     url = server_url(wiki)
     try:
         resp = httpx.post(f"{url}{path}", json=body, timeout=timeout)

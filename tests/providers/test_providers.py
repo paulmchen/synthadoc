@@ -153,7 +153,7 @@ def test_make_provider_minimax_uses_openai_provider_with_base_url(monkeypatch):
     provider = make_provider("ingest", _make_cfg("minimax", "MiniMax-M2.5"))
     assert isinstance(provider, OpenAIProvider)
     assert "minimax.io" in str(provider._client.base_url)
-    assert provider.supports_vision is False
+    assert provider.supports_vision is True   # M2.5 is natively multimodal
 
 
 def test_make_provider_gemini_uses_openai_provider_with_base_url(monkeypatch):

@@ -649,7 +649,7 @@ synthadoc
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--save` | off | Save the answer as a new wiki page |
-| `--timeout N` | `30` | Seconds to wait for the LLM response. Increase for slower providers (e.g. `--timeout 120` for MiniMax reasoning models) |
+| `--timeout N` | `60` | Seconds to wait for the LLM response. Increase for slower providers (e.g. `--timeout 120` for MiniMax reasoning models) |
 
 ### `ingest --analyse-only`
 
@@ -774,7 +774,7 @@ Required environment variables per provider:
 | `openai` | `OPENAI_API_KEY` | No (pay-per-token) | Yes |
 | `gemini` | `GEMINI_API_KEY` | **Yes** — 15 RPM / 1M tokens/day on Flash | Yes |
 | `groq` | `GROQ_API_KEY` | **Yes** — generous free tier on Llama/Mixtral models | No |
-| `minimax` | `MINIMAX_API_KEY` | No (pay-per-token) | No (text only) |
+| `minimax` | `MINIMAX_API_KEY` | No (pay-per-token) | Yes (M2.5 / M2.7 natively multimodal) |
 | `ollama` | _(none)_ | **Yes** — fully local | Model-dependent |
 
 ### Per-project config — `<wiki-root>/.synthadoc/config.toml`

@@ -36,7 +36,7 @@ def query_cmd(
     question: str = typer.Argument(..., help="Question to ask the wiki"),
     save: bool = typer.Option(False, "--save", help="Save answer as wiki page"),
     wiki: str = typer.Option(".", "--wiki", "-w"),
-    timeout: int = typer.Option(30, "--timeout", help="Seconds to wait for the LLM (default 30; increase for slow providers)"),
+    timeout: int = typer.Option(60, "--timeout", help="Seconds to wait for the LLM (default 60; increase for slow providers)"),
 ):
     """Query the wiki. Requires synthadoc serve to be running."""
     result = get(wiki, "/query", timeout=timeout, q=question)

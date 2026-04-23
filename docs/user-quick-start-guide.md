@@ -882,7 +882,7 @@ default = { provider = "gemini", model = "gemini-2.5-flash" }
 [agents]
 default = { provider = "groq", model = "llama-3.3-70b-versatile" }
 
-# MiniMax (cheapest paid text — no vision/image support)
+# MiniMax (cheapest paid, natively multimodal)
 [agents]
 default = { provider = "minimax", model = "MiniMax-M2.5" }
 ```
@@ -893,7 +893,7 @@ Restart `synthadoc serve`. The startup banner confirms `LLM: <provider>/<model>`
 >
 > - **Gemini** free tier: 15 RPM. If you see `429 RateLimitError` during a long ingest, wait 60 s and retry, or switch to Groq or MiniMax.
 > - **Groq** free tier: 100K tokens/day — adequate for short demo sessions; heavy web search ingest can exhaust it.
-> - **MiniMax:** no free tier, but M2.5 input is ~$0.15/M tokens — roughly half the cost of Gemini 2.5 Flash. Text-only; image ingestion will fall back to text extraction.
+> - **MiniMax:** no free tier, but M2.5 input is ~$0.15/M tokens — roughly half the cost of Gemini 2.5 Flash. M2.5 and M2.7 are natively multimodal (text + image).
 > - **Ollama:** fully local, no rate limits. Install from [ollama.com](https://ollama.com); no API key needed.
 
 ---
