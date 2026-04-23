@@ -71,6 +71,59 @@ async def test_provider_raises_after_max_retries():
             await provider.complete(messages=[Message(role="user", content="hi")])
 
 
+@pytest.mark.asyncio
+async def test_openai_provider_retries_once_on_rate_limit_then_succeeds():
+    """A single 429 is retried; the second attempt succeeds and returns a result."""
+    import openai
+    from synthadoc.providers.openai import OpenAIProvider
+    cfg = AgentConfig(provider="gemini", model="gemini-2.5-flash",
+                      base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
+    provider = OpenAIProvider(api_key="test-key", config=cfg)
+
+    ok_resp = MagicMock()
+    ok_resp.choices = [MagicMock()]
+    ok_resp.choices[0].message.content = "hello"
+    ok_resp.usage.prompt_tokens = 10
+    ok_resp.usage.completion_tokens = 5
+
+    rate_limit_exc = openai.RateLimitError(
+        message="rate limit", response=MagicMock(status_code=429), body={})
+    call_count = 0
+
+    async def flaky(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise rate_limit_exc
+        return ok_resp
+
+    with patch.object(provider._client.chat.completions, "create", side_effect=flaky):
+        with patch("asyncio.sleep", new=AsyncMock()):
+            result = await provider.complete(messages=[Message(role="user", content="hi")])
+
+    assert result.text == "hello"
+    assert call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_raises_after_all_retries_exhausted():
+    """When 429s persist across all retries, RateLimitError is re-raised."""
+    import openai
+    from synthadoc.providers.openai import OpenAIProvider
+    cfg = AgentConfig(provider="gemini", model="gemini-2.5-flash",
+                      base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
+    provider = OpenAIProvider(api_key="test-key", config=cfg)
+
+    rate_limit_exc = openai.RateLimitError(
+        message="rate limit", response=MagicMock(status_code=429), body={})
+
+    with patch.object(provider._client.chat.completions, "create",
+                      side_effect=rate_limit_exc):
+        with patch("asyncio.sleep", new=AsyncMock()):
+            with pytest.raises(openai.RateLimitError):
+                await provider.complete(messages=[Message(role="user", content="hi")])
+
+
 def _make_cfg(provider: str, model: str) -> "Config":
     from synthadoc.config import Config, AgentsConfig, AgentConfig
     return Config(agents=AgentsConfig(default=AgentConfig(provider=provider, model=model)))
