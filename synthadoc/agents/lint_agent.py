@@ -68,6 +68,8 @@ class LintAgent:
 
         if scope in ("all", "contradictions"):
             for slug in slugs:
+                if slug in LINT_SKIP_SLUGS:
+                    continue
                 page = self._store.read_page(slug)
                 if page and page.status == "contradicted":
                     report.contradictions_found += 1

@@ -239,6 +239,48 @@ async def test_ingest_flags_contradiction(tmp_wiki):
 
 
 @pytest.mark.asyncio
+async def test_ingest_flag_ignores_skip_slugs(tmp_wiki):
+    """LLM targeting a skip slug (e.g. 'index') with action='flag' must be silently ignored."""
+    from unittest.mock import AsyncMock
+    import itertools
+    from synthadoc.agents.lint_agent import LINT_SKIP_SLUGS
+    from synthadoc.storage.wiki import WikiPage
+    p = AsyncMock()
+    _entity = CompletionResponse(
+        text='{"entities":["index"],"concepts":[],"tags":[]}',
+        input_tokens=100, output_tokens=50,
+    )
+    _decision = CompletionResponse(
+        text='{"action":"flag","target":"index","new_slug":"","update_content":""}',
+        input_tokens=100, output_tokens=50,
+    )
+    p.complete.side_effect = itertools.cycle([_entity, _decision])
+
+    store = WikiStorage(tmp_wiki / "wiki")
+    store.write_page("index", WikiPage(
+        title="Index", tags=[], content="# Index\n\nWiki root.",
+        status="active", confidence="high", sources=[],
+    ))
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    audit = AuditDB(tmp_wiki / ".synthadoc" / "audit.db")
+    await audit.init()
+    cache = CacheManager(tmp_wiki / ".synthadoc" / "cache.db")
+    await cache.init()
+
+    source = tmp_wiki / "raw_sources" / "rewrite.md"
+    source.write_text("Completely different index content.", encoding="utf-8")
+
+    agent = IngestAgent(provider=p, store=store, search=search,
+                        log_writer=log, audit_db=audit, cache=cache, max_pages=15)
+    result = await agent.ingest(str(source))
+
+    assert "index" not in result.pages_flagged
+    page = store.read_page("index")
+    assert page.status == "active", "skip slugs must never be set to contradicted"
+
+
+@pytest.mark.asyncio
 async def test_ingest_updates_existing_page(tmp_wiki):
     """When LLM returns action='update', content is appended to the target page."""
     from unittest.mock import AsyncMock
