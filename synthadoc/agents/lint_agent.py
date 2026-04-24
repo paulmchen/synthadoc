@@ -31,10 +31,10 @@ def find_orphan_slugs(
     page_texts: dict[str, str],
     skip: frozenset[str] = LINT_SKIP_SLUGS,
 ) -> list[str]:
-    """Return slugs with no inbound [[wikilinks]] from non-skip pages.
+    """Return slugs with no inbound [[wikilinks]] from other non-skip pages.
 
-    page_texts maps slug → page text (content body or full raw file).
-    Links from skip pages (overview, index, …) are not counted as real references.
+    page_texts maps slug → page body text (frontmatter must be stripped by caller).
+    Links from skip pages (overview, index, …) and self-links are not counted.
     """
     referenced: set[str] = set()
     for slug, text in page_texts.items():
@@ -42,7 +42,9 @@ def find_orphan_slugs(
             continue
         for link in _WIKILINK_RE.findall(text):
             slug_part = link.split("|")[0].strip()
-            referenced.add(slug_part.lower().replace(" ", "-"))
+            target = slug_part.lower().replace(" ", "-")
+            if target != slug:  # self-links don't count as inbound references
+                referenced.add(target)
     return [s for s in page_texts if s not in referenced and s not in skip]
 
 

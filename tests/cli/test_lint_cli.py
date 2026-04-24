@@ -162,3 +162,65 @@ def test_lint_report_syncs_orphan_frontmatter(tmp_path, monkeypatch):
         "orphan-page must be flagged orphan: true"
     assert _parse_frontmatter(linked_text).get("orphan") is False, \
         "linked-page must be cleared to orphan: false"
+
+
+def test_lint_report_frontmatter_wikilink_does_not_prevent_orphan(tmp_path, monkeypatch):
+    """A [[wikilink]] appearing only in frontmatter YAML must not rescue a page from orphan status.
+    Only links in the page body count as real inbound references."""
+    import synthadoc.cli.install as install_mod
+    # page-b is linked only from the frontmatter of hub-page (not from any body)
+    hub_with_fm_link = (
+        "---\ntitle: Hub\nstatus: active\nrelated: '[[page-b]]'\n---\n\n"
+        "# Hub\n\nThis page has no body links.\n"
+    )
+    wiki_dir, root = _make_wiki(tmp_path, {
+        "index":  "# Index\n",
+        "hub":    hub_with_fm_link,
+        "page-b": "---\nstatus: active\n---\n# Page B\n",
+    })
+    monkeypatch.setattr(install_mod, "_read_registry",
+                        lambda: {"mywiki": {"path": str(tmp_path)}})
+    result = runner.invoke(app, ["lint", "report", "-w", "mywiki"])
+    assert result.exit_code == 0, result.output
+    # page-b has no inbound body links → IS an orphan
+    assert "page-b" in result.output
+
+
+def test_lint_report_all_clear_clears_stale_orphan_flags(tmp_path, monkeypatch):
+    """When lint report finds no issues, stale orphan: true flags must be cleared."""
+    import synthadoc.cli.install as install_mod
+    # All pages are mutually linked; one has a stale orphan: true from a previous run
+    stale_orphan_fm = (
+        "---\ntitle: Linked Page\nstatus: active\norphan: true\n---\n\n"
+        "# Linked Page\n\nSee [[hub]].\n"
+    )
+    hub_content = "---\nstatus: active\n---\n\n# Hub\n\nSee [[linked-page]]."
+    wiki_dir, root = _make_wiki(tmp_path, {
+        "index":       "# Index\n",
+        "hub":         hub_content,
+        "linked-page": stale_orphan_fm,
+    })
+    monkeypatch.setattr(install_mod, "_read_registry",
+                        lambda: {"mywiki": {"path": str(tmp_path)}})
+    result = runner.invoke(app, ["lint", "report", "-w", "mywiki"])
+    assert result.exit_code == 0, result.output
+    assert "All clear" in result.output
+
+    from synthadoc.cli.lint import _parse_frontmatter
+    linked_text = (wiki_dir / "linked-page.md").read_text(encoding="utf-8")
+    assert _parse_frontmatter(linked_text).get("orphan") is False, \
+        "stale orphan: true must be cleared on All clear"
+
+
+def test_lint_report_self_link_does_not_rescue_from_orphan(tmp_path, monkeypatch):
+    """A page that links only to itself must still be reported as an orphan."""
+    import synthadoc.cli.install as install_mod
+    wiki_dir, root = _make_wiki(tmp_path, {
+        "index":   "# Index\n",
+        "lonely":  "---\nstatus: active\n---\n# Lonely\n\nSee also [[lonely]].\n",
+    })
+    monkeypatch.setattr(install_mod, "_read_registry",
+                        lambda: {"mywiki": {"path": str(tmp_path)}})
+    result = runner.invoke(app, ["lint", "report", "-w", "mywiki"])
+    assert result.exit_code == 0, result.output
+    assert "lonely" in result.output

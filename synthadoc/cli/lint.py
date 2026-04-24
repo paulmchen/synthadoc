@@ -108,11 +108,19 @@ def lint_report(
     ]
 
     # --- Orphans ---
-    orphans = find_orphan_slugs(page_texts)
+    # Strip frontmatter before scanning so CLI and server-side LintAgent use the
+    # same definition: only wikilinks in the page body count as real references.
+    page_bodies: dict[str, str] = {
+        slug: (text[m.end():] if (m := _FRONTMATTER_RE.match(text)) else text)
+        for slug, text in page_texts.items()
+    }
+    orphans = find_orphan_slugs(page_bodies)
 
     # --- Report ---
     has_issues = contradicted or orphans
     if not has_issues:
+        # Still sync frontmatter to clear stale orphan: true flags from previous runs.
+        _sync_orphan_frontmatter(wiki_dir, page_texts, set())
         typer.echo("All clear — no contradictions or orphan pages found.")
         return
 
