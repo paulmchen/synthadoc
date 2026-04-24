@@ -30,6 +30,9 @@ def test_install_creates_fresh_wiki(tmp_path, monkeypatch):
     import synthadoc.cli.install as install_mod
     monkeypatch.setattr(install_mod, "_REGISTRY", tmp_path / "wikis.json")
     monkeypatch.setattr(install_mod, "_find_free_port", lambda start=7070, max_scan=20: 7070)
+    # Prevent a real LLM call: _run_scaffold checks for API keys in the environment
+    # and will call the provider if one is set (e.g. GEMINI_API_KEY on a dev machine).
+    monkeypatch.setattr(install_mod, "_run_scaffold", lambda dest, domain: None)
 
     result = runner.invoke(app, ["install", "my-wiki", "--target", str(tmp_path)])
     assert result.exit_code == 0, result.output
@@ -107,6 +110,7 @@ def test_install_output_instructs_parent_dir(tmp_path, monkeypatch):
     import synthadoc.cli.install as install_mod
     monkeypatch.setattr(install_mod, "_REGISTRY", tmp_path / "wikis.json")
     monkeypatch.setattr(install_mod, "_find_free_port", lambda start=7070, max_scan=20: 7070)
+    monkeypatch.setattr(install_mod, "_run_scaffold", lambda dest, domain: None)
 
     result = runner.invoke(app, ["install", "my-research", "--target", str(tmp_path)])
     # No absolute paths in output
