@@ -16,6 +16,7 @@ dependencies = [
     "anthropic>=0.30",
     "openai>=1.40",
     "httpx>=0.27",
+    "certifi>=2024.0",
     "beautifulsoup4>=4.12",
     "pypdf>=4.0",
     "pdfminer.six>=20221105",

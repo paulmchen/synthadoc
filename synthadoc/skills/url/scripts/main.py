@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Paul Chen / axoviq.com
+import logging
 import tempfile
 import httpx
 from bs4 import BeautifulSoup
@@ -7,6 +8,7 @@ from urllib.parse import urlparse
 from synthadoc.skills.base import BaseSkill, ExtractedContent, SkillMeta
 from synthadoc.errors import DomainBlockedException
 
+logger = logging.getLogger(__name__)
 
 _HEADERS = {
     "User-Agent": (
@@ -19,25 +21,49 @@ _HEADERS = {
 # HTTP status codes that indicate bot/access blocking (not transient errors)
 _BLOCKED_STATUSES = {403, 401, 429}
 
+# macOS Python (python.org installer) doesn't use the system keychain.
+# certifi ships its own CA bundle that covers the vast majority of public sites.
+import ssl as _ssl
+try:
+    import certifi as _certifi
+    _SSL_CONTEXT = _ssl.create_default_context(cafile=_certifi.where())
+except ImportError:
+    _SSL_CONTEXT = _ssl.create_default_context()  # fall back to system certs
+
 
 class UrlSkill(BaseSkill):
     meta = SkillMeta(name="url", description="Fetch and extract text from web URLs",
                      extensions=["https://", "http://"])
 
+    def __init__(self, fetch_timeout: int = 30) -> None:
+        super().__init__()
+        self._fetch_timeout = fetch_timeout
+
     async def extract(self, source: str) -> ExtractedContent:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=30, headers=_HEADERS) as client:
-            resp = await client.get(source)
-            if resp.status_code in _BLOCKED_STATUSES:
-                domain = urlparse(source).hostname or source
-                raise DomainBlockedException(
-                    domain=domain, url=source, status_code=resp.status_code
-                )
-            resp.raise_for_status()
-            content_type = resp.headers.get("content-type", "")
-            is_pdf = "application/pdf" in content_type or source.lower().endswith(".pdf")
-            if is_pdf:
-                return self._extract_pdf_response(resp.content, source)
-            html = resp.text
+        try:
+            async with httpx.AsyncClient(
+                follow_redirects=True, timeout=self._fetch_timeout, headers=_HEADERS, verify=_SSL_CONTEXT
+            ) as client:
+                resp = await client.get(source)
+        except httpx.ConnectError as exc:
+            err_str = str(exc)
+            if "CERTIFICATE_VERIFY_FAILED" in err_str or "SSL" in err_str.upper():
+                # SSL errors won't resolve on retry — skip gracefully
+                logger.warning("SSL verification failed for %s — skipping", source)
+                return ExtractedContent(text="", source_path=source,
+                                        metadata={"url": source, "ssl_error": True})
+            raise  # non-SSL ConnectError — let orchestrator handle (retry with backoff)
+        if resp.status_code in _BLOCKED_STATUSES:
+            domain = urlparse(source).hostname or source
+            raise DomainBlockedException(
+                domain=domain, url=source, status_code=resp.status_code
+            )
+        resp.raise_for_status()
+        content_type = resp.headers.get("content-type", "")
+        is_pdf = "application/pdf" in content_type or source.lower().endswith(".pdf")
+        if is_pdf:
+            return self._extract_pdf_response(resp.content, source)
+        html = resp.text
 
         soup = BeautifulSoup(html, "html.parser")
         for tag in soup(["script", "style", "nav", "footer"]):
@@ -53,12 +79,10 @@ class UrlSkill(BaseSkill):
         an empty ExtractedContent is returned so the job completes as 'skipped'
         rather than dying after 3 retries.
         """
-        import logging
         import os
         import pypdf
 
         logging.getLogger("pypdf").setLevel(logging.ERROR)
-        logger = logging.getLogger(__name__)
 
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp.write(content)

@@ -270,6 +270,7 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
             cache=orch._cache, max_pages=orch._cfg.ingest.max_pages_per_ingest,
             wiki_root=orch._root,
             cache_version=orch._cfg.cache.version,
+            fetch_timeout=orch._cfg.ingest.fetch_timeout_seconds,
         )
         skill = SkillAgent()
         extracted = await skill.extract(req.source)

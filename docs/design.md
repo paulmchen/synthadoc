@@ -854,9 +854,10 @@ hard_gate_usd                     = 2.00
 auto_resolve_confidence_threshold = 0.85
 
 [ingest]
-max_pages_per_ingest = 15
-chunk_size           = 1500
-chunk_overlap        = 150
+max_pages_per_ingest  = 15
+chunk_size            = 1500
+chunk_overlap         = 150
+fetch_timeout_seconds = 30   # seconds to wait for a URL response before retrying
 
 [logs]
 level        = "INFO"
@@ -900,6 +901,7 @@ cron = "0 3 * * 0"   # every Sunday at 03:00
 | `ingest.max_pages_per_ingest` | int | `15` | Max pages one ingest may update |
 | `ingest.chunk_size` | int | `1500` | Text chunk size (characters) |
 | `ingest.chunk_overlap` | int | `150` | Overlap between chunks |
+| `ingest.fetch_timeout_seconds` | int | `30` | Seconds to wait for a URL response before retrying |
 | `logs.level` | str | `"INFO"` | Console log level |
 | `logs.max_file_mb` | int | `5` | Rotate `synthadoc.log` at this size |
 | `logs.backup_count` | int | `5` | Rotated files to keep |

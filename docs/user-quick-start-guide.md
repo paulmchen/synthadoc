@@ -976,6 +976,9 @@ port = 7071          # required if running more than one wiki simultaneously
 soft_warn_usd = 0.50
 hard_gate_usd = 2.00
 
+[ingest]
+fetch_timeout_seconds = 60   # increase if slow sites time out during web search
+
 [web_search]
 provider    = "tavily"
 max_results = 20

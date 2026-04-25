@@ -164,7 +164,8 @@ class IngestAgent:
     def __init__(self, provider: LLMProvider, store: WikiStorage, search: HybridSearch,
                  log_writer: LogWriter, audit_db: AuditDB, cache: CacheManager,
                  max_pages: int = 15, wiki_root: Optional[Path] = None,
-                 cache_version: str = CACHE_VERSION) -> None:
+                 cache_version: str = CACHE_VERSION,
+                 fetch_timeout: int = 30) -> None:
         self._provider = provider
         self._store = store
         self._search = search
@@ -174,7 +175,7 @@ class IngestAgent:
         self._max_pages = max_pages
         self._wiki_root = Path(wiki_root) if wiki_root is not None else None
         self._cache_version = cache_version
-        self._skill_agent = SkillAgent()
+        self._skill_agent = SkillAgent(skill_kwargs={"url": {"fetch_timeout": fetch_timeout}})
         self._purpose = self._load_purpose()
 
     async def _analyse(self, text: str, bust_cache: bool = False) -> dict:

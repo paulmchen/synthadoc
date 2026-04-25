@@ -84,9 +84,11 @@ class SkillAgent:
         self,
         wiki_root: Optional[Path] = None,
         extra_dirs: Optional[list[Path]] = None,
+        skill_kwargs: Optional[dict[str, dict]] = None,
     ) -> None:
         self._registry: dict[str, SkillMeta] = {}
         self._loaded: dict[str, type[BaseSkill]] = {}
+        self._skill_kwargs: dict[str, dict] = skill_kwargs or {}
         self._build_registry(wiki_root, extra_dirs or [])
 
     def _build_registry(self, wiki_root: Optional[Path], extra_dirs: list[Path]) -> None:
@@ -159,7 +161,8 @@ class SkillAgent:
             self._check_requires(meta)
             cls = _import_class(meta.skill_dir / meta.entry_script, meta.entry_class)
             self._loaded[name] = cls
-        instance = self._loaded[name]()
+        kwargs = self._skill_kwargs.get(name, {})
+        instance = self._loaded[name](**kwargs)
         instance.skill_dir = self._registry[name].skill_dir
         return instance
 

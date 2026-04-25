@@ -75,6 +75,7 @@ class IngestConfig:
     max_pages_per_ingest: int = 15
     chunk_size: int = 1500
     chunk_overlap: int = 150
+    fetch_timeout_seconds: int = 30
 
 
 @dataclass
@@ -255,6 +256,7 @@ def _raw_to_config(raw: dict, source_has_agents: bool) -> Config:
         max_pages_per_ingest=ig.get("max_pages_per_ingest", 15),
         chunk_size=ig.get("chunk_size", 1500),
         chunk_overlap=ig.get("chunk_overlap", 150),
+        fetch_timeout_seconds=ig.get("fetch_timeout_seconds", 30),
     )
 
     # --- query ---

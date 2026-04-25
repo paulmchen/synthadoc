@@ -102,6 +102,42 @@ async def test_url_skill_raises_domain_blocked_on_403():
 
 
 @pytest.mark.asyncio
+async def test_url_skill_ssl_error_skips_gracefully():
+    """SSL ConnectError returns empty ExtractedContent instead of raising."""
+    import respx, httpx
+    from synthadoc.skills.url.scripts.main import UrlSkill
+    with respx.mock:
+        respx.get("https://badssl.example/").mock(
+            side_effect=httpx.ConnectError("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed")
+        )
+        result = await UrlSkill().extract("https://badssl.example/")
+    assert result.text == ""
+    assert result.metadata.get("ssl_error") is True
+
+
+@pytest.mark.asyncio
+async def test_url_skill_connect_timeout_propagates():
+    """ConnectTimeout propagates so the orchestrator can retry with backoff."""
+    import respx, httpx
+    from synthadoc.skills.url.scripts.main import UrlSkill
+    with respx.mock:
+        respx.get("https://slow.example/").mock(side_effect=httpx.ConnectTimeout("timed out"))
+        with pytest.raises(httpx.ConnectTimeout):
+            await UrlSkill().extract("https://slow.example/")
+
+
+@pytest.mark.asyncio
+async def test_url_skill_read_error_propagates():
+    """ReadError propagates so the orchestrator can retry with backoff."""
+    import respx, httpx
+    from synthadoc.skills.url.scripts.main import UrlSkill
+    with respx.mock:
+        respx.get("https://drops.example/").mock(side_effect=httpx.ReadError("connection dropped"))
+        with pytest.raises(httpx.ReadError):
+            await UrlSkill().extract("https://drops.example/")
+
+
+@pytest.mark.asyncio
 async def test_url_skill_extracts_pdf_via_content_type():
     """URLs served with application/pdf content-type route to PDF extraction."""
     import respx, httpx
