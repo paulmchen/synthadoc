@@ -58,6 +58,28 @@ Use a second terminal for all commands below.
 
 ---
 
+## Free-tier API usage
+
+This demo makes roughly **10–15 LLM calls** across all four scenarios (ingest, query
+decomposition, web search, lint auto-resolve). Free-tier Gemini allows **20 requests per
+day** — enough for one full run-through, but not multiple sessions in the same day.
+
+**If you hit the daily limit** the server logs `Daily quota exhausted` and immediately
+fails pending jobs (no retry loop). You can either wait until midnight UTC for the quota
+to reset, or switch providers by editing `.synthadoc/config.toml`:
+
+```toml
+# Groq — free tier, generous daily budget
+default = { provider = "groq", model = "llama-3.3-70b-versatile" }
+
+# Paid Gemini key — no daily cap
+default = { provider = "gemini", model = "gemini-2.5-flash-lite" }
+```
+
+Restart `synthadoc serve` after changing the provider.
+
+---
+
 ## Step 2 — Scenario A: Clean merge
 
 Ingest the PDF about Turing's Enigma work. It adds new detail to the existing
@@ -140,10 +162,10 @@ synthadoc lint report -w history-of-computing
 **Your decision — three options:**
 
 1. **Link it** — open a related page (e.g. `artificial-intelligence-history.md`) and add
-   `\[\[quantum-computing\]\]` in a relevant sentence. The page is no longer an orphan.
+   `[[quantum-computing]]` in a relevant sentence. The page is no longer an orphan.
 
-2. **Add to index** — open `wiki/index.md` and add it under an appropriate category,
-   e.g. `## Platforms and AI`.
+2. **Leave it** — keep it as a standalone page until you ingest more quantum content
+   that naturally references it.
 
 3. **Delete it** — if the page quality is poor, delete `wiki/quantum-computing.md` and re-ingest
    with `--force` once you have a better source document.
