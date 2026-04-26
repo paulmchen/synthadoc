@@ -36,12 +36,7 @@ def get(wiki: str, path: str, timeout: int = 60, **params) -> dict:
     except httpx.ConnectError:
         _no_server(wiki)
     except httpx.ReadTimeout:
-        E.cli_error(
-            E.QUERY_TIMEOUT,
-            f"The query timed out waiting for the LLM to respond ({timeout} s).",
-            "The wiki server is still running. Try again — if the wiki is large, "
-            "reduce your question scope or pass --timeout 120 to allow more time.",
-        )
+        _timeout_error(path, timeout)
     except httpx.HTTPStatusError as e:
         E.cli_error(E.SRV_HTTP_ERROR,
                     f"Server returned {e.response.status_code}: {_detail(e.response)}")
@@ -56,11 +51,7 @@ def post(wiki: str, path: str, body: dict, timeout: int = 60) -> dict:
     except httpx.ConnectError:
         _no_server(wiki)
     except httpx.ReadTimeout:
-        E.cli_error(
-            E.QUERY_TIMEOUT,
-            f"The request timed out waiting for the server to respond ({timeout} s).",
-            "The wiki server is still running. Try again.",
-        )
+        _timeout_error(path, timeout)
     except httpx.HTTPStatusError as e:
         E.cli_error(E.SRV_HTTP_ERROR,
                     f"Server returned {e.response.status_code}: {_detail(e.response)}")
@@ -77,6 +68,29 @@ def delete(wiki: str, path: str) -> dict:
     except httpx.HTTPStatusError as e:
         E.cli_error(E.SRV_HTTP_ERROR,
                     f"Server returned {e.response.status_code}: {_detail(e.response)}")
+
+
+def _timeout_error(path: str, timeout: int) -> None:
+    if "/query" in path:
+        E.cli_error(
+            E.QUERY_TIMEOUT,
+            f"The query timed out waiting for the LLM to respond ({timeout} s).",
+            "The wiki server is still running. Try again — if the wiki is large, "
+            "reduce your question scope or pass --timeout 120 to allow more time.",
+        )
+    elif "/jobs" in path:
+        E.cli_error(
+            E.QUERY_TIMEOUT,
+            f"The server did not respond to '{path}' within {timeout} s.",
+            "The server may be busy processing a large file (e.g. a PDF). "
+            "Wait a moment and try again.",
+        )
+    else:
+        E.cli_error(
+            E.QUERY_TIMEOUT,
+            f"The request timed out waiting for the server to respond ({timeout} s).",
+            "The wiki server is still running. Try again.",
+        )
 
 
 def _detail(response: httpx.Response) -> str:

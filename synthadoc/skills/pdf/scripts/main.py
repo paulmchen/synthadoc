@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 Paul Chen / axoviq.com
+import asyncio
 import logging
 
 import pypdf
@@ -22,7 +23,11 @@ class PdfSkill(BaseSkill):
     meta = SkillMeta(name="pdf", description="Extract text from PDF files", extensions=[".pdf"])
 
     async def extract(self, source: str) -> ExtractedContent:
-        text, num_pages = self._extract_pypdf(source)
+        # pypdf and pdfminer are synchronous CPU-bound libraries; run them in a
+        # thread pool so they do not block the asyncio event loop and starve
+        # other coroutines (e.g. HTTP handlers, jobs list) while processing
+        # large PDFs.
+        text, num_pages = await asyncio.to_thread(self._extract_pypdf, source)
 
         # Low yield → likely CJK fonts that pypdf cannot decode; try pdfminer fallback
         if num_pages > 0 and len(text.strip()) < num_pages * _MIN_CHARS_PER_PAGE:
@@ -30,7 +35,7 @@ class PdfSkill(BaseSkill):
                 "pypdf yielded %d chars for %d page(s) in %s — trying pdfminer fallback",
                 len(text.strip()), num_pages, source,
             )
-            fallback = self._extract_pdfminer(source)
+            fallback = await asyncio.to_thread(self._extract_pdfminer, source)
             if len(fallback.strip()) > len(text.strip()):
                 text = fallback
 

@@ -62,7 +62,8 @@ class UrlSkill(BaseSkill):
         content_type = resp.headers.get("content-type", "")
         is_pdf = "application/pdf" in content_type or source.lower().endswith(".pdf")
         if is_pdf:
-            return self._extract_pdf_response(resp.content, source)
+            import asyncio
+            return await asyncio.to_thread(self._extract_pdf_response, resp.content, source)
         html = resp.text
 
         soup = BeautifulSoup(html, "html.parser")

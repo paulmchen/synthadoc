@@ -33,7 +33,7 @@ def jobs_list(
 ):
     """List all jobs for this wiki."""
     params = {"status": status} if status else {}
-    jobs = get(wiki, "/jobs", **params)
+    jobs = get(wiki, "/jobs", timeout=10, **params)
     if not jobs:
         typer.echo("No jobs found.")
         return
