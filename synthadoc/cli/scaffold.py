@@ -108,12 +108,8 @@ def scaffold_cmd(
 
       synthadoc scaffold -w ~/wikis/my-research
     """
-    if wiki is None:
-        E.cli_error(
-            E.WIKI_NOT_FOUND,
-            "--wiki / -w is required.",
-            "Provide a registered wiki name or a path: synthadoc scaffold -w <name-or-path>",
-        )
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
 
     dest = resolve_wiki_path(wiki)
 

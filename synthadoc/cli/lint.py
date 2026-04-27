@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import yaml
 from pathlib import Path
+from typing import Optional
 
 import typer
 
@@ -72,9 +73,11 @@ app.add_typer(lint_app, name="lint")
 def lint_cmd(
     scope: str = typer.Option("all", "--scope", help="all/contradictions/orphans/stale"),
     auto_resolve: bool = typer.Option(False, "--auto-resolve"),
-    wiki: str = typer.Option(".", "--wiki", "-w"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w"),
 ):
     """Enqueue a lint job. Requires synthadoc serve to be running."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     result = post(wiki, "/jobs/lint", {"scope": scope, "auto_resolve": auto_resolve})
     typer.echo(f"Lint enqueued -> job {result['job_id']}")
     typer.echo(f"Check status: synthadoc jobs status {result['job_id']} -w {wiki}")
@@ -83,14 +86,16 @@ def lint_cmd(
 
 @lint_app.command("report")
 def lint_report(
-    wiki: str = typer.Option(".", "--wiki", "-w"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w"),
 ):
     """Show current contradictions and orphan pages — no server required.
 
     Reads wiki files directly. Run after 'synthadoc lint' completes to see
     what needs your attention.
     """
+    from synthadoc.cli._wiki import resolve_wiki
     from synthadoc.cli.install import resolve_wiki_path
+    wiki = resolve_wiki(wiki)
 
     wiki_dir = resolve_wiki_path(wiki) / "wiki"
     if not wiki_dir.exists():

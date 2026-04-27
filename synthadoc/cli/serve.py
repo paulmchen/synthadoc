@@ -166,11 +166,14 @@ def serve_cmd(
     Run one server per wiki on its own port, then set the matching
     Server URL in the Obsidian plugin settings for each vault.
     """
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
+
     import uvicorn
     from synthadoc.config import load_config
     from synthadoc.core.logging_config import setup_logging
 
-    root = resolve_wiki_path(wiki) if wiki else Path(".")
+    root = resolve_wiki_path(wiki)
     cfg = load_config(project_config=root / ".synthadoc" / "config.toml")
     effective_port = port if port is not None else cfg.server.port
     provider = cfg.agents.resolve("ingest").provider

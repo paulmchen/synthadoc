@@ -18,6 +18,9 @@ def cache_cmd(
                                         help="Path to wiki root (defaults to current directory)"),
 ):
     """Manage the LLM response cache."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
+
     if action != "clear":
         typer.echo(f"Unknown action '{action}'. Available: clear", err=True)
         raise typer.Exit(1)
@@ -25,7 +28,7 @@ def cache_cmd(
     import asyncio
     from synthadoc.core.cache import CacheManager
 
-    root = resolve_wiki_path(wiki) if wiki else Path(".")
+    root = resolve_wiki_path(wiki)
     db_path = root / ".synthadoc" / "cache.db"
 
     if not db_path.exists():

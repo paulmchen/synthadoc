@@ -753,6 +753,24 @@ Registry stored at `~/.synthadoc/wikis.json`:
 }
 ```
 
+### Wiki context resolution
+
+Every CLI command resolves the target wiki through a priority chain rather than
+requiring `-w` on each invocation:
+
+1. **Explicit `-w <name>`** — highest priority, always wins
+2. **`SYNTHADOC_WIKI` environment variable** — shell-session scope
+3. **`~/.synthadoc/default_wiki`** — persistent default, set by `synthadoc use <name>`
+4. **Current directory fallback** — if `.synthadoc/config.toml` is present in CWD
+   (backward compat for users who `cd` into a wiki directory)
+5. **Error** — actionable message directing user to `synthadoc use`
+
+All hint and notification messages are written to **stderr**. Stdout carries only
+command results, keeping `synthadoc ... | jq` and other pipelines clean.
+
+The `synthadoc use` command manages the saved default. `synthadoc use` (no args)
+shows which wiki is active and from which source, equivalent to `kubectl config current-context`.
+
 ### Error codes
 
 Every user-facing error carries a stable code in the format `[ERR-<CATEGORY>-<NNN>]`. Codes are printed to stderr and embedded in job `error` fields, making them greppable in logs.

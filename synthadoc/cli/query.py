@@ -2,6 +2,8 @@
 # Copyright (C) 2026 Paul Chen / axoviq.com
 from __future__ import annotations
 
+from typing import Optional
+
 import typer
 
 from synthadoc.cli.main import app
@@ -35,10 +37,12 @@ def _format_gap_callout(suggested_searches: list[str], wiki: str) -> str:
 def query_cmd(
     question: str = typer.Argument(..., help="Question to ask the wiki"),
     save: bool = typer.Option(False, "--save", help="Save answer as wiki page"),
-    wiki: str = typer.Option(".", "--wiki", "-w"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w"),
     timeout: int = typer.Option(60, "--timeout", help="Seconds to wait for the LLM (default 60; increase for slow providers)"),
 ):
     """Query the wiki. Requires synthadoc serve to be running."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     result = get(wiki, "/query", timeout=timeout, q=question)
     typer.echo(result["answer"])
     if result.get("citations"):

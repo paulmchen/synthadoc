@@ -301,6 +301,27 @@ synthadoc serve -w history-of-computing --background
 
 The server binds to `http://127.0.0.1:7070` by default (port is set in `<wiki-root>/.synthadoc/config.toml`). Leave it running while you work — the Obsidian plugin, CLI ingest commands, and query commands all talk to it.
 
+### Skip typing -w on every command
+
+After installing a wiki, set it as your active context once:
+
+```bash
+synthadoc use my-wiki
+```
+
+All subsequent commands in any terminal run against `my-wiki` by default.
+Pass `-w <other>` to override for a single command.
+
+**Multiple wikis:** switch instantly with `synthadoc use <other-wiki>`.
+**See current active wiki:** `synthadoc use` (no arguments).
+**Shell prompt integration** — add to `~/.bashrc` or `~/.zshrc`:
+```bash
+export PS1='(${SYNTHADOC_WIKI:-no-wiki}) \$ '
+```
+
+**Automation / pipelines:** all wiki-context messages go to stderr; stdout is always
+machine-readable so `synthadoc jobs list | jq` works without filtering.
+
 To stop a background server:
 
 ```bash

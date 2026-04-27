@@ -75,7 +75,12 @@ def test_audit_history_json_flag(tmp_path):
 
     result = runner.invoke(app, ["audit", "history", "--wiki", str(wiki), "--json"])
     assert result.exit_code == 0
-    data = json.loads(result.output)
+    # CliRunner mixes stderr into output; strip the [wiki: ...] hint line before parsing JSON
+    json_output = "\n".join(
+        line for line in result.output.splitlines()
+        if not line.startswith("[wiki:")
+    ).strip()
+    data = json.loads(json_output)
     assert isinstance(data, list)
 
 

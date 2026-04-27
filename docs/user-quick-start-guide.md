@@ -83,6 +83,21 @@ If the server does not start, the most common cause is the port already being in
 Check `<wiki-root>/.synthadoc/config.toml` for `[server] port` and use `--port N` to
 override if needed.
 
+### Set your active wiki (do this once)
+
+```bash
+synthadoc use history-of-computing
+```
+
+From this point on, every command in this guide works **without** the
+`-w history-of-computing` suffix. The guide still shows `-w` in examples
+for clarity — but it is now optional.
+
+To see which wiki is active at any time:
+```bash
+synthadoc use
+```
+
 ---
 
 ## Step 2 — Install Dataview in Obsidian
@@ -995,3 +1010,67 @@ on_ingest_complete = "python git-auto-commit.py"
 Common reason to edit: each wiki needs its own port when running multiple wikis at the same time.
 
 Full config reference including all keys, defaults, and multi-wiki setup: [docs/design.md — Configuration](design.md#configuration).
+
+---
+
+## Appendix F — Build Your Own Wiki from scratch
+
+This appendix walks through creating a wiki for your own domain — no demo template.
+
+### 1. Install and scaffold
+
+```bash
+synthadoc install my-research --target ~/wikis
+synthadoc scaffold -w my-research
+synthadoc use my-research
+```
+
+`scaffold` prompts for a domain description and generates `wiki/index.md`,
+`wiki/purpose.md`, and `AGENTS.md` (the LLM's per-ingest context document).
+
+### 2. Start the server
+
+```bash
+synthadoc serve -w my-research
+```
+
+### 3. Ingest sources
+
+```bash
+synthadoc ingest path/to/document.pdf
+synthadoc ingest "https://example.com/article"
+synthadoc ingest "search for: <your domain topic>"
+synthadoc jobs list
+```
+
+### 4. Query
+
+```bash
+synthadoc query "What are the key themes?"
+```
+
+### 5. Lint
+
+```bash
+synthadoc lint report
+synthadoc lint run --auto-resolve
+```
+
+### 6. Open in Obsidian
+
+Open `~/wikis/my-research` as an Obsidian vault.
+
+### Working with multiple wikis
+
+```bash
+synthadoc use finance-wiki     # switch active wiki
+synthadoc status               # checks finance-wiki
+synthadoc status -w legal-wiki # one-off check without switching
+synthadoc use                  # confirm which wiki is active
+```
+
+| Method | Scope |
+|--------|-------|
+| `synthadoc use <name>` | Persistent across terminal sessions |
+| `export SYNTHADOC_WIKI=<name>` | Current shell session only |
+| `-w <name>` on command | Single command only |

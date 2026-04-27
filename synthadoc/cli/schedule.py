@@ -40,6 +40,8 @@ def add_cmd(
     wiki: Optional[str] = typer.Option(None, "--wiki", "-w"),
 ):
     """Register a recurring operation with the OS scheduler."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     from synthadoc.core.scheduler import Scheduler
     root = _resolve_and_validate(wiki)
     sched = Scheduler(wiki=wiki, wiki_root=str(root))
@@ -50,6 +52,8 @@ def add_cmd(
 @schedule_app.command("list")
 def list_cmd(wiki: Optional[str] = typer.Option(None, "--wiki", "-w")):
     """List all synthadoc-registered scheduled jobs."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     from synthadoc.core.scheduler import Scheduler
     root = _resolve_and_validate(wiki)
     sched = Scheduler(wiki=wiki, wiki_root=str(root))
@@ -63,6 +67,8 @@ def remove_cmd(
     wiki: Optional[str] = typer.Option(None, "--wiki", "-w"),
 ):
     """Remove a scheduled job by ID."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     from synthadoc.core.scheduler import Scheduler
     root = _resolve_and_validate(wiki)
     sched = Scheduler(wiki=wiki, wiki_root=str(root))
@@ -73,6 +79,8 @@ def remove_cmd(
 @schedule_app.command("apply")
 def apply_cmd(wiki: Optional[str] = typer.Option(None, "--wiki", "-w")):
     """Register all jobs declared in [schedule] in the project config."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     from synthadoc.config import load_config
     from synthadoc.core.scheduler import Scheduler, ScheduleEntry
     root = _resolve_and_validate(wiki)

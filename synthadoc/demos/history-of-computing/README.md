@@ -25,6 +25,19 @@ All commands use the wiki name (`-w history-of-computing`) — no paths needed.
 
 ---
 
+## Set your active wiki
+
+After installing, run this once so you don't need `-w history-of-computing` on every command:
+
+```bash
+synthadoc use history-of-computing
+```
+
+All commands below will work without the `-w` flag.
+To confirm which wiki is active: `synthadoc use`
+
+---
+
 ## Source documents (pre-built)
 
 Four source documents are included in `raw_sources/` — no generation step needed:

@@ -15,7 +15,7 @@ def test_ingest_batch_dir(tmp_path):
     (tmp_path / "skip.xyz").write_text("ignored")
     # ingest.py is a thin HTTP client — patch the post() helper it imports
     with patch("synthadoc.cli.ingest.post", return_value={"job_id": "job-1"}) as mock_post:
-        result = runner.invoke(app, ["ingest", "--batch", str(tmp_path)])
+        result = runner.invoke(app, ["ingest", "--batch", str(tmp_path), "-w", "."])
     assert result.exit_code == 0
     assert mock_post.call_count == 2    # a.md + b.pdf, not skip.xyz
 
@@ -27,7 +27,7 @@ def test_ingest_manifest_file(tmp_path):
     manifest = tmp_path / "sources.txt"
     manifest.write_text(str(doc) + "\n", encoding="utf-8")
     with patch("synthadoc.cli.ingest.post", return_value={"job_id": "job-1"}) as mock_post:
-        result = runner.invoke(app, ["ingest", "--file", str(manifest)])
+        result = runner.invoke(app, ["ingest", "--file", str(manifest), "-w", "."])
     assert result.exit_code == 0
     assert mock_post.call_count == 1
 
@@ -37,7 +37,7 @@ def test_ingest_manifest_urls_not_mangled(tmp_path):
     manifest = tmp_path / "sources.txt"
     manifest.write_text("https://en.wikipedia.org/wiki/Alan_Turing\n", encoding="utf-8")
     with patch("synthadoc.cli.ingest.post", return_value={"job_id": "job-1"}) as mock_post:
-        result = runner.invoke(app, ["ingest", "--file", str(manifest)])
+        result = runner.invoke(app, ["ingest", "--file", str(manifest), "-w", "."])
     assert result.exit_code == 0
     payload = mock_post.call_args[0][2]
     assert payload["source"] == "https://en.wikipedia.org/wiki/Alan_Turing"
@@ -53,7 +53,7 @@ def test_ingest_manifest_skips_blanks_and_comments(tmp_path):
         encoding="utf-8",
     )
     with patch("synthadoc.cli.ingest.post", return_value={"job_id": "job-1"}) as mock_post:
-        result = runner.invoke(app, ["ingest", "--file", str(manifest)])
+        result = runner.invoke(app, ["ingest", "--file", str(manifest), "-w", "."])
     assert result.exit_code == 0
     assert mock_post.call_count == 1   # only doc.md, not blanks or comments
 
@@ -63,7 +63,7 @@ def test_ingest_force_bypasses_dedup(tmp_path):
     source = tmp_path / "doc.md"
     source.write_text("# Doc", encoding="utf-8")
     with patch("synthadoc.cli.ingest.post", return_value={"job_id": "job-1"}) as mock_post:
-        result = runner.invoke(app, ["ingest", str(source), "--force"])
+        result = runner.invoke(app, ["ingest", str(source), "--force", "-w", "."])
     assert result.exit_code == 0
     # post(wiki, path, payload) — payload is the third positional arg
     payload = mock_post.call_args[0][2]
@@ -76,7 +76,7 @@ def test_jobs_list_filtered_by_dead_status(tmp_path):
     with patch("synthadoc.cli.jobs.get", return_value=[
         {"id": "a1", "status": "dead", "operation": "ingest", "created_at": None}
     ]):
-        result = runner.invoke(app, ["jobs", "list", "--status", "dead"])
+        result = runner.invoke(app, ["jobs", "list", "--status", "dead", "-w", "."])
     assert result.exit_code == 0
     assert "a1" in result.output
 
@@ -212,7 +212,7 @@ def test_jobs_status_shows_all_fields():
         "error": None,
         "result": {"pages_created": ["alan-turing"], "tokens_used": 500},
     }):
-        result = runner.invoke(app, ["jobs", "status", "job-123"])
+        result = runner.invoke(app, ["jobs", "status", "job-123", "-w", "."])
     assert result.exit_code == 0
     assert "job-123" in result.output
     assert "alan-turing" in result.output
@@ -228,7 +228,7 @@ def test_jobs_status_shows_error_field():
         "error": "Something went wrong",
         "result": {},
     }):
-        result = runner.invoke(app, ["jobs", "status", "job-999"])
+        result = runner.invoke(app, ["jobs", "status", "job-999", "-w", "."])
     assert result.exit_code == 0
     assert "Something went wrong" in result.output
 
