@@ -78,10 +78,8 @@ def resolve_wiki(explicit: Optional[str]) -> str:
 
     typer.echo(
         "Error: No wiki specified.\n"
-        "  Option 1 — Pass -w <name> on this command\n"
-        "  Option 2 — Run 'synthadoc use <name>' to save a session default\n"
-        f"  Option 3 — Set {ENV_VAR}=<name> in your shell profile\n"
-        "  Tip: after setting a default you won't need -w unless switching wikis.",
+        "  Pass -w <name> on this command, or run 'synthadoc use <name>' to\n"
+        "  save a default — you won't need -w again unless switching wikis.",
         err=True,
     )
     raise typer.Exit(1)
