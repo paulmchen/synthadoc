@@ -29,9 +29,11 @@ app.add_typer(jobs_app, name="jobs")
 @jobs_app.command("list")
 def jobs_list(
     status: Optional[str] = typer.Option(None, "--status", help="Filter by status"),
-    wiki: str = typer.Option(".", "--wiki", "-w"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w"),
 ):
     """List all jobs for this wiki."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     params = {"status": status} if status else {}
     jobs = get(wiki, "/jobs", timeout=10, **params)
     if not jobs:
@@ -44,9 +46,11 @@ def jobs_list(
 @jobs_app.command("status")
 def jobs_status(
     job_id: str = typer.Argument(..., help="Job ID returned by ingest/lint"),
-    wiki: str = typer.Option(".", "--wiki", "-w"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w"),
 ):
     """Get the status of a specific job by ID."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     j = get(wiki, f"/jobs/{job_id}")
     typer.echo(f"ID:        {j['id']}")
     typer.echo(f"Status:    {j['status']}")
@@ -68,9 +72,11 @@ def jobs_status(
 @jobs_app.command("retry")
 def jobs_retry(
     job_id: str = typer.Argument(...),
-    wiki: str = typer.Option(".", "--wiki", "-w"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w"),
 ):
     """Reset a job to pending and re-queue it. Works for failed, dead, or stuck in-progress jobs."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     import asyncio
     from synthadoc.core.orchestrator import Orchestrator
     from synthadoc.cli.install import resolve_wiki_path
@@ -87,19 +93,23 @@ def jobs_retry(
 @jobs_app.command("delete")
 def jobs_delete(
     job_id: str = typer.Argument(...),
-    wiki: str = typer.Option(".", "--wiki", "-w"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w"),
 ):
     """Delete a job."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     http_delete(wiki, f"/jobs/{job_id}")
     typer.echo(f"Deleted: {job_id}")
 
 
 @jobs_app.command("cancel")
 def jobs_cancel(
-    wiki: str = typer.Option(".", "--wiki", "-w"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ):
     """Cancel all pending jobs (marks them as skipped)."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     from synthadoc.cli._http import post as http_post
     if not yes:
         typer.confirm("Cancel all pending jobs?", abort=True)
@@ -110,9 +120,11 @@ def jobs_cancel(
 @jobs_app.command("purge")
 def jobs_purge(
     older_than: int = typer.Option(30, "--older-than"),
-    wiki: str = typer.Option(".", "--wiki", "-w"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w"),
 ):
     """Purge old completed/dead jobs."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     import asyncio
     from synthadoc.core.orchestrator import Orchestrator
     from synthadoc.cli.install import resolve_wiki_path

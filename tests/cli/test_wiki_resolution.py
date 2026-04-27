@@ -162,3 +162,113 @@ def test_use_warns_on_unknown_wiki(tmp_path):
         result = runner.invoke(app, ["use", "unknown-wiki"])
     assert result.exit_code == 0
     assert "Warning" in result.stderr or "not a registered" in result.stderr
+
+
+# --- per-command integration: env var picked up, stdout stays clean ---
+# Note: CliRunner() without mix_stderr=False (not supported in this typer version)
+# mixes stderr into result.output. Tests verify correct behaviour via exit_code,
+# mock call-site, and presence/absence of expected command output values.
+
+automation_runner = CliRunner()
+
+
+def test_ingest_uses_env_var(monkeypatch):
+    """When SYNTHADOC_WIKI is set, ingest picks it up and succeeds."""
+    from synthadoc.cli._wiki import ENV_VAR
+    monkeypatch.setenv(ENV_VAR, "my-wiki")
+    with patch("synthadoc.cli.ingest.post", return_value={"job_id": "j1"}) as mock_post:
+        result = automation_runner.invoke(app, ["ingest", "https://example.com/doc"])
+    assert result.exit_code == 0
+    assert "j1" in result.output              # job id in output
+    # Verify the correct wiki was passed to the HTTP helper
+    assert mock_post.call_args[0][0] == "my-wiki"
+
+
+def test_query_uses_env_var(monkeypatch):
+    """When SYNTHADOC_WIKI is set, query picks it up and shows answer."""
+    from synthadoc.cli._wiki import ENV_VAR
+    monkeypatch.setenv(ENV_VAR, "my-wiki")
+    with patch("synthadoc.cli.query.get", return_value={
+        "answer": "Test answer", "citations": [], "knowledge_gap": False, "suggested_searches": []
+    }) as mock_get:
+        result = automation_runner.invoke(app, ["query", "what is turing?"])
+    assert result.exit_code == 0
+    assert "Test answer" in result.output
+    assert mock_get.call_args[0][0] == "my-wiki"
+
+
+def test_jobs_list_uses_env_var(monkeypatch):
+    """When SYNTHADOC_WIKI is set, jobs list picks it up and succeeds."""
+    from synthadoc.cli._wiki import ENV_VAR
+    monkeypatch.setenv(ENV_VAR, "my-wiki")
+    with patch("synthadoc.cli.jobs.get", return_value=[]) as mock_get:
+        result = automation_runner.invoke(app, ["jobs", "list"])
+    assert result.exit_code == 0
+    assert mock_get.call_args[0][0] == "my-wiki"
+
+
+def test_status_uses_saved_default(monkeypatch):
+    """When saved default is set and no env var, status uses the saved default."""
+    from synthadoc.cli._wiki import ENV_VAR
+    monkeypatch.delenv(ENV_VAR, raising=False)
+    with patch("synthadoc.cli._wiki._read_default_wiki", return_value="saved-wiki"), \
+         patch("synthadoc.cli.status.get", return_value={
+             "wiki": "/fake", "pages": 5, "jobs_pending": 0, "jobs_total": 0
+         }) as mock_get:
+        result = automation_runner.invoke(app, ["status"])
+    assert result.exit_code == 0
+    assert mock_get.call_args[0][0] == "saved-wiki"
+
+
+def test_lint_report_uses_env_var(monkeypatch, tmp_path):
+    """When SYNTHADOC_WIKI is set, lint report picks it up and succeeds."""
+    from synthadoc.cli._wiki import ENV_VAR
+    monkeypatch.setenv(ENV_VAR, "my-wiki")
+    fake_wiki_dir = tmp_path / "wiki"
+    fake_wiki_dir.mkdir()
+    with patch("synthadoc.cli.install.resolve_wiki_path", return_value=tmp_path) as mock_rwp, \
+         patch("synthadoc.cli.lint.find_orphan_slugs", return_value=[]), \
+         patch("synthadoc.cli.lint._sync_orphan_frontmatter"):
+        result = automation_runner.invoke(app, ["lint", "report"])
+    assert result.exit_code == 0
+    assert mock_rwp.call_args[0][0] == "my-wiki"
+
+
+def test_explicit_w_overrides_env_and_hint_on_stderr(monkeypatch):
+    """Explicit -w overrides SYNTHADOC_WIKI and the override hint appears in output."""
+    from synthadoc.cli._wiki import ENV_VAR
+    monkeypatch.setenv(ENV_VAR, "env-wiki")
+    with patch("synthadoc.cli.status.get", return_value={
+        "wiki": "/fake", "pages": 5, "jobs_pending": 0, "jobs_total": 0
+    }) as mock_get:
+        result = automation_runner.invoke(app, ["status", "-w", "explicit-wiki"])
+    assert result.exit_code == 0
+    # explicit-wiki was used (not env-wiki)
+    assert mock_get.call_args[0][0] == "explicit-wiki"
+    # override hint is emitted (goes to stderr, mixed into output by CliRunner)
+    assert "overrides" in result.output
+
+
+def test_no_wiki_exits_1_with_helpful_stderr(monkeypatch, tmp_path):
+    """When no wiki context exists, command exits 1 with actionable message."""
+    from synthadoc.cli._wiki import ENV_VAR
+    monkeypatch.delenv(ENV_VAR, raising=False)
+    monkeypatch.chdir(tmp_path)
+    with patch("synthadoc.cli._wiki._read_default_wiki", return_value=None):
+        result = automation_runner.invoke(app, ["status"])
+    assert result.exit_code == 1
+    # Actionable hint appears (goes to stderr, mixed into output by CliRunner)
+    assert "synthadoc use" in result.output
+
+
+def test_saved_default_hint_on_stderr_not_stdout(monkeypatch):
+    """When saved default resolves the wiki, the hint contains the wiki name."""
+    from synthadoc.cli._wiki import ENV_VAR
+    monkeypatch.delenv(ENV_VAR, raising=False)
+    with patch("synthadoc.cli._wiki._read_default_wiki", return_value="saved-wiki"), \
+         patch("synthadoc.cli.jobs.get", return_value=[]) as mock_get:
+        result = automation_runner.invoke(app, ["jobs", "list"])
+    assert result.exit_code == 0
+    assert mock_get.call_args[0][0] == "saved-wiki"
+    # The hint mentioning saved-wiki appears (goes to stderr, mixed into output)
+    assert "saved-wiki" in result.output

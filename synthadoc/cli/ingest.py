@@ -45,13 +45,15 @@ def ingest_cmd(
     batch: bool = typer.Option(False, "--batch/--no-batch", help="Ingest directory"),
     file: Optional[str] = typer.Option(None, "--file", help="Manifest file of paths"),
     force: bool = typer.Option(False, "--force", help="Bypass dedup"),
-    wiki: str = typer.Option(".", "--wiki", "-w"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w"),
     analyse_only: bool = typer.Option(False, "--analyse-only",
         help="Run analysis pass only; print result without writing wiki pages."),
     max_results: Optional[int] = typer.Option(None, "--max-results", "-n",
         help="Max URLs to ingest from a web search (overrides config default of 20)."),
 ):
     """Enqueue a source for ingestion. Requires synthadoc serve to be running."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     sources = []
     if batch and source:
         from synthadoc import errors as E

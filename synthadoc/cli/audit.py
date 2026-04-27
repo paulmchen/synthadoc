@@ -17,9 +17,9 @@ audit_app = typer.Typer(name="audit", help="Inspect ingest history and costs.")
 console = Console()
 
 
-def _get_audit_db(wiki: Optional[str]):
+def _get_audit_db(wiki: str):
     from synthadoc.storage.log import AuditDB
-    root = resolve_wiki_path(wiki) if wiki else Path(".")
+    root = resolve_wiki_path(wiki)
     return AuditDB(root / ".synthadoc" / "audit.db")
 
 
@@ -30,6 +30,8 @@ def history_cmd(
     as_json: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ):
     """Show recent ingest history."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     db = _get_audit_db(wiki)
 
     async def _fetch():
@@ -64,6 +66,8 @@ def cost_cmd(
     as_json: bool = typer.Option(False, "--json"),
 ):
     """Show token and cost summary."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     db = _get_audit_db(wiki)
 
     async def _fetch():
@@ -93,6 +97,8 @@ def queries_cmd(
     as_json: bool = typer.Option(False, "--json", help="Output raw JSON"),
 ):
     """Show recent query history."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     db = _get_audit_db(wiki)
 
     async def _fetch():
@@ -127,6 +133,8 @@ def events_cmd(
     as_json: bool = typer.Option(False, "--json"),
 ):
     """Show raw audit events."""
+    from synthadoc.cli._wiki import resolve_wiki
+    wiki = resolve_wiki(wiki)
     db = _get_audit_db(wiki)
 
     async def _fetch():
