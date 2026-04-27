@@ -58,22 +58,17 @@ def resolve_wiki(explicit: Optional[str]) -> str:
         return explicit
 
     if env_wiki:
-        typer.echo(
-            f"[wiki: {env_wiki}]  source: {ENV_VAR} — pass -w <name> to override",
-            err=True,
-        )
+        typer.echo(f"[wiki: {env_wiki}]", err=True)
         return env_wiki
 
     if saved_wiki:
-        typer.echo(
-            f"[wiki: {saved_wiki}]  source: saved default — run 'synthadoc use' to switch wikis",
-            err=True,
-        )
+        typer.echo(f"[wiki: {saved_wiki}]", err=True)
         return saved_wiki
 
     # Backward compat: user is inside a wiki directory
     if Path(".synthadoc/config.toml").exists():
-        typer.echo("[wiki: . (current directory)]", err=True)
+        cwd_name = Path(".").resolve().name
+        typer.echo(f"[wiki: {cwd_name} (current directory)]", err=True)
         return "."
 
     typer.echo(

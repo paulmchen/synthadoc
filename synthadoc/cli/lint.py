@@ -80,8 +80,9 @@ def lint_cmd(
     wiki = resolve_wiki(wiki)
     result = post(wiki, "/jobs/lint", {"scope": scope, "auto_resolve": auto_resolve})
     typer.echo(f"Lint enqueued -> job {result['job_id']}")
-    typer.echo(f"Check status: synthadoc jobs status {result['job_id']} -w {wiki}")
-    typer.echo(f"View results: synthadoc lint report -w {wiki}")
+    w_flag = f" -w {wiki}" if wiki != "." else ""
+    typer.echo(f"Check status: synthadoc jobs status {result['job_id']}{w_flag}")
+    typer.echo(f"View results: synthadoc lint report{w_flag}")
 
 
 @lint_app.command("report")
