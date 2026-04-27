@@ -93,3 +93,72 @@ def test_write_strips_whitespace(tmp_path):
     with patch("synthadoc.cli._wiki.DEFAULT_WIKI_FILE", tmp_path / "default_wiki"):
         _write("  my-wiki  ")
         assert _read() == "my-wiki"
+
+
+# --- synthadoc use command ---
+from typer.testing import CliRunner
+from synthadoc.cli.main import app
+
+runner = CliRunner()
+
+
+def test_use_saves_default(tmp_path):
+    """'synthadoc use my-wiki' writes the wiki name as saved default."""
+    with patch("synthadoc.cli.main._write_default_wiki") as mock_write, \
+         patch("synthadoc.cli.main._resolve_wiki_path",
+               return_value=tmp_path) as _:
+        (tmp_path / ".synthadoc").mkdir()
+        (tmp_path / ".synthadoc" / "config.toml").write_text("")
+        result = runner.invoke(app, ["use", "my-wiki"])
+    assert result.exit_code == 0
+    assert "my-wiki" in result.output
+    mock_write.assert_called_once_with("my-wiki")
+
+
+def test_use_no_arg_shows_env_source(monkeypatch):
+    """'synthadoc use' shows active wiki and source when env var is set."""
+    from synthadoc.cli._wiki import ENV_VAR
+    monkeypatch.setenv(ENV_VAR, "env-wiki")
+    result = runner.invoke(app, ["use"])
+    assert result.exit_code == 0
+    assert "env-wiki" in result.output
+    assert ENV_VAR in result.output
+
+
+def test_use_no_arg_shows_saved_source(monkeypatch):
+    """'synthadoc use' shows saved default when env var is absent."""
+    from synthadoc.cli._wiki import ENV_VAR
+    monkeypatch.delenv(ENV_VAR, raising=False)
+    with patch("synthadoc.cli.main._read_default_wiki", return_value="saved-wiki"):
+        result = runner.invoke(app, ["use"])
+    assert result.exit_code == 0
+    assert "saved-wiki" in result.output
+    assert "saved default" in result.output
+
+
+def test_use_no_arg_shows_no_default_message(monkeypatch):
+    """'synthadoc use' gives actionable message when nothing is set."""
+    from synthadoc.cli._wiki import ENV_VAR
+    monkeypatch.delenv(ENV_VAR, raising=False)
+    with patch("synthadoc.cli.main._read_default_wiki", return_value=None):
+        result = runner.invoke(app, ["use"])
+    assert result.exit_code == 0
+    assert "synthadoc use <name>" in result.output
+
+
+def test_use_clear_removes_default():
+    """'synthadoc use --clear' calls _write_default_wiki(None)."""
+    with patch("synthadoc.cli.main._write_default_wiki") as mock_write:
+        result = runner.invoke(app, ["use", "--clear"])
+    assert result.exit_code == 0
+    mock_write.assert_called_once_with(None)
+
+
+def test_use_warns_on_unknown_wiki(tmp_path):
+    """'synthadoc use unknown' warns but still saves (user may not have server running)."""
+    with patch("synthadoc.cli.main._write_default_wiki"), \
+         patch("synthadoc.cli.main._resolve_wiki_path", return_value=tmp_path):
+        # tmp_path has no .synthadoc/config.toml → unknown wiki
+        result = runner.invoke(app, ["use", "unknown-wiki"])
+    assert result.exit_code == 0
+    assert "Warning" in result.stderr or "not a registered" in result.stderr
