@@ -831,7 +831,7 @@ otlp_endpoint = "http://localhost:4317"   # used when exporter = "otlp"
 
 ### Provider switching
 
-All six supported providers (`anthropic`, `openai`, `gemini`, `groq`, `minimax`, `ollama`) share the same config key. Gemini, Groq, and MiniMax use OpenAI-compatible endpoints internally, so no custom provider class is needed — just set the provider name and supply the corresponding API key:
+All seven supported providers (`anthropic`, `openai`, `gemini`, `groq`, `minimax`, `deepseek`, `ollama`) share the same config key. Gemini, Groq, MiniMax, and DeepSeek use OpenAI-compatible endpoints internally, so no custom provider class is needed — just set the provider name and supply the corresponding API key:
 
 ```toml
 # Switch from Claude to Gemini Flash (free tier available)
@@ -848,6 +848,7 @@ Required environment variables per provider:
 | `gemini` | `GEMINI_API_KEY` | **Yes** — 15 RPM / 1M tokens/day on Flash | Yes |
 | `groq` | `GROQ_API_KEY` | **Yes** — generous free tier on Llama/Mixtral models | No |
 | `minimax` | `MINIMAX_API_KEY` | No (pay-per-token) | Yes (M2.5 / M2.7 natively multimodal) |
+| `deepseek` | `DEEPSEEK_API_KEY` | No (pay-per-token, very cheap) | No (text-only) |
 | `ollama` | _(none)_ | **Yes** — fully local | Model-dependent |
 
 ### Per-project config — `<wiki-root>/.synthadoc/config.toml`
@@ -907,7 +908,7 @@ cron = "0 3 * * 0"   # every Sunday at 03:00
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `agents.default.provider` | str | `"gemini"` | LLM provider: `anthropic`, `openai`, `gemini`, `groq`, `minimax`, `ollama` |
+| `agents.default.provider` | str | `"gemini"` | LLM provider: `anthropic`, `openai`, `gemini`, `groq`, `minimax`, `deepseek`, `ollama` |
 | `agents.default.model` | str | `"gemini-2.5-flash"` | Model ID |
 | `agents.llm_timeout_seconds` | int | `0` | Per-call LLM timeout in seconds; `0` = no limit. Set to e.g. `90` when using reasoning models (MiniMax-M2.5, DeepSeek-R1) that can exceed their internal generation budget silently. Restart required. |
 | `server.port` | int | `7070` | HTTP listen port |
@@ -1338,7 +1339,7 @@ class SlackExportSkill(BaseSkill):
 
 ### Writing a provider
 
-Built-in providers: `anthropic`, `openai`, `gemini`, `groq`, `minimax`, `ollama`. For any provider that exposes an OpenAI-compatible API, no custom class is needed — the built-in `openai` provider with a custom `base_url` is sufficient.
+Built-in providers: `anthropic`, `openai`, `gemini`, `groq`, `minimax`, `deepseek`, `ollama`. For any provider that exposes an OpenAI-compatible API, no custom class is needed — the built-in `openai` provider with a custom `base_url` is sufficient.
 
 For a fully proprietary API, subclass `LLMProvider`:
 
@@ -1394,7 +1395,7 @@ echo "Event $event fired on wiki $wiki" | mail -s "Synthadoc notification" you@e
 - **Folder-based skill system** — each skill is a self-contained folder with a `SKILL.md` manifest; intent-based dispatch alongside extension matching; drop a folder in `skills/` to add a new format without touching core code
 - **2 access surfaces** — CLI (thin HTTP client), HTTP REST API
 - **Obsidian plugin** — ingest (file picker, URL, all sources, web search), query modal, lint report, jobs list — all from the command palette; ribbon shows engine health + page count
-- **6 LLM providers** — Anthropic, OpenAI, Gemini (free tier), Groq (free tier), MiniMax (paid, cheapest text), Ollama (local); switch with one config line
+- **7 LLM providers** — Anthropic, OpenAI, Gemini (free tier), Groq (free tier), MiniMax (paid, multimodal), DeepSeek (paid, very cheap text-only), Ollama (local); switch with one config line
 - **Two-step ingest** — `_analyse()` caches entity extraction + summary; decision prompt uses summary instead of full text; reduces cost on large documents
 - **purpose.md scope filtering** — define what belongs in your wiki; the LLM skips out-of-scope sources cleanly
 - **overview.md auto-summary** — 2-paragraph wiki overview regenerated automatically after every ingest
@@ -1432,4 +1433,5 @@ echo "Event $event fired on wiki $wiki" | mail -s "Synthadoc notification" you@e
 - **MiniMax reasoning-model fixes** — `OpenAIProvider` now handles three failure modes of reasoning models (e.g. MiniMax-M2.5): (1) `choices=null` response converted from silent `TypeError` to a descriptive `RuntimeError` with error code logged; (2) `content=null` with prose answer in `reasoning_content` — think-tag stripping then full-text fallback so query synthesis returns a real answer; (3) `APITimeoutError` caught, logged with the config key to set, then re-raised
 - **Configurable LLM call timeout (`agents.llm_timeout_seconds`)** — new `[agents]` key (default `0` = no limit); passed as `timeout` to every OpenAI-compatible `create()` call; `APITimeoutError` logs an actionable message naming the exact config key; config.toml template ships the key commented out with a 5-line explanation of when to enable it
 - **`parse_json_string_array` utility** — extracted shared fence-strip + JSON-parse + filter logic from `QueryAgent.decompose()` and `SearchDecomposeAgent.decompose()` into `synthadoc/agents/_utils.py`; 16 unit tests; LLM call failures and JSON-parse failures now log separate, distinct messages
+- **DeepSeek provider** — `deepseek` added as an eighth provider; routes through `OpenAIProvider` with `base_url="https://api.deepseek.com/v1"` and `DEEPSEEK_API_KEY`; vision disabled (`_NO_VISION_HOSTS`); DeepSeek-R1 `<think>` tags in the `content` field are stripped by the existing regex; config.toml template ships a commented-out example for `deepseek-chat`
 - **v0.2.0 gap fixes** — Ollama `eval_count` mapped to `output_tokens` (was always 0); `_SLUG_BLACKLIST` moved to module-level `frozenset`; synthetic URL fields in ingest_agent commented; four test-coverage gaps closed (no-text guard, orphan flag inversion, `/analyse` endpoint, hybrid-search partial-miss fallback)

@@ -63,8 +63,16 @@ def make_provider(agent_name: str, config: Config) -> LLMProvider:
             base_url="https://api.minimax.io/v1",
         )
         return OpenAIProvider(api_key=key, config=cfg_with_url, timeout=timeout)
+    if name == "deepseek":
+        from synthadoc.providers.openai import OpenAIProvider
+        key = _require_env("DEEPSEEK_API_KEY", "DeepSeek", "https://platform.deepseek.com/api_keys")
+        cfg_with_url = AgentConfig(
+            provider="deepseek", model=agent_cfg.model,
+            base_url="https://api.deepseek.com/v1",
+        )
+        return OpenAIProvider(api_key=key, config=cfg_with_url, timeout=timeout)
     if name == "ollama":
         from synthadoc.providers.ollama import OllamaProvider
         return OllamaProvider(config=agent_cfg)
     E.cli_error(E.CFG_UNKNOWN_PROVIDER, f"Unknown provider: {name!r}",
-                "Supported providers: anthropic, openai, gemini, groq, minimax, ollama")
+                "Supported providers: anthropic, openai, gemini, groq, minimax, deepseek, ollama")

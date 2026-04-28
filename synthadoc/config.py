@@ -17,7 +17,7 @@ from typing import Optional
 # Known providers
 # ---------------------------------------------------------------------------
 
-KNOWN_PROVIDERS = {"anthropic", "openai", "ollama", "gemini", "groq", "minimax"}
+KNOWN_PROVIDERS = {"anthropic", "openai", "ollama", "gemini", "groq", "minimax", "deepseek"}
 
 
 # ---------------------------------------------------------------------------

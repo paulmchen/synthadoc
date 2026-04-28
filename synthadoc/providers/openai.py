@@ -13,7 +13,7 @@ from synthadoc.providers.base import CompletionResponse, LLMProvider, Message
 logger = logging.getLogger(__name__)
 
 # Providers whose chat endpoint does not support image inputs
-_NO_VISION_HOSTS = ("groq.com",)
+_NO_VISION_HOSTS = ("groq.com", "api.deepseek.com")
 
 # Retry delays (seconds) after an HTTP 429 rate-limit response.
 #
