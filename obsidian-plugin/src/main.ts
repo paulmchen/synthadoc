@@ -504,10 +504,12 @@ class WebSearchModal extends Modal {
         const btn = btnRow.createEl("button", { text: "Search" });
 
         const statusEl = contentEl.createEl("p");
-        statusEl.style.cssText = "font-size:12px;min-height:20px;margin-bottom:4px";
+        statusEl.style.cssText = "font-size:12px;min-height:20px;margin-bottom:4px;-webkit-user-select:text;user-select:text";
 
         const pagesEl = contentEl.createEl("div");
+        pagesEl.style.cssText = "-webkit-user-select:text;user-select:text";
         const errorsEl = contentEl.createEl("div");
+        errorsEl.style.cssText = "-webkit-user-select:text;user-select:text";
 
         const submit = async () => {
             const topic = input.value.trim();
@@ -997,7 +999,7 @@ class QueryModal extends Modal {
         const btn = row.createEl("button", { text: "Ask" });
 
         const out = contentEl.createEl("div");
-        out.style.cssText = "max-height:60vh;overflow-y:auto;padding:4px 0";
+        out.style.cssText = "max-height:60vh;overflow-y:auto;padding:4px 0;-webkit-user-select:text;user-select:text";
 
         // Handle internal [[wikilinks]] rendered by MarkdownRenderer inside the modal.
         // Obsidian's normal link handler doesn't fire inside modals, so we intercept
