@@ -2,9 +2,9 @@
 # Copyright (C) 2026 William Johnason / axoviq.com
 from __future__ import annotations
 
-import json
 import logging
 
+from synthadoc.agents._utils import parse_json_string_array
 from synthadoc.providers.base import LLMProvider, Message
 
 logger = logging.getLogger(__name__)
@@ -43,28 +43,24 @@ class SearchDecomposeAgent:
                 ))],
                 temperature=0.0,
             )
-            text = resp.text.strip()
-            if text.startswith("```"):
-                lines = text.splitlines()
-                text = "\n".join(
-                    l for l in lines if not l.strip().startswith("```")
-                ).strip()
-            parts = json.loads(text)
-            if isinstance(parts, list) and parts:
-                filtered = [str(q) for q in parts[:_MAX_SUB_QUERIES] if str(q).strip()]
-                if filtered:
-                    if len(filtered) == 1:
-                        logger.info("web search is simple — no decomposition (1 query)")
-                    else:
-                        logger.info(
-                            "web search decomposed into %d queries: %s",
-                            len(filtered),
-                            " | ".join(f'"{q}"' for q in filtered),
-                        )
-                    return filtered
         except Exception as exc:
             logger.warning(
                 "search decompose failed (%s: %s) — falling back to original query",
                 type(exc).__name__, exc,
             )
+            return [query]
+        filtered = parse_json_string_array(resp.text, _MAX_SUB_QUERIES)
+        if filtered:
+            if len(filtered) == 1:
+                logger.info("web search is simple — no decomposition (1 query)")
+            else:
+                logger.info(
+                    "web search decomposed into %d queries: %s",
+                    len(filtered),
+                    " | ".join(f'"{q}"' for q in filtered),
+                )
+            return filtered
+        logger.warning(
+            "search decompose failed (invalid JSON array) — falling back to original query"
+        )
         return [query]

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from dataclasses import dataclass, field
 
+from synthadoc.agents._utils import parse_json_string_array
 from synthadoc.agents.search_decompose_agent import SearchDecomposeAgent
 from synthadoc.providers.base import LLMProvider, Message
 from synthadoc.storage.search import HybridSearch
@@ -71,32 +71,26 @@ class QueryAgent:
                     ))],
                 temperature=0.0,
             )
-            text = resp.text.strip()
-            if text.startswith("```"):
-                # Strip markdown code fences that some models add despite instructions
-                lines = text.splitlines()
-                text = "\n".join(
-                    l for l in lines
-                    if not l.strip().startswith("```")
-                ).strip()
-            parts = json.loads(text)
-            if isinstance(parts, list) and parts:
-                filtered = [str(q) for q in parts[:_MAX_SUB_QUESTIONS] if str(q).strip()]
-                if filtered:
-                    if len(filtered) == 1:
-                        logger.info("query is simple — no decomposition (1 sub-question)")
-                    else:
-                        logger.info(
-                            "query decomposed into %d sub-question(s): %s",
-                            len(filtered),
-                            " | ".join(f'"{q}"' for q in filtered),
-                        )
-                    return filtered
         except Exception as exc:
             logger.warning(
                 "decompose failed (%s: %s) — falling back to original question",
                 type(exc).__name__, exc,
             )
+            return [question]
+        filtered = parse_json_string_array(resp.text, _MAX_SUB_QUESTIONS)
+        if filtered:
+            if len(filtered) == 1:
+                logger.info("query is simple — no decomposition (1 sub-question)")
+            else:
+                logger.info(
+                    "query decomposed into %d sub-question(s): %s",
+                    len(filtered),
+                    " | ".join(f'"{q}"' for q in filtered),
+                )
+            return filtered
+        logger.warning(
+            "decompose: response was not a valid JSON array — falling back to original question"
+        )
         return [question]
 
     async def query(self, question: str) -> QueryResult:
