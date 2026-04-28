@@ -132,3 +132,23 @@ async def test_lint_skip_slugs_not_counted_as_contradictions(tmp_wiki):
     agent = LintAgent(provider=AsyncMock(), store=store, log_writer=log)
     report = await agent.lint(scope="contradictions")
     assert report.contradictions_found == 0
+
+
+@pytest.mark.asyncio
+async def test_orphan_flag_cleared_when_inbound_link_added(tmp_wiki):
+    """Page with orphan=True transitions to orphan=False once another page links to it."""
+    store = WikiStorage(tmp_wiki / "wiki")
+    store.write_page("page-a", WikiPage(title="Page A", tags=[],
+        content="Content of page A.", status="active", confidence="high",
+        sources=[], orphan=True))
+    store.write_page("page-b", WikiPage(title="Page B", tags=[],
+        content="Links to [[page-a]] here.", status="active", confidence="high",
+        sources=[]))
+
+    assert store.read_page("page-a").orphan is True
+
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    agent = LintAgent(provider=AsyncMock(), store=store, log_writer=log)
+    await agent.lint(scope="orphans")
+
+    assert store.read_page("page-a").orphan is False

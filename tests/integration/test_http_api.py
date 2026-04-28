@@ -329,3 +329,48 @@ def test_list_jobs_includes_progress_field(tmp_wiki):
     assert len(jobs) >= 1
     for job in jobs:
         assert "progress" in job
+
+
+def test_analyse_endpoint_returns_structure(tmp_wiki):
+    """POST /analyse returns source and analysis keys."""
+    from synthadoc.integration.http_server import create_app
+    from synthadoc.skills.base import ExtractedContent
+
+    app = create_app(wiki_root=tmp_wiki)
+    mock_extracted = ExtractedContent(text="AI is important.", source_path="test.md", metadata={})
+    mock_analysis = {"entities": ["AI"], "tags": ["ai"], "summary": "AI summary.", "relevant": True}
+
+    with patch("synthadoc.agents.skill_agent.SkillAgent.extract",
+               new=AsyncMock(return_value=mock_extracted)), \
+         patch("synthadoc.agents.ingest_agent.IngestAgent._analyse",
+               new=AsyncMock(return_value=mock_analysis)), \
+         patch("synthadoc.providers.make_provider", return_value=AsyncMock()):
+        with TestClient(app) as client:
+            resp = client.post("/analyse", json={"source": "test.md"})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["source"] == "test.md"
+    assert "analysis" in data
+    assert "entities" in data["analysis"]
+
+
+def test_analyse_endpoint_empty_wiki(tmp_wiki):
+    """POST /analyse works when the wiki has no pages."""
+    from synthadoc.integration.http_server import create_app
+    from synthadoc.skills.base import ExtractedContent
+
+    app = create_app(wiki_root=tmp_wiki)
+    mock_extracted = ExtractedContent(text="", source_path="empty.md", metadata={})
+    mock_analysis = {"entities": [], "tags": [], "summary": "", "relevant": False}
+
+    with patch("synthadoc.agents.skill_agent.SkillAgent.extract",
+               new=AsyncMock(return_value=mock_extracted)), \
+         patch("synthadoc.agents.ingest_agent.IngestAgent._analyse",
+               new=AsyncMock(return_value=mock_analysis)), \
+         patch("synthadoc.providers.make_provider", return_value=AsyncMock()):
+        with TestClient(app) as client:
+            resp = client.post("/analyse", json={"source": "empty.md"})
+
+    assert resp.status_code == 200
+    assert resp.json()["source"] == "empty.md"

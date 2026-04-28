@@ -377,3 +377,34 @@ def test_get_embed_model_raises_on_missing_fastembed(tmp_wiki):
             sys.modules.pop("fastembed", None)
         else:
             sys.modules["fastembed"] = orig
+
+
+@pytest.mark.asyncio
+async def test_hybrid_search_partial_embeddings(tmp_wiki):
+    """Candidates missing embeddings get score 0.0 — not an error — and rank below those with embeddings."""
+    from synthadoc.storage.search import HybridSearch, VectorStore
+    from synthadoc.config import SearchConfig
+
+    store = WikiStorage(tmp_wiki / "wiki")
+    # Both pages are relevant to the query so they both appear as BM25 candidates
+    _write_page(store, "with-emb", "transformers attention mechanisms deep learning neural")
+    _write_page(store, "no-emb",   "transformer attention networks vision model")
+    _write_page(store, "extra",    "something completely unrelated content here about cooking")
+
+    cfg = SearchConfig(vector=True, vector_top_candidates=10)
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db", search_cfg=cfg)
+    with patch.dict("sys.modules", {"fastembed": MagicMock()}):
+        await search.init_vector()
+
+    vs = VectorStore(tmp_wiki / ".synthadoc" / "embeddings.db")
+    await vs.upsert("with-emb", [1.0, 0.0, 0.0, 0.0])
+    # "no-emb" intentionally has no embedding stored
+
+    with patch.object(search, "_embed_text", return_value=[1.0, 0.0, 0.0, 0.0]):
+        results = await search.hybrid_search(["attention", "transformer"], top_n=3)
+
+    slugs = [r.slug for r in results]
+    assert "with-emb" in slugs, "page with embedding must appear in results"
+    assert "no-emb" in slugs, "page without embedding must not be dropped — fallback score 0.0"
+    assert slugs.index("with-emb") < slugs.index("no-emb"), \
+        "page with matching embedding must rank above page with fallback score 0.0"

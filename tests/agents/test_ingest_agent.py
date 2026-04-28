@@ -828,3 +828,30 @@ async def test_ingest_slug_collision_appends_as_update(tmp_wiki):
     assert "alan-turing" not in result.pages_created
     page = store.read_page("alan-turing")
     assert "Original content." in page.content
+
+
+@pytest.mark.asyncio
+async def test_no_extractable_text_produces_skip(tmp_wiki, mock_provider):
+    """Empty extracted text on a create action skips with skip_reason='no extractable text'."""
+    from unittest.mock import patch
+    from synthadoc.skills.base import ExtractedContent
+
+    store = WikiStorage(tmp_wiki / "wiki")
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    audit = AuditDB(tmp_wiki / ".synthadoc" / "audit.db")
+    await audit.init()
+    cache = CacheManager(tmp_wiki / ".synthadoc" / "cache.db")
+    await cache.init()
+
+    source = tmp_wiki / "raw_sources" / "blank.md"
+    source.write_text("some bytes so it passes the size check", encoding="utf-8")
+
+    agent = IngestAgent(provider=mock_provider, store=store, search=search,
+                        log_writer=log, audit_db=audit, cache=cache, max_pages=15)
+    fake_extracted = ExtractedContent(text="", source_path=str(source), metadata={})
+    with patch.object(agent._skill_agent, "extract", AsyncMock(return_value=fake_extracted)):
+        result = await agent.ingest(str(source))
+
+    assert result.skipped is True
+    assert result.skip_reason == "no extractable text"
