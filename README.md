@@ -367,11 +367,11 @@ Unlike the demo (which ships with pre-built pages), your own wiki starts from a 
 
 ```bash
 synthadoc install market-condition-canada --target ~/wikis --domain "Market conditions and trends in Canada"
-synthadoc serve -w market-condition-canada
 synthadoc use market-condition-canada
+synthadoc serve
 ```
 
-Set the wiki as your active context once — all subsequent commands skip the `-w` flag.
+Set the wiki as your active context right after install — all subsequent commands skip the `-w` flag.
 
 `--domain` is a free-text description of the subject area — the LLM uses it to generate four domain-aware starter files via scaffold:
 
@@ -390,9 +390,9 @@ Open the wiki folder in Obsidian as a new vault and install both the Dataview an
 **1. Seed with web searches** — pull in real content for the topics you care about:
 
 ```bash
-synthadoc ingest "search for: Economy, employment and labour market analysis in Toronto GTA" -w market-condition-canada
-synthadoc ingest "search for: Bank of Canada interest rate outlook 2025" -w market-condition-canada
-synthadoc jobs list -w market-condition-canada   # watch progress
+synthadoc ingest "search for: Economy, employment and labour market analysis in Toronto GTA"
+synthadoc ingest "search for: Bank of Canada interest rate outlook 2025"
+synthadoc jobs list   # watch progress
 ```
 
 Each search fans out into up to 20 parallel URL ingest jobs. Query decomposition and web search decomposition (see below) make broad topics yield much richer results than a single search.
@@ -400,22 +400,22 @@ Each search fans out into up to 20 parallel URL ingest jobs. Query decomposition
 **2. Lint and query** — check for contradictions and verify the wiki answers your questions:
 
 ```bash
-synthadoc lint run -w market-condition-canada
-synthadoc lint report -w market-condition-canada
-synthadoc query "What are the current employment trends in the Toronto GTA?" -w market-condition-canada
+synthadoc lint run
+synthadoc lint report
+synthadoc query "What are the current employment trends in the Toronto GTA?"
 ```
 
 **3. Re-run scaffold** — after pages accumulate, scaffold regenerates a richer index that reflects actual content. Pages already linked in `index.md` are never overwritten:
 
 ```bash
-synthadoc scaffold -w market-condition-canada
+synthadoc scaffold
 ```
 
 **4. Schedule recurring updates** — keep the wiki fresh automatically:
 
 ```bash
-synthadoc schedule add --op "ingest" --source "search for: Toronto GTA economic indicators latest" --cron "0 2 * * *" -w market-condition-canada
-synthadoc schedule add --op "scaffold" --cron "0 4 * * 0" -w market-condition-canada
+synthadoc schedule add --op "ingest" --source "search for: Toronto GTA economic indicators latest" --cron "0 2 * * *"
+synthadoc schedule add --op "scaffold" --cron "0 4 * * 0"
 ```
 
 ### How decomposition works
