@@ -39,6 +39,7 @@ class AgentsConfig:
     query: Optional[AgentConfig] = None
     lint: Optional[AgentConfig] = None
     skill: Optional[AgentConfig] = None
+    llm_timeout_seconds: int = 0  # 0 = no limit (provider default)
 
     def resolve(self, agent_name: str) -> AgentConfig:
         """Return the effective AgentConfig for *agent_name*.
@@ -228,7 +229,10 @@ def _raw_to_config(raw: dict, source_has_agents: bool) -> Config:
     default_agent = _parse_agent(a["default"])
     _validate_provider(default_agent)
 
-    agents = AgentsConfig(default=default_agent)
+    agents = AgentsConfig(
+        default=default_agent,
+        llm_timeout_seconds=int(a.get("llm_timeout_seconds", 0)),
+    )
 
     for name in ("ingest", "query", "lint", "skill"):
         if name in a:

@@ -28,6 +28,7 @@ def _require_env(var: str, provider: str, url: str) -> str:
 
 def make_provider(agent_name: str, config: Config) -> LLMProvider:
     agent_cfg = config.agents.resolve(agent_name)
+    timeout = config.agents.llm_timeout_seconds
     name = agent_cfg.provider
     if name == "anthropic":
         from synthadoc.providers.anthropic import AnthropicProvider
@@ -36,7 +37,7 @@ def make_provider(agent_name: str, config: Config) -> LLMProvider:
     if name == "openai":
         from synthadoc.providers.openai import OpenAIProvider
         key = _require_env("OPENAI_API_KEY", "OpenAI", "https://platform.openai.com/api-keys")
-        return OpenAIProvider(api_key=key, config=agent_cfg)
+        return OpenAIProvider(api_key=key, config=agent_cfg, timeout=timeout)
     if name == "gemini":
         from synthadoc.providers.openai import OpenAIProvider
         key = _require_env("GEMINI_API_KEY", "Google Gemini",
@@ -45,7 +46,7 @@ def make_provider(agent_name: str, config: Config) -> LLMProvider:
             provider="gemini", model=agent_cfg.model,
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         )
-        return OpenAIProvider(api_key=key, config=cfg_with_url)
+        return OpenAIProvider(api_key=key, config=cfg_with_url, timeout=timeout)
     if name == "groq":
         from synthadoc.providers.openai import OpenAIProvider
         key = _require_env("GROQ_API_KEY", "Groq", "https://console.groq.com/keys")
@@ -53,7 +54,7 @@ def make_provider(agent_name: str, config: Config) -> LLMProvider:
             provider="groq", model=agent_cfg.model,
             base_url="https://api.groq.com/openai/v1",
         )
-        return OpenAIProvider(api_key=key, config=cfg_with_url)
+        return OpenAIProvider(api_key=key, config=cfg_with_url, timeout=timeout)
     if name == "minimax":
         from synthadoc.providers.openai import OpenAIProvider
         key = _require_env("MINIMAX_API_KEY", "MiniMax", "https://platform.minimax.io/")
@@ -61,7 +62,7 @@ def make_provider(agent_name: str, config: Config) -> LLMProvider:
             provider="minimax", model=agent_cfg.model,
             base_url="https://api.minimax.io/v1",
         )
-        return OpenAIProvider(api_key=key, config=cfg_with_url)
+        return OpenAIProvider(api_key=key, config=cfg_with_url, timeout=timeout)
     if name == "ollama":
         from synthadoc.providers.ollama import OllamaProvider
         return OllamaProvider(config=agent_cfg)

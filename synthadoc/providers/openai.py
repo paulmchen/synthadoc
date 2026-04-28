@@ -37,12 +37,13 @@ _sleep = asyncio.sleep
 
 
 class OpenAIProvider(LLMProvider):
-    def __init__(self, api_key: str, config: AgentConfig) -> None:
+    def __init__(self, api_key: str, config: AgentConfig, timeout: int = 0) -> None:
         kwargs: dict = {"api_key": api_key}
         if config.base_url:
             kwargs["base_url"] = config.base_url
         self._client = AsyncOpenAI(**kwargs)
         self._config = config
+        self._timeout: int | None = timeout if timeout > 0 else None
         base = str(config.base_url or "")
         self.supports_vision = not any(host in base for host in _NO_VISION_HOSTS)
 
@@ -103,7 +104,16 @@ class OpenAIProvider(LLMProvider):
                 return await self._client.chat.completions.create(
                     model=self._config.model, messages=msgs,
                     temperature=temperature, max_tokens=max_tokens,
+                    timeout=self._timeout,
                 )
+            except _openai.APITimeoutError:
+                logger.error(
+                    "LLM call to %s timed out after %d s. "
+                    "Increase [agents] llm_timeout_seconds in .synthadoc/config.toml "
+                    "or switch to a faster model.",
+                    self._config.provider, self._timeout,
+                )
+                raise
             except _openai.RateLimitError as exc:
                 if self._is_daily_quota_error(exc):
                     logger.error(
@@ -135,8 +145,10 @@ class OpenAIProvider(LLMProvider):
             err_msg  = base_resp.get("status_msg",  "no details")
             logger.error(
                 "OpenAI provider: %s returned choices=null (code=%s, msg=%r). "
-                "The model likely timed out internally — try a lighter model or "
-                "reduce max_tokens.",
+                "The model likely timed out internally. Set "
+                "[agents] llm_timeout_seconds in .synthadoc/config.toml "
+                "(e.g. llm_timeout_seconds = 90) to fail fast, or switch to "
+                "a lighter model.",
                 self._config.provider, err_code, err_msg,
             )
             raise RuntimeError(

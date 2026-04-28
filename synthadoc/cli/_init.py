@@ -35,6 +35,13 @@ default = {{ provider = "gemini", model = "gemini-2.5-flash-lite" }}
 # default = {{ provider = "groq",      model = "llama-3.3-70b-versatile" }}  # free tier, 100K tokens/day
 # default = {{ provider = "anthropic", model = "claude-sonnet-4-6" }}        # paid, highest quality
 # default = {{ provider = "ollama",    model = "llama3.2" }}                  # fully local, no API key
+#
+# LLM call timeout — useful for reasoning models (e.g. MiniMax-M2.5) that can
+# spend 2+ minutes on a single prompt and return an empty response instead of
+# raising an error.  Setting this causes synthadoc to fail fast with a clear
+# log message so you know to adjust the model or prompt size.
+# 0 = no limit (provider default).  Restart the server after changing.
+# llm_timeout_seconds = 90
 
 [ingest]
 max_pages_per_ingest = 15

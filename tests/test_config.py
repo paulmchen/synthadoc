@@ -118,3 +118,22 @@ def test_search_config_vector_true_parsed(tmp_path):
     cfg = load_config(project_config=toml)
     assert cfg.search.vector is True
     assert cfg.search.vector_top_candidates == 30
+
+
+def test_llm_timeout_seconds_default_is_zero(tmp_path):
+    """llm_timeout_seconds defaults to 0 (no limit) when not set."""
+    toml = tmp_path / "config.toml"
+    toml.write_text('[agents]\ndefault = {provider = "gemini", model = "gemini-2.5-flash-lite"}\n')
+    cfg = load_config(project_config=toml)
+    assert cfg.agents.llm_timeout_seconds == 0
+
+
+def test_llm_timeout_seconds_is_parsed(tmp_path):
+    """llm_timeout_seconds is read from [agents] and exposed on AgentsConfig."""
+    toml = tmp_path / "config.toml"
+    toml.write_text(
+        '[agents]\ndefault = {provider = "gemini", model = "gemini-2.5-flash-lite"}\n'
+        'llm_timeout_seconds = 90\n'
+    )
+    cfg = load_config(project_config=toml)
+    assert cfg.agents.llm_timeout_seconds == 90
