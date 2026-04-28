@@ -568,6 +568,23 @@ async def test_openai_provider_reasoning_content_strips_think_tags_then_returns_
 
 
 @pytest.mark.asyncio
+async def test_openai_provider_raises_on_null_choices():
+    """choices=null from providers like MiniMax must raise RuntimeError, not TypeError."""
+    cfg = AgentConfig(provider="minimax", model="MiniMax-M2.5",
+                      base_url="https://api.minimax.io/v1")
+    provider = OpenAIProvider(api_key="test-key", config=cfg)
+
+    mock_resp = MagicMock()
+    mock_resp.choices = None
+    mock_resp.model_extra = {"base_resp": {"status_code": 1000, "status_msg": "timeout"}}
+
+    with patch.object(provider._client.chat.completions, "create",
+                      new=AsyncMock(return_value=mock_resp)):
+        with pytest.raises(RuntimeError, match="choices=null"):
+            await provider.complete(messages=[Message(role="user", content="hi")])
+
+
+@pytest.mark.asyncio
 async def test_openai_provider_uses_custom_base_url():
     """Providers like Groq and Gemini pass a base_url — verify it is forwarded to AsyncOpenAI."""
     cfg = AgentConfig(provider="groq", model="llama3-8b-8192",

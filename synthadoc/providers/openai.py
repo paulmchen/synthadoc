@@ -126,6 +126,23 @@ class OpenAIProvider(LLMProvider):
         msgs.extend({"role": m.role, "content": self._to_openai_content(m.content)}
                     for m in messages)
         resp = await self._call_with_retry(msgs, temperature, max_tokens)
+        if not resp.choices:
+            # Some providers (e.g. MiniMax) return choices=null when the model
+            # exceeds its internal generation budget. Extract any error details.
+            extra = getattr(resp, "model_extra", None) or {}
+            base_resp = extra.get("base_resp") or {}
+            err_code = base_resp.get("status_code", "unknown")
+            err_msg  = base_resp.get("status_msg",  "no details")
+            logger.error(
+                "OpenAI provider: %s returned choices=null (code=%s, msg=%r). "
+                "The model likely timed out internally — try a lighter model or "
+                "reduce max_tokens.",
+                self._config.provider, err_code, err_msg,
+            )
+            raise RuntimeError(
+                f"{self._config.provider} returned choices=null "
+                f"(code={err_code}): {err_msg}"
+            )
         choice = resp.choices[0]
         text = choice.message.content or ""
         # Strip <think>...</think> blocks that reasoning models prepend to their output
