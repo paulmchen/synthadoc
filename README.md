@@ -310,14 +310,16 @@ synthadoc use history-of-computing
 ```
 
 All subsequent commands in any terminal run against `history-of-computing` by default.
-Pass `-w <other>` to override for a single command.
 
-**Multiple wikis:** switch instantly with `synthadoc use <other-wiki>`.
-**See current active wiki:** `synthadoc use` (no arguments).
-**Shell prompt integration** — add to `~/.bashrc` or `~/.zshrc`:
-```bash
-export PS1='(${SYNTHADOC_WIKI:-no-wiki}) \$ '
-```
+### Working with multiple wikis
+
+| Goal | How |
+|------|-----|
+| Set a persistent default | `synthadoc use wiki1` |
+| One-off command against wiki2 | `synthadoc query "..." -w wiki2` |
+| Dedicate a terminal session to wiki2 | `export SYNTHADOC_WIKI=wiki2` in that window |
+
+`synthadoc use wiki1` saves to `~/.synthadoc/default_wiki` — persistent across all terminal windows. For occasional cross-wiki commands, pass `-w wiki2` directly without switching your default. To work with two wikis in parallel across separate windows, set `SYNTHADOC_WIKI` as an environment variable in each window — it takes priority over the saved default.
 
 **Automation / pipelines:** all wiki-context messages go to stderr; stdout is always
 machine-readable so `synthadoc jobs list | jq` works without filtering.
@@ -366,7 +368,10 @@ Unlike the demo (which ships with pre-built pages), your own wiki starts from a 
 ```bash
 synthadoc install market-condition-canada --target ~/wikis --domain "Market conditions and trends in Canada"
 synthadoc serve -w market-condition-canada
+synthadoc use market-condition-canada
 ```
+
+Set the wiki as your active context once — all subsequent commands skip the `-w` flag.
 
 `--domain` is a free-text description of the subject area — the LLM uses it to generate four domain-aware starter files via scaffold:
 
