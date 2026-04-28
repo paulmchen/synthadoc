@@ -21,7 +21,7 @@ _MAX_BODY_BYTES = 10 * 1024 * 1024  # 10 MB
 def _classify_llm_error(exc: Exception) -> "HTTPException | None":
     """Return a meaningful HTTPException for known LLM API error codes, or None."""
     from synthadoc.errors import DailyQuotaExhaustedException
-    _SWITCH = "Switch to another provider by editing [agents] in .synthadoc/config.toml and restarting the server (options: groq, gemini, anthropic, openai, ollama)."
+    _SWITCH = "Switch to another provider by editing [agents] in .synthadoc/config.toml and restarting the server (options: anthropic, openai, gemini, groq, minimax, deepseek, ollama)."
     if isinstance(exc, DailyQuotaExhaustedException):
         return HTTPException(
             status_code=503,
@@ -35,19 +35,39 @@ def _classify_llm_error(exc: Exception) -> "HTTPException | None":
         resp = getattr(exc, "response", None)
         code = getattr(resp, "status_code", None)
 
+    if code == 401:
+        msg = str(exc)
+        if "deepseek" in msg.lower() or "api.deepseek.com" in msg.lower():
+            var = "DEEPSEEK_API_KEY"
+        elif "minimax" in msg.lower():
+            var = "MINIMAX_API_KEY"
+        elif "groq" in msg.lower():
+            var = "GROQ_API_KEY"
+        elif "generativelanguage" in msg.lower() or "gemini" in msg.lower():
+            var = "GEMINI_API_KEY"
+        elif "anthropic" in msg.lower():
+            var = "ANTHROPIC_API_KEY"
+        elif "openai" in msg.lower():
+            var = "OPENAI_API_KEY"
+        else:
+            var = "your provider's API key env var"
+        return HTTPException(
+            status_code=401,
+            detail=f"LLM provider rejected the API key (401). Check that {var} is set correctly and restart the server.",
+        )
     if code == 429:
         msg = str(exc)
-        _SWITCH = "Switch to another provider by editing [agents] in .synthadoc/config.toml and restarting the server (options: groq, gemini, anthropic, openai, ollama)."
+        _SWITCH_429 = "Switch to another provider by editing [agents] in .synthadoc/config.toml and restarting the server (options: anthropic, openai, gemini, groq, minimax, deepseek, ollama)."
         if "generativelanguage.googleapis.com" in msg or "gemini" in msg.lower():
-            hint = f"Gemini free-tier quota exhausted. Wait for the daily reset or switch providers. {_SWITCH}"
+            hint = f"Gemini free-tier quota exhausted. Wait for the daily reset or switch providers. {_SWITCH_429}"
         elif "groq" in msg.lower():
-            hint = f"Groq rate limit hit. Wait for the retry window or switch providers. {_SWITCH}"
+            hint = f"Groq rate limit hit. Wait for the retry window or switch providers. {_SWITCH_429}"
         elif "anthropic" in msg.lower():
-            hint = f"Anthropic rate limit hit. Wait a moment or switch providers. {_SWITCH}"
+            hint = f"Anthropic rate limit hit. Wait a moment or switch providers. {_SWITCH_429}"
         elif "openai" in msg.lower():
-            hint = f"OpenAI rate limit hit. Wait a moment or switch providers. {_SWITCH}"
+            hint = f"OpenAI rate limit hit. Wait a moment or switch providers. {_SWITCH_429}"
         else:
-            hint = f"LLM provider rate limit hit. Wait a moment or switch providers. {_SWITCH}"
+            hint = f"LLM provider rate limit hit. Wait a moment or switch providers. {_SWITCH_429}"
         return HTTPException(
             status_code=429,
             detail=f"LLM quota exceeded (429). {hint}",

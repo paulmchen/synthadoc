@@ -773,6 +773,57 @@ async def test_openai_provider_deepseek_r1_think_tags_stripped():
     assert "<think>" not in result.text
 
 
+def test_classify_llm_error_returns_401_for_auth_error():
+    """AuthenticationError (401) must return a 401 HTTPException, not fall through to 502."""
+    import openai
+    from synthadoc.integration.http_server import _classify_llm_error
+    exc = openai.AuthenticationError(
+        message="Authentication Fails, Your api key is invalid",
+        response=MagicMock(status_code=401),
+        body={"error": {"message": "Authentication Fails, Your api key: ****2YES is invalid",
+                        "type": "authentication_error"}},
+    )
+    result = _classify_llm_error(exc)
+    assert result is not None
+    assert result.status_code == 401
+    assert "401" in result.detail
+
+
+def test_classify_llm_error_names_deepseek_key_in_401():
+    """A DeepSeek 401 must name DEEPSEEK_API_KEY in the error detail."""
+    import openai
+    from synthadoc.integration.http_server import _classify_llm_error
+    exc = openai.AuthenticationError(
+        message="Authentication Fails from api.deepseek.com",
+        response=MagicMock(status_code=401),
+        body={},
+    )
+    result = _classify_llm_error(exc)
+    assert result is not None
+    assert "DEEPSEEK_API_KEY" in result.detail
+
+
+def test_classify_llm_error_names_gemini_key_in_401():
+    """A Gemini 401 must name GEMINI_API_KEY in the error detail."""
+    import openai
+    from synthadoc.integration.http_server import _classify_llm_error
+    exc = openai.AuthenticationError(
+        message="Invalid key for generativelanguage.googleapis.com",
+        response=MagicMock(status_code=401),
+        body={},
+    )
+    result = _classify_llm_error(exc)
+    assert result is not None
+    assert "GEMINI_API_KEY" in result.detail
+
+
+def test_classify_llm_error_returns_none_for_unrecognised():
+    """Unrecognised exception (no status_code, not DailyQuota) returns None → caller emits 502."""
+    from synthadoc.integration.http_server import _classify_llm_error
+    result = _classify_llm_error(ValueError("something unexpected"))
+    assert result is None
+
+
 @pytest.mark.asyncio
 async def test_ollama_provider_uses_eval_count_for_output_tokens():
     """OllamaProvider must read eval_count from the response for output_tokens."""
