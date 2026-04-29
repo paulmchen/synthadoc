@@ -162,3 +162,130 @@ def test_is_cjk_dominant_mixed_under_threshold():
 def test_is_cjk_dominant_empty_string():
     from synthadoc.skills.youtube.scripts.main import _is_cjk_dominant
     assert _is_cjk_dominant("") is False
+
+
+@pytest.mark.asyncio
+async def test_extract_without_provider_returns_raw_transcript():
+    """Without a provider, extract() returns raw transcript — existing behaviour."""
+    skill = _load_skill()  # no provider
+    with patch("synthadoc.skills.youtube.scripts.main.asyncio.to_thread",
+               new=AsyncMock(return_value=_fake_transcript())):
+        result = await skill.extract("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    assert "## Executive Summary" not in result.text
+    assert result.metadata.get("has_summary") is not True
+
+
+@pytest.mark.asyncio
+async def test_extract_with_provider_includes_executive_summary():
+    """With a provider, extract() returns text starting with ## Executive Summary."""
+    from synthadoc.providers.base import CompletionResponse
+    from synthadoc.skills.youtube.scripts.main import YoutubeSkill
+
+    provider = AsyncMock()
+    provider.complete.return_value = CompletionResponse(
+        text="A video about computing history.\n- Topic one\n- Topic two\nKey takeaway: history matters.",
+        input_tokens=100, output_tokens=50,
+    )
+    skill = YoutubeSkill(provider=provider)
+    with patch("synthadoc.skills.youtube.scripts.main.asyncio.to_thread",
+               new=AsyncMock(return_value=_fake_transcript())):
+        result = await skill.extract("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    assert result.text.startswith("## Executive Summary")
+
+
+@pytest.mark.asyncio
+async def test_extract_with_provider_has_summary_metadata():
+    """With a provider, metadata must include has_summary=True."""
+    from synthadoc.providers.base import CompletionResponse
+    from synthadoc.skills.youtube.scripts.main import YoutubeSkill
+
+    provider = AsyncMock()
+    provider.complete.return_value = CompletionResponse(
+        text="Summary text.", input_tokens=10, output_tokens=10,
+    )
+    skill = YoutubeSkill(provider=provider)
+    with patch("synthadoc.skills.youtube.scripts.main.asyncio.to_thread",
+               new=AsyncMock(return_value=_fake_transcript())):
+        result = await skill.extract("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    assert result.metadata.get("has_summary") is True
+
+
+@pytest.mark.asyncio
+async def test_extract_with_provider_includes_transcript_section():
+    """Structured output must include ## Transcript section with [MM:SS] entries."""
+    from synthadoc.providers.base import CompletionResponse
+    from synthadoc.skills.youtube.scripts.main import YoutubeSkill
+
+    provider = AsyncMock()
+    provider.complete.return_value = CompletionResponse(
+        text="Summary text.", input_tokens=10, output_tokens=10,
+    )
+    skill = YoutubeSkill(provider=provider)
+    with patch("synthadoc.skills.youtube.scripts.main.asyncio.to_thread",
+               new=AsyncMock(return_value=_fake_transcript())):
+        result = await skill.extract("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    assert "## Transcript" in result.text
+    assert "[0:00]" in result.text
+
+
+@pytest.mark.asyncio
+async def test_extract_summary_llm_failure_falls_back():
+    """If the summary LLM call raises, extract() falls back to raw transcript."""
+    from synthadoc.skills.youtube.scripts.main import YoutubeSkill
+
+    provider = AsyncMock()
+    provider.complete.side_effect = RuntimeError("LLM unavailable")
+    skill = YoutubeSkill(provider=provider)
+    with patch("synthadoc.skills.youtube.scripts.main.asyncio.to_thread",
+               new=AsyncMock(return_value=_fake_transcript())):
+        result = await skill.extract("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    assert "## Executive Summary" not in result.text
+    assert result.metadata.get("has_summary") is not True
+
+
+@pytest.mark.asyncio
+async def test_summary_uses_limit_200_for_latin():
+    """Latin transcript → prompt must contain '200 words'."""
+    from synthadoc.providers.base import CompletionResponse
+    from synthadoc.skills.youtube.scripts.main import YoutubeSkill
+
+    provider = AsyncMock()
+    captured_prompt = []
+
+    async def capture(messages, **kwargs):
+        captured_prompt.append(messages[0].content)
+        return CompletionResponse(text="ok", input_tokens=5, output_tokens=5)
+
+    provider.complete.side_effect = capture
+    skill = YoutubeSkill(provider=provider)
+    with patch("synthadoc.skills.youtube.scripts.main.asyncio.to_thread",
+               new=AsyncMock(return_value=_fake_transcript())):
+        await skill.extract("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    assert "200 words" in captured_prompt[0]
+
+
+@pytest.mark.asyncio
+async def test_summary_uses_limit_400_for_cjk():
+    """CJK transcript → prompt must contain '400 words'."""
+    from types import SimpleNamespace
+    from synthadoc.providers.base import CompletionResponse
+    from synthadoc.skills.youtube.scripts.main import YoutubeSkill
+
+    provider = AsyncMock()
+    captured_prompt = []
+
+    async def capture(messages, **kwargs):
+        captured_prompt.append(messages[0].content)
+        return CompletionResponse(text="好的", input_tokens=5, output_tokens=5)
+
+    provider.complete.side_effect = capture
+
+    cjk_snippets = [
+        SimpleNamespace(text="这是关于计算机历史的视频。晶体管的发明改变了世界。", start=0.0, duration=5.0),
+        SimpleNamespace(text="摩尔定律预测了集成电路上晶体管数量的增长趋势。", start=5.0, duration=5.0),
+    ]
+    skill = YoutubeSkill(provider=provider)
+    with patch("synthadoc.skills.youtube.scripts.main.asyncio.to_thread",
+               new=AsyncMock(return_value=cjk_snippets)):
+        await skill.extract("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    assert "400 words" in captured_prompt[0]
