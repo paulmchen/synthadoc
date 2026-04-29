@@ -50,14 +50,15 @@ def _extract_video_id(url: str) -> str | None:
     qs = parse_qs(parsed.query)
     if "v" in qs:
         return qs["v"][0] or None
-    # youtube.com/embed/<id>
+    # youtube.com/embed/<id>, youtube.com/shorts/<id>, youtube.com/live/<id>, youtube.com/v/<id>
     parts = parsed.path.split("/")
-    try:
-        idx = parts.index("embed")
-        vid = parts[idx + 1] if idx + 1 < len(parts) else ""
-        return vid or None
-    except ValueError:
-        pass
+    for segment in ("embed", "shorts", "live", "v"):
+        try:
+            idx = parts.index(segment)
+            vid = parts[idx + 1] if idx + 1 < len(parts) else ""
+            return vid or None
+        except ValueError:
+            pass
     return None
 
 

@@ -86,6 +86,18 @@ def test_extract_video_id_from_embed_url():
     assert _extract_video_id("https://www.youtube.com/embed/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
 
 
+def test_extract_video_id_from_shorts_url():
+    """Shorts URL: extract video ID from /shorts/ path segment."""
+    from synthadoc.skills.youtube.scripts.main import _extract_video_id
+    assert _extract_video_id("https://www.youtube.com/shorts/vVeaJMd4wa8") == "vVeaJMd4wa8"
+
+
+def test_extract_video_id_from_live_url():
+    """Live URL: extract video ID from /live/ path segment."""
+    from synthadoc.skills.youtube.scripts.main import _extract_video_id
+    assert _extract_video_id("https://www.youtube.com/live/abc123xyz") == "abc123xyz"
+
+
 def test_extract_video_id_returns_none_for_invalid():
     """URL with no recognisable video ID must return None."""
     from synthadoc.skills.youtube.scripts.main import _extract_video_id
