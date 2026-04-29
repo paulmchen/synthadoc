@@ -118,28 +118,28 @@ As the wiki accumulates pages the `index.md` table of contents, domain scope (`p
 ### Competitive advantages
 
 
-| Capability                   | Synthadoc                                           | Typical RAG | NotebookLM | Notion AI |
-| ---------------------------- | --------------------------------------------------- | ----------- | ---------- | --------- |
-| Ingest-time synthesis        | **Yes**                                             | No          | Partial    | No        |
-| Contradiction detection      | **Yes**                                             | No          | No         | No        |
-| Orphan page detection        | **Yes**                                             | No          | No         | No        |
-| Persistent wikilink graph    | **Yes**                                             | No          | No         | No        |
-| Local-first (no cloud data)  | **Yes**                                             | Varies      | No         | No        |
-| Custom skill plugins         | **Yes**                                             | Limited     | No         | No        |
-| Obsidian integration         | **Yes**                                             | No          | No         | No        |
-| Cost guard + audit trail     | **Yes**                                             | No          | No         | No        |
-| Hook / CI integration        | **Yes** (2 events)                                  | No          | No         | No        |
-| Offline browsable artifact   | **Yes**                                             | No          | No         | No        |
-| Multi-wiki isolation         | **Yes**                                             | No          | No         | No        |
-| Web search → wiki pages     | **Yes**                                             | No          | No         | No        |
-| Multiple LLMs support       | **Yes** (MiniMax, Gemini, Groq, Anthropic, OpenAI, Ollama) | No          | No         | No        |
-| Auto wiki overview page      | **Yes**                                             | No          | No         | No        |
-| Resumable job queue + retry  | **Yes**                                             | No          | No         | No        |
-| Query decomposition          | **Yes** (parallel sub-queries)                      | No          | No         | No        |
-| Knowledge gap detection      | **Yes**                                             | No          | No         | No        |
-| Web search decomposition     | **Yes** (parallel Tavily)                           | No          | No         | No        |
-| Semantic re-ranking (vector) | **Yes** (optional fastembed)                        | Varies      | No         | No        |
-| Scaffold automation          | **Yes**                                             | No          | No         | No        |
+| Capability                   | Synthadoc                                                      | Typical RAG | NotebookLM | Notion AI |
+| ---------------------------- | -------------------------------------------------------------- | ----------- | ---------- | --------- |
+| Ingest-time synthesis        | **Yes**                                                        | No          | Partial    | No        |
+| Contradiction detection      | **Yes**                                                        | No          | No         | No        |
+| Orphan page detection        | **Yes**                                                        | No          | No         | No        |
+| Persistent wikilink graph    | **Yes**                                                        | No          | No         | No        |
+| Local-first (no cloud data)  | **Yes**                                                        | Varies      | No         | No        |
+| Custom skill plugins         | **Yes**                                                        | Limited     | No         | No        |
+| Obsidian integration         | **Yes**                                                        | No          | No         | No        |
+| Cost guard + audit trail     | **Yes**                                                        | No          | No         | No        |
+| Hook / CI integration        | **Yes** (2 events)                                             | No          | No         | No        |
+| Offline browsable artifact   | **Yes**                                                        | No          | No         | No        |
+| Multi-wiki isolation         | **Yes**                                                        | No          | No         | No        |
+| Web search → wiki pages     | **Yes**                                                        | No          | No         | No        |
+| Multiple LLMs support       | **Yes** (MiniMax, Gemini, Groq, Anthropic, DeepSeek, Ollama) | No          | No         | No        |
+| Auto wiki overview page      | **Yes**                                                        | No          | No         | No        |
+| Resumable job queue + retry  | **Yes**                                                        | No          | No         | No        |
+| Query decomposition          | **Yes** (parallel sub-queries)                                 | No          | No         | No        |
+| Knowledge gap detection      | **Yes**                                                        | No          | No         | No        |
+| Web search decomposition     | **Yes** (parallel Tavily)                                      | No          | No         | No        |
+| Semantic re-ranking (vector) | **Yes** (optional fastembed)                                   | Varies      | No         | No        |
+| Scaffold automation          | **Yes**                                                        | No          | No         | No        |
 
 ### Key differentiators vs. RAG
 
@@ -246,7 +246,8 @@ Web search uses **Tavily** (`TAVILY_API_KEY`) — optional, only needed for
 export GEMINI_API_KEY=AIza…          # default — free tier, 1M tokens/day
 export GROQ_API_KEY=gsk_…            # alternative free tier — 100K tokens/day
 export ANTHROPIC_API_KEY=sk-ant-…    # paid — highest quality
-export MINIMAX_API_KEY=…             # paid — cheapest text rates (no image support)
+export MINIMAX_API_KEY=…             # paid — text rates (image support)
+export DEEPSEEK_API_KEY=…            # paid — text rates (no image support)
 export TAVILY_API_KEY=tvly-…         # web search (optional)
 
 # Windows cmd — current session only
@@ -254,6 +255,7 @@ set GEMINI_API_KEY=AIza…
 set GROQ_API_KEY=gsk_…
 set ANTHROPIC_API_KEY=sk-ant-…
 set MINIMAX_API_KEY=…
+set DEEPSEEK_API_KEY=…
 set TAVILY_API_KEY=tvly-…
 
 # Windows cmd — permanent (open a new cmd window after running)
@@ -301,29 +303,6 @@ synthadoc serve -w history-of-computing --background
 
 The server binds to `http://127.0.0.1:7070` by default (port is set in `<wiki-root>/.synthadoc/config.toml`). Leave it running while you work — the Obsidian plugin, CLI ingest commands, and query commands all talk to it.
 
-### Skip typing -w on every command
-
-Set the demo wiki as your active context once — you won't need `-w` for the rest of the walkthrough:
-
-```bash
-synthadoc use history-of-computing
-```
-
-All subsequent commands in any terminal run against `history-of-computing` by default.
-
-### Working with multiple wikis
-
-| Goal | How |
-|------|-----|
-| Set a persistent default | `synthadoc use wiki1` |
-| One-off command against wiki2 | `synthadoc query "..." -w wiki2` |
-| Dedicate a terminal session to wiki2 | `export SYNTHADOC_WIKI=wiki2` in that window |
-
-`synthadoc use wiki1` saves to `~/.synthadoc/default_wiki` — persistent across all terminal windows. For occasional cross-wiki commands, pass `-w wiki2` directly without switching your default. To work with two wikis in parallel across separate windows, set `SYNTHADOC_WIKI` as an environment variable in each window — it takes priority over the saved default.
-
-**Automation / pipelines:** all wiki-context messages go to stderr; stdout is always
-machine-readable so `synthadoc jobs list | jq` works without filtering.
-
 To stop a background server:
 
 ```bash
@@ -367,11 +346,8 @@ Unlike the demo (which ships with pre-built pages), your own wiki starts from a 
 
 ```bash
 synthadoc install market-condition-canada --target ~/wikis --domain "Market conditions and trends in Canada"
-synthadoc use market-condition-canada
-synthadoc serve
+synthadoc serve -w market-condition-canada
 ```
-
-Set the wiki as your active context right after install — all subsequent commands skip the `-w` flag.
 
 `--domain` is a free-text description of the subject area — the LLM uses it to generate four domain-aware starter files via scaffold:
 
@@ -390,9 +366,9 @@ Open the wiki folder in Obsidian as a new vault and install both the Dataview an
 **1. Seed with web searches** — pull in real content for the topics you care about:
 
 ```bash
-synthadoc ingest "search for: Economy, employment and labour market analysis in Toronto GTA"
-synthadoc ingest "search for: Bank of Canada interest rate outlook 2025"
-synthadoc jobs list   # watch progress
+synthadoc ingest "search for: Economy, employment and labour market analysis in Toronto GTA" -w market-condition-canada
+synthadoc ingest "search for: Bank of Canada interest rate outlook 2025" -w market-condition-canada
+synthadoc jobs list -w market-condition-canada   # watch progress
 ```
 
 Each search fans out into up to 20 parallel URL ingest jobs. Query decomposition and web search decomposition (see below) make broad topics yield much richer results than a single search.
@@ -400,22 +376,22 @@ Each search fans out into up to 20 parallel URL ingest jobs. Query decomposition
 **2. Lint and query** — check for contradictions and verify the wiki answers your questions:
 
 ```bash
-synthadoc lint run
-synthadoc lint report
-synthadoc query "What are the current employment trends in the Toronto GTA?"
+synthadoc lint run -w market-condition-canada
+synthadoc lint report -w market-condition-canada
+synthadoc query "What are the current employment trends in the Toronto GTA?" -w market-condition-canada
 ```
 
 **3. Re-run scaffold** — after pages accumulate, scaffold regenerates a richer index that reflects actual content. Pages already linked in `index.md` are never overwritten:
 
 ```bash
-synthadoc scaffold
+synthadoc scaffold -w market-condition-canada
 ```
 
 **4. Schedule recurring updates** — keep the wiki fresh automatically:
 
 ```bash
-synthadoc schedule add --op "ingest" --source "search for: Toronto GTA economic indicators latest" --cron "0 2 * * *"
-synthadoc schedule add --op "scaffold" --cron "0 4 * * 0"
+synthadoc schedule add --op "ingest" --source "search for: Toronto GTA economic indicators latest" --cron "0 2 * * *" -w market-condition-canada
+synthadoc schedule add --op "scaffold" --cron "0 4 * * 0" -w market-condition-canada
 ```
 
 ### How decomposition works
@@ -426,18 +402,7 @@ See [docs/design.md — Query decomposition and web search decomposition](docs/d
 
 ### Semantic re-ranking (vector search)
 
-BM25 keyword search is the default. Optional vector re-ranking (`BAAI/bge-small-en-v1.5` cosine similarity) improves recall on conceptually related queries. The ~130 MB model is downloaded once on first enable; BM25 stays active as fallback.
-
-```bash
-pip install fastembed
-```
-
-Then enable in your wiki's `.synthadoc/config.toml`:
-
-```toml
-[search]
-vector = true
-```
+BM25 keyword search is the default. Optional vector re-ranking (`BAAI/bge-small-en-v1.5` cosine similarity) improves recall on conceptually related queries — enable it by installing `fastembed` and setting `[search] vector = true` in config. The ~130 MB model is downloaded once; BM25 stays active as fallback.
 
 See [docs/design.md — Semantic re-ranking](docs/design.md#semantic-re-ranking) for configuration options and performance notes.
 
