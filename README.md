@@ -70,7 +70,7 @@ Most knowledge-management tools retrieve and summarize at query time. Synthadoc 
 | LLM wiki vs. RAG         | Pre-compiled structured knowledge beats query-time synthesis for contradiction detection, graph traversal, and offline access                                                                                 |
 | CLI / HTTP               | A unified interface via CLI and RESTful endpoints, the system streamlines full-spectrum integration: from data ingestion and querying to automated linting, security auditing, and job orchestration          |
 | Local-first              | All data stays on your machine; localhost-only network binding; no cloud dependency except the LLM API itself                                                                                                 |
-| Provider choice          | LLM backends including free-tier Gemini and Groq, plus MiniMax for cheapest paid text rates — no single-vendor dependency                                                                                    |
+| Provider choice          | LLM backends including free-tier Gemini and Groq, plus DeepSeek and MiniMax for cheapest paid text rates — no single-vendor dependency                                                                                    |
 
 ---
 
@@ -188,7 +188,8 @@ See [docs/design.md — Appendix A: Release Feature Index](docs/design.md#append
 | **Gemini Flash** | Yes — 15 RPM / 1M tokens/day, no credit card | Yes             | [aistudio.google.com](https://aistudio.google.com/app/apikey) |
 | Groq             | Yes — rate-limited                           | No              | [console.groq.com](https://console.groq.com/keys)             |
 | Ollama           | Yes — runs locally, no key                   | Model-dependent | [ollama.com](https://ollama.com)                              |
-| MiniMax          | No — pay-per-token (cheapest text rates)     | No              | [platform.minimax.io](https://platform.minimax.io/)           |
+| MiniMax          | No — pay-per-token                           | Yes             | [platform.minimax.io](https://platform.minimax.io/)           |
+| DeepSeek         | No — pay-per-token (very cheap text rates)   | No              | [platform.deepseek.com](https://platform.deepseek.com/api_keys) |
 | Anthropic        | No                                            | Yes             | [console.anthropic.com](https://console.anthropic.com/)       |
 | OpenAI           | No                                            | Yes             | [platform.openai.com](https://platform.openai.com/api-keys)   |
 
@@ -260,9 +261,10 @@ set TAVILY_API_KEY=tvly-…
 
 # Windows cmd — permanent (open a new cmd window after running)
 setx GEMINI_API_KEY AIza…
-setx GROQ_API_KEY=gsk_…
-setx ANTHROPIC_API_KEY=sk-ant-…
+setx GROQ_API_KEY gsk_…
+setx ANTHROPIC_API_KEY sk-ant-…
 setx MINIMAX_API_KEY …
+setx DEEPSEEK_API_KEY sk-…
 setx TAVILY_API_KEY tvly-…
 ```
 
