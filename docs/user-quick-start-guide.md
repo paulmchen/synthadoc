@@ -457,17 +457,7 @@ design of a high-level programming language, in Germany during World War II.
 
 Save — the orphan disappears from the dashboard immediately.
 
-### Option 2 — Add to index
-
-The lint report prints a ready-to-paste suggested entry. Copy it, open `wiki/index.md`,
-add a section heading if needed, and paste:
-
-```markdown
-## European Computing Pioneers
-- [[konrad-zuse]] — computer history, Germany, Z3, Plankalkül
-```
-
-### Option 3 — Delete and re-ingest later
+### Option 2 — Delete and re-ingest later
 
 If the page content quality is poor, delete `wiki/konrad-zuse.md` from Obsidian and
 re-ingest with a better source document:
