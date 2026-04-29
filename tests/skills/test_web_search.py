@@ -304,3 +304,70 @@ async def test_url_skill_still_handles_non_youtube_urls():
         )
         result = await UrlSkill().extract("https://example.com/article")
     assert "Article content" in result.text
+
+
+# ── fetcher.search_tavily unit tests ─────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_search_tavily_calls_client_with_query_and_max_results():
+    """search_tavily passes query and max_results to AsyncTavilyClient.search."""
+    from synthadoc.skills.web_search.scripts.fetcher import search_tavily
+
+    mock_client = AsyncMock()
+    mock_client.search.return_value = {"results": []}
+
+    with patch("tavily.AsyncTavilyClient",
+               return_value=mock_client) as mock_cls:
+        result = await search_tavily("quantum computing", max_results=5, api_key="test-key")
+
+    mock_cls.assert_called_once_with(api_key="test-key")
+    mock_client.search.assert_called_once_with("quantum computing", max_results=5)
+    assert result == {"results": []}
+
+
+@pytest.mark.asyncio
+async def test_search_tavily_passes_include_domains_when_provided():
+    """include_domains is forwarded to client.search when not None."""
+    from synthadoc.skills.web_search.scripts.fetcher import search_tavily
+
+    mock_client = AsyncMock()
+    mock_client.search.return_value = {"results": []}
+
+    with patch("tavily.AsyncTavilyClient", return_value=mock_client):
+        await search_tavily("Moore's Law", max_results=3, api_key="key",
+                            include_domains=["youtube.com", "youtu.be"])
+
+    _, kwargs = mock_client.search.call_args
+    assert kwargs.get("include_domains") == ["youtube.com", "youtu.be"]
+
+
+@pytest.mark.asyncio
+async def test_search_tavily_omits_include_domains_when_none():
+    """include_domains is NOT forwarded when None — Tavily searches all domains."""
+    from synthadoc.skills.web_search.scripts.fetcher import search_tavily
+
+    mock_client = AsyncMock()
+    mock_client.search.return_value = {"results": []}
+
+    with patch("tavily.AsyncTavilyClient", return_value=mock_client):
+        await search_tavily("Alan Turing", max_results=5, api_key="key",
+                            include_domains=None)
+
+    _, kwargs = mock_client.search.call_args
+    assert "include_domains" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_search_tavily_returns_raw_client_response():
+    """search_tavily returns the raw dict from client.search unchanged."""
+    from synthadoc.skills.web_search.scripts.fetcher import search_tavily
+
+    expected = {"results": [{"url": "https://example.com", "content": "text"}],
+                "query": "test", "response_time": 0.42}
+    mock_client = AsyncMock()
+    mock_client.search.return_value = expected
+
+    with patch("tavily.AsyncTavilyClient", return_value=mock_client):
+        result = await search_tavily("test", max_results=1, api_key="key")
+
+    assert result is expected
