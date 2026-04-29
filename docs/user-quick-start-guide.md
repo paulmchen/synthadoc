@@ -579,7 +579,7 @@ The modal prepends `search for:` automatically — just type the topic, no prefi
 ## Step 10 — Ingest a YouTube video
 
 Pass any YouTube URL directly — the transcript is extracted automatically from the
-YouTube caption system (no API key, no audio download) and synthesized into wiki pages:
+YouTube caption system (no API key, no audio download):
 
 ```bash
 synthadoc ingest "https://www.youtube.com/watch?v=O5nskjZ_GoI"
@@ -593,6 +593,10 @@ The demo wiki also ships a `sources.txt` manifest. Run the whole file at once:
 ```bash
 synthadoc ingest --file raw_sources/sources.txt
 ```
+
+The wiki page opens with an **executive summary** — a brief description of what the video
+covers, the main topics as bullet points, and the key takeaway — so you can assess
+relevance at a glance. The full timestamped transcript follows for precise cross-referencing.
 
 > **Captions required** — the video must have captions (auto-generated or manually added).
 > Check by opening the video on YouTube → `...` → **Show transcript**. If no transcript

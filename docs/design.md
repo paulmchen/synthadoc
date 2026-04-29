@@ -414,7 +414,7 @@ For URL sources, **longest prefix wins**: the matched extension string length de
 | `xlsx` | `.xlsx`, `.csv` | `spreadsheet`, `excel`, `csv` | openpyxl |
 | `image` | `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.tiff` | `image`, `screenshot`, `diagram`, `photo` | Base64 + vision LLM |
 | `web_search` | _(none)_ | `search for`, `find on the web`, `look up`, `web search`, `browse` | Calls Tavily API; returns top result URLs as child sources enqueued individually. Requires `TAVILY_API_KEY`. |
-| `youtube` | `https://www.youtube.com/`, `https://youtu.be/` | `youtube video`, `youtube lecture`, `youtube talk` | Extracts captions via YouTube caption system; no API key or audio download needed. Skips gracefully when no captions are available. |
+| `youtube` | `https://www.youtube.com/`, `https://youtu.be/` | `youtube video`, `youtube lecture`, `youtube talk` | Extracts captions via YouTube caption system; no API key or audio download needed. Generates an executive summary (what the video covers, main topics, key takeaway) followed by the full timestamped transcript. Skips gracefully when no captions are available. |
 
 ### Custom Skill Locations
 

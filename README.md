@@ -534,6 +534,10 @@ synthadoc ingest "https://youtu.be/O5nskjZ_GoI" -w my-wiki
 synthadoc ingest "search for: history of computing lecture" -w my-wiki
 ```
 
+Each YouTube wiki page opens with an **executive summary** — what the video is about,
+the main topics covered, and the key takeaway — followed by the full timestamped transcript
+for precise citation.
+
 ### Querying
 
 ```bash
