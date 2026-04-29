@@ -104,13 +104,8 @@ class WebSearchSkill(BaseSkill):
         all_blocked = _BLOCKED_DOMAINS | _load_dynamic_blocked()
 
         def _allowed(url: str) -> bool:
-            try:
-                host = urlparse(url).hostname or ""
-                return not any(
-                    host == d or host.endswith("." + d) for d in all_blocked
-                )
-            except Exception:
-                return True
+            host = urlparse(url).hostname or ""
+            return not any(host == d or host.endswith("." + d) for d in all_blocked)
 
         child_sources = [
             r["url"] for r in response.get("results", [])
