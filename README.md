@@ -132,7 +132,7 @@ As the wiki accumulates pages the `index.md` table of contents, domain scope (`p
 | Offline browsable artifact   | **Yes**                                                        | No          | No         | No        |
 | Multi-wiki isolation         | **Yes**                                                        | No          | No         | No        |
 | Web search → wiki pages     | **Yes**                                                        | No          | No         | No        |
-| Multiple LLMs support       | **Yes** (MiniMax, Gemini, Groq, Anthropic, DeepSeek, Ollama) | No          | No         | No        |
+| Multiple LLMs support       | **Yes** (Gemini, Groq, MiniMax, DeepSeek, Anthropic, OpenAI, Ollama) | No          | No         | No        |
 | Auto wiki overview page      | **Yes**                                                        | No          | No         | No        |
 | Resumable job queue + retry  | **Yes**                                                        | No          | No         | No        |
 | Query decomposition          | **Yes** (parallel sub-queries)                                 | No          | No         | No        |
