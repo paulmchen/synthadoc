@@ -582,7 +582,7 @@ Pass any YouTube URL directly — the transcript is extracted automatically from
 YouTube caption system (no API key, no audio download) and synthesized into wiki pages:
 
 ```bash
-synthadoc ingest "https://www.youtube.com/watch?v=O5nskjLzbog"
+synthadoc ingest "https://www.youtube.com/watch?v=O5nskjZ_GoI"
 ```
 
 This ingests *Early Computing: Crash Course Computer Science #1*, which covers Hollerith,

@@ -5,4 +5,4 @@
 # YouTube: "Early Computing: Crash Course Computer Science #1" (PBS Digital Studios)
 # Covers Hollerith, Babbage, Lovelace, and early programmable machines.
 # Auto-generated captions are available — confirmed stable since 2017.
-https://www.youtube.com/watch?v=O5nskjLzbog
+https://www.youtube.com/watch?v=O5nskjZ_GoI
