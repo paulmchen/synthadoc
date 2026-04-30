@@ -74,5 +74,18 @@ def make_provider(agent_name: str, config: Config) -> LLMProvider:
     if name == "ollama":
         from synthadoc.providers.ollama import OllamaProvider
         return OllamaProvider(config=agent_cfg)
+    if name == "claude-code":
+        from synthadoc.providers.coding_tool import ClaudeCodeCLIProvider
+        return ClaudeCodeCLIProvider(
+            model=agent_cfg.model or None,
+            timeout=timeout,
+        )
+    if name == "opencode":
+        from synthadoc.providers.coding_tool import OpencodeProvider
+        return OpencodeProvider(
+            model=agent_cfg.model or None,
+            timeout=timeout,
+        )
     E.cli_error(E.CFG_UNKNOWN_PROVIDER, f"Unknown provider: {name!r}",
-                "Supported providers: anthropic, openai, gemini, groq, minimax, deepseek, ollama")
+                "Supported providers: anthropic, openai, gemini, groq, minimax, deepseek, ollama, "
+                "claude-code, opencode")
