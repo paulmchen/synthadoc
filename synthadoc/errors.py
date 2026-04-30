@@ -61,6 +61,7 @@ class DomainBlockedException(Exception):
 
 # ── Provider ──────────────────────────────────────────────────────────────────
 PROVIDER_DAILY_QUOTA = "ERR-PROV-001"  # Daily API quota exhausted for today
+CODING_TOOL_QUOTA    = "ERR-PROV-002"  # Coding tool CLI usage quota exhausted
 
 
 class DailyQuotaExhaustedException(Exception):
@@ -76,6 +77,20 @@ class DailyQuotaExhaustedException(Exception):
             f"[{PROVIDER_DAILY_QUOTA}] Daily quota exhausted for {provider} — "
             f"no retry possible until quota resets (typically midnight UTC). "
             f"Upgrade to a paid API key or switch providers."
+        )
+
+
+class CodingToolQuotaExhaustedException(Exception):
+    """Raised when a coding tool CLI provider (Claude Code, Opencode) hits its usage quota.
+
+    Unlike per-minute rate limits, coding tool quotas require waiting hours before resetting.
+    The orchestrator permanently fails the job rather than requeuing.
+    """
+    def __init__(self, tool_name: str) -> None:
+        super().__init__(
+            f"[{CODING_TOOL_QUOTA}] {tool_name} usage quota exhausted — "
+            f"wait for quota to reset, then retry the job. "
+            f"Or switch provider temporarily: synthadoc serve -w <wiki> --provider anthropic"
         )
 
 

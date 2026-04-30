@@ -143,6 +143,22 @@ def _spawn_background(wiki_root: Path, effective_port: int, log_path: Path) -> N
     )
 
 
+def _apply_provider_override(cfg, provider_name: str) -> None:
+    """Override the provider field on all agent configs in cfg in-place."""
+    from synthadoc.config import KNOWN_PROVIDERS
+    if provider_name not in KNOWN_PROVIDERS:
+        E.cli_error(
+            E.CFG_UNKNOWN_PROVIDER,
+            f"Unknown provider: {provider_name!r}",
+            f"Supported providers: {', '.join(sorted(KNOWN_PROVIDERS))}",
+        )
+    cfg.agents.default.provider = provider_name
+    for slot in ("ingest", "query", "lint", "skill"):
+        override = getattr(cfg.agents, slot, None)
+        if override is not None:
+            override.provider = provider_name
+
+
 @app.command("serve")
 def serve_cmd(
     wiki: Optional[str] = typer.Option(None, "--wiki", "-w"),
@@ -155,6 +171,11 @@ def serve_cmd(
     background: bool = typer.Option(False, "--background", "-b",
         help="Detach the server to the background. Banner is shown then the shell is released; "
              "all subsequent logs go to the wiki log file."),
+    provider_override: Optional[str] = typer.Option(
+        None, "--provider",
+        help="Override config.toml provider for all agents for this server session "
+             "(e.g. anthropic, claude-code, opencode). Does not require editing config.toml.",
+    ),
 ):
     """Start MCP + HTTP API servers (localhost only).
 
@@ -176,6 +197,10 @@ def serve_cmd(
     root = resolve_wiki_path(wiki)
     cfg = load_config(project_config=root / ".synthadoc" / "config.toml")
     effective_port = port if port is not None else cfg.server.port
+
+    if provider_override:
+        _apply_provider_override(cfg, provider_override)
+
     provider = cfg.agents.resolve("ingest").provider
 
     # Pre-flight checks — run before binding the port or starting workers
@@ -185,7 +210,9 @@ def serve_cmd(
     setup_logging(root, cfg=cfg.logs, verbose=verbose)
 
     from synthadoc.providers import _require_env
-    if provider == "anthropic":
+    if provider in ("claude-code", "opencode", "ollama"):
+        pass  # CLI and local providers — no API key required
+    elif provider == "anthropic":
         _require_env("ANTHROPIC_API_KEY", "Anthropic", "https://console.anthropic.com/")
     elif provider == "openai":
         _require_env("OPENAI_API_KEY", "OpenAI", "https://platform.openai.com/api-keys")

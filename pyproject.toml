@@ -56,6 +56,9 @@ synthadoc = "synthadoc.cli.main:app"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: marks tests that require real external tools (deselect with '-m not integration')",
+]
 
 [tool.hatch.version]
 # Reads __version__ from synthadoc/__init__.py, which in turn reads the repo-root VERSION file.

@@ -193,7 +193,10 @@ class Orchestrator:
         except Exception as e:
             import httpx
             import logging
-            from synthadoc.errors import DomainBlockedException, DailyQuotaExhaustedException
+            from synthadoc.errors import (
+                DomainBlockedException, DailyQuotaExhaustedException,
+                CodingToolQuotaExhaustedException,
+            )
             # Check for LLM rate limits (openai SDK used by Groq/Gemini, and Anthropic SDK)
             _status = getattr(e, "status_code", None) or getattr(
                 getattr(e, "response", None), "status_code", None)
@@ -203,6 +206,11 @@ class Orchestrator:
                 logging.getLogger(__name__).error(
                     "Daily quota exhausted — permanently failing job %s "
                     "(quota resets at midnight UTC)", job_id
+                )
+                await self._queue.fail_permanent(job_id, str(e))
+            elif isinstance(e, CodingToolQuotaExhaustedException):
+                logging.getLogger(__name__).error(
+                    "Coding tool quota exhausted — permanently failing job %s", job_id
                 )
                 await self._queue.fail_permanent(job_id, str(e))
                 # Do NOT raise: letting the worker continue drains the pending
@@ -348,5 +356,9 @@ class Orchestrator:
                 "orphans": report.orphan_slugs,
             })
         except Exception as e:
-            await self._queue.fail(job_id, str(e))
-            raise
+            from synthadoc.errors import DailyQuotaExhaustedException, CodingToolQuotaExhaustedException
+            if isinstance(e, (DailyQuotaExhaustedException, CodingToolQuotaExhaustedException)):
+                await self._queue.fail_permanent(job_id, str(e))
+            else:
+                await self._queue.fail(job_id, str(e))
+                raise

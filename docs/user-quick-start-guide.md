@@ -35,6 +35,7 @@ major engine feature. No setup beyond following the steps below is required.
 - [Appendix C — Switching LLM providers](#appendix-c--switching-llm-providers)
 - [Appendix D — Tavily web search key](#appendix-d--tavily-web-search-key)
 - [Appendix E — Configuration](#appendix-e--configuration)
+- [Appendix G — Using a Coding Tool as Your LLM Provider](#appendix-g--using-a-coding-tool-as-your-llm-provider)
 
 ---
 
@@ -83,6 +84,8 @@ The banner confirms the port, wiki path, active LLM provider/model, and PID. If 
 If the server does not start, the most common cause is the port already being in use.
 Check `<wiki-root>/.synthadoc/config.toml` for `[server] port` and use `--port N` to
 override if needed.
+
+> To use Claude Code or Opencode as your LLM provider instead of a direct API key, see [Appendix G](#appendix-g--using-a-coding-tool-as-your-llm-provider).
 
 ### Set your active wiki (do this once)
 
@@ -1103,3 +1106,62 @@ synthadoc use                  # confirm which wiki is active
 | `synthadoc use <name>` | Persistent across terminal sessions |
 | `export SYNTHADOC_WIKI=<name>` | Current shell session only |
 | `-w <name>` on command | Single command only |
+
+---
+
+## Appendix G — Using a Coding Tool as Your LLM Provider
+
+If you already have a **Claude Code** or **Opencode** subscription, you can use it to power Synthadoc's LLM calls — no separate API key required.
+
+### Setup
+
+Open `.synthadoc/config.toml` in your wiki root, comment out the active `default` line, and uncomment the one for your tool:
+
+```toml
+[agents]
+# default = { provider = "claude-code" }   # no API key — uses your Claude Code subscription
+# default = { provider = "opencode" }      # no API key — uses your Opencode subscription
+```
+
+The `model` field is optional — if omitted, the tool uses its own configured default. Restart the server after saving.
+
+Ensure the tool is installed and authenticated in your terminal before starting the server. No environment variables are required.
+
+> **Note:** CLI providers use BM25 search only — vector/semantic search (`[search] vector = true`) is not supported and will be silently bypassed.
+
+### Demo: ingest + query
+
+Start the server and ingest a source as normal:
+
+```bash
+synthadoc serve -w my-wiki
+synthadoc ingest "https://example.com/article" -w my-wiki
+synthadoc query "What does the article cover?" -w my-wiki
+```
+
+The output is identical to a direct API provider. The only difference is that each LLM call is handled by Claude Code or Opencode running as a subprocess.
+
+> **Performance note:** CLI providers add subprocess startup overhead per LLM call. For high-volume batch ingest, a direct API provider (`anthropic`, `gemini`, etc.) is faster.
+
+### Demo: temporary provider override
+
+If your coding tool quota is exhausted and you need to continue ingesting, override the provider for the current server session without editing `config.toml`:
+
+```bash
+synthadoc serve -w my-wiki --provider anthropic
+```
+
+This uses `ANTHROPIC_API_KEY` (or whichever provider you specify) for that session only. When quota resets, restart without `--provider` to return to the CLI provider.
+
+### Troubleshooting
+
+**"usage quota exhausted" error in job log:**
+Your coding tool subscription has hit its usage limit. Options:
+1. Wait for quota to reset (typically a few hours)
+2. Retry the job: `synthadoc ingest <source> -w my-wiki`
+3. Switch temporarily: `synthadoc serve -w my-wiki --provider anthropic`
+
+**"not found in PATH" error on server start:**
+Install and authenticate the coding tool first:
+- Claude Code: [claude.ai/code](https://claude.ai/code)
+- Opencode: [opencode.ai](https://opencode.ai)

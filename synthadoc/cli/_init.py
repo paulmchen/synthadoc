@@ -36,6 +36,8 @@ default = {{ provider = "gemini", model = "gemini-2.5-flash-lite" }}
 # default = {{ provider = "anthropic", model = "claude-sonnet-4-6" }}        # paid, highest quality
 # default = {{ provider = "deepseek",  model = "deepseek-chat" }}             # paid, very cheap ($0.14/M in); text-only, no vision
 # default = {{ provider = "ollama",    model = "llama3.2" }}                  # fully local, no API key
+# default = {{ provider = "claude-code" }}                                    # no API key — uses your Claude Code subscription
+# default = {{ provider = "opencode" }}                                       # no API key — uses your Opencode subscription
 #
 # LLM call timeout — useful for reasoning models (e.g. MiniMax-M2.5) that can
 # spend 2+ minutes on a single prompt and return an empty response instead of
