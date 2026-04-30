@@ -165,7 +165,7 @@ class Config:
 def _parse_agent(raw: dict) -> AgentConfig:
     return AgentConfig(
         provider=raw["provider"],
-        model=raw["model"],
+        model=raw.get("model", ""),
         base_url=raw.get("base_url", ""),
     )
 
