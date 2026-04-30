@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json as _json
 import shutil
+import sys
 from abc import abstractmethod
 from typing import Optional
 
@@ -21,11 +22,18 @@ class CodingToolCLIProvider(LLMProvider):
     _tool_binary: str  # e.g. "claude" or "opencode" — set by subclass
 
     def __init__(self, model: Optional[str], timeout: int) -> None:
-        if shutil.which(self._tool_binary) is None:
+        resolved = shutil.which(self._tool_binary)
+        if resolved is None:
             raise EnvironmentError(
                 f"[ERR-PROV-003] '{self._tool_binary}' not found in PATH. "
                 f"Install it and ensure it is authenticated before using this provider."
             )
+        # On Windows, .cmd/.bat wrappers cannot be executed directly by
+        # create_subprocess_exec — they must be run via "cmd /c".
+        self._cmd_prefix: list[str] = (
+            ["cmd", "/c"] if sys.platform == "win32" and resolved.lower().endswith((".cmd", ".bat"))
+            else []
+        )
         self._model = model
         self._timeout = timeout or None
 
@@ -54,7 +62,7 @@ class CodingToolCLIProvider(LLMProvider):
     async def complete(self, messages: list[Message], system: Optional[str] = None,
                        temperature: float = 0.0, max_tokens: int = 4096) -> CompletionResponse:
         prompt = self._build_prompt(messages, system)
-        cmd = self._build_command()
+        cmd = self._cmd_prefix + self._build_command()
 
         try:
             proc = await asyncio.create_subprocess_exec(
