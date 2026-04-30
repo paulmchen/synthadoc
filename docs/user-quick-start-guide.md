@@ -1115,12 +1115,15 @@ If you already have a **Claude Code** or **Opencode** subscription, you can use 
 
 ### Setup
 
-Edit `.synthadoc/config.toml` in your wiki root and set the provider:
+Open `.synthadoc/config.toml` in your wiki root, comment out the active `default` line, and uncomment the one for your tool:
 
 ```toml
 [agents]
-provider = "claude-code"   # or "opencode"
+# default = { provider = "claude-code" }   # no API key — uses your Claude Code subscription
+# default = { provider = "opencode" }      # no API key — uses your Opencode subscription
 ```
+
+The `model` field is optional — if omitted, the tool uses its own configured default. Restart the server after saving.
 
 Ensure the tool is installed and authenticated in your terminal before starting the server. No environment variables are required.
 
