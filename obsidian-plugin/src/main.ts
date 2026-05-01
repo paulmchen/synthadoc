@@ -77,26 +77,8 @@ export default class SynthadocPlugin extends Plugin {
 
         this.addCommand({
             id: "synthadoc-lint",
-            name: "Lint: run",
-            callback: async () => {
-                new Notice("Synthadoc: running lint...");
-                try {
-                    const r = await api.lint() as any;
-                    new Notice(`Synthadoc: lint done — ${r.contradictions_found} contradictions, ${r.orphans?.length ?? 0} orphans`);
-                } catch { new Notice("Synthadoc: server not running — run 'synthadoc serve'"); }
-            },
-        });
-
-        this.addCommand({
-            id: "synthadoc-lint-auto-resolve",
-            name: "Lint: run with auto-resolve",
-            callback: async () => {
-                new Notice("Synthadoc: running lint with auto-resolve...");
-                try {
-                    const r = await api.lint("all", true) as any;
-                    new Notice(`Synthadoc: lint done — ${r.contradictions_found} contradictions, ${r.orphans?.length ?? 0} orphans`);
-                } catch { new Notice("Synthadoc: server not running — run 'synthadoc serve'"); }
-            },
+            name: "Lint: run...",
+            callback: () => new LintRunModal(this.app).open(),
         });
 
         this.addCommand({
@@ -486,6 +468,52 @@ class JobsModal extends Modal {
         this._stopTimer();
         this.contentEl.empty();
     }
+}
+
+class LintRunModal extends Modal {
+    onOpen() {
+        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
+        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
+        const { contentEl } = this;
+        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Run lint" });
+        makeDraggable(this.modalEl, titleEl);
+
+        const optRow = contentEl.createEl("div");
+        optRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:8px";
+        const cb = optRow.createEl("input", { type: "checkbox" }) as HTMLInputElement;
+        cb.id = "lint-auto-resolve";
+        const lbl = optRow.createEl("label", { text: "Auto-resolve contradictions" });
+        lbl.htmlFor = "lint-auto-resolve";
+        lbl.style.cssText = "font-size:13px;cursor:pointer";
+
+        const hint = contentEl.createEl("p", {
+            text: "Auto-resolve rewrites contradicted pages to reconcile conflicts automatically. Leave unchecked to review the report first.",
+        });
+        hint.style.cssText = "font-size:11px;color:var(--text-muted);margin-bottom:16px;-webkit-user-select:text;user-select:text";
+
+        const btnRow = contentEl.createEl("div");
+        btnRow.style.cssText = "display:flex;justify-content:flex-end";
+        const btn = btnRow.createEl("button", { text: "Run lint" });
+
+        const out = contentEl.createEl("p");
+        out.style.cssText = "margin-top:12px;-webkit-user-select:text;user-select:text";
+
+        btn.onclick = async () => {
+            const autoResolve = cb.checked;
+            btn.disabled = true;
+            out.setText(autoResolve ? "Running lint with auto-resolve…" : "Running lint…");
+            try {
+                const r = await api.lint("all", autoResolve) as any;
+                const contradictions = r.contradictions_found ?? 0;
+                const orphans = r.orphans?.length ?? 0;
+                out.setText(`Done — ${contradictions} contradiction(s), ${orphans} orphan(s).`);
+                new Notice(`Synthadoc: lint done — ${contradictions} contradictions, ${orphans} orphans`);
+            } catch {
+                out.setText("Error: is synthadoc serve running?");
+            } finally { btn.disabled = false; }
+        };
+    }
+    onClose() { this.contentEl.empty(); }
 }
 
 class LintReportModal extends Modal {
