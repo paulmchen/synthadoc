@@ -12,6 +12,7 @@ import typer
 
 from synthadoc.cli.main import app
 from synthadoc.cli._port import find_free_port as _find_free_port, _DEFAULT_PORT
+from synthadoc.cli._wiki import _normalise_wiki_name
 from synthadoc import errors as E
 
 _REGISTRY = Path.home() / ".synthadoc" / "wikis.json"
@@ -74,7 +75,7 @@ def resolve_wiki_path(wiki: str) -> Path:
     If neither resolves to an existing directory, returns the path as-is and
     lets the caller surface the error (e.g. Orchestrator will fail clearly).
     """
-    wiki = wiki.rstrip("/\\")
+    wiki = _normalise_wiki_name(wiki)
     registry = _read_registry()
     if wiki in registry:
         return Path(registry[wiki]["path"])
@@ -217,6 +218,7 @@ def uninstall_cmd(
     Requires two confirmations: a y/N prompt followed by typing the wiki name.
     There is no --yes flag — this operation is irreversible.
     """
+    name = _normalise_wiki_name(name)
     registry = _read_registry()
 
     if name not in registry:

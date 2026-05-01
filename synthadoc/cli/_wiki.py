@@ -12,6 +12,11 @@ ENV_VAR = "SYNTHADOC_WIKI"
 DEFAULT_WIKI_FILE = Path.home() / ".synthadoc" / "default_wiki"
 
 
+def _normalise_wiki_name(name: str) -> str:
+    """Strip trailing path separators that macOS tab-completion appends."""
+    return name.strip().rstrip("/\\")
+
+
 def _read_default_wiki() -> Optional[str]:
     """Return the saved default wiki name, or None if not set."""
     try:
@@ -25,7 +30,7 @@ def _write_default_wiki(name: Optional[str]) -> None:
     """Write (or clear) the saved default wiki name."""
     DEFAULT_WIKI_FILE.parent.mkdir(parents=True, exist_ok=True)
     if name:
-        DEFAULT_WIKI_FILE.write_text(name.strip(), encoding="utf-8")
+        DEFAULT_WIKI_FILE.write_text(_normalise_wiki_name(name), encoding="utf-8")
     elif DEFAULT_WIKI_FILE.exists():
         DEFAULT_WIKI_FILE.unlink()
 
