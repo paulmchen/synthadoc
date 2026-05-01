@@ -4,12 +4,47 @@ from __future__ import annotations
 
 import asyncio
 import json as _json
+import os
 import shutil
 import sys
 from abc import abstractmethod
+from pathlib import Path
 from typing import Optional
 
 from synthadoc.providers.base import CompletionResponse, LLMProvider, Message
+
+# Common locations where npm-installed CLIs (claude, opencode) live on macOS/Linux
+# that are absent from the minimal PATH seen by GUI apps and non-login shells.
+def _extra_binary_dirs() -> list[Path]:
+    dirs = [
+        Path.home() / ".npm" / "bin",
+        Path("/usr/local/bin"),
+        Path("/opt/homebrew/bin"),        # Homebrew on Apple Silicon
+        Path("/usr/local/opt/node/bin"),  # Homebrew node on Intel
+        Path.home() / ".local" / "bin",
+        Path.home() / ".yarn" / "bin",
+        Path.home() / "bin",
+    ]
+    # nvm-managed node versions
+    nvm_node = Path.home() / ".nvm" / "versions" / "node"
+    if nvm_node.is_dir():
+        dirs.extend(sorted(nvm_node.glob("*/bin")))
+    return dirs
+
+
+def _find_binary(name: str) -> Optional[str]:
+    """Locate *name* in the process PATH first, then common extra locations."""
+    found = shutil.which(name)
+    if found:
+        return found
+    # Extend the search to directories not in the current PATH
+    current_path = os.environ.get("PATH", "")
+    extra = os.pathsep.join(
+        str(d) for d in _extra_binary_dirs()
+        if str(d) not in current_path and d.is_dir()
+    )
+    augmented = extra + os.pathsep + current_path if extra else current_path
+    return shutil.which(name, path=augmented)
 
 
 class CodingToolCLIProvider(LLMProvider):
@@ -22,11 +57,13 @@ class CodingToolCLIProvider(LLMProvider):
     _tool_binary: str  # e.g. "claude" or "opencode" — set by subclass
 
     def __init__(self, model: Optional[str], timeout: int) -> None:
-        resolved = shutil.which(self._tool_binary)
+        resolved = _find_binary(self._tool_binary)
         if resolved is None:
             raise EnvironmentError(
                 f"[ERR-PROV-003] '{self._tool_binary}' not found in PATH. "
-                f"Install it and ensure it is authenticated before using this provider."
+                f"Install it and ensure it is authenticated before using this provider. "
+                f"If it is installed, add its directory to PATH before starting synthadoc serve "
+                f"(e.g. export PATH=\"$HOME/.npm/bin:$PATH\")."
             )
         # On Windows, .cmd/.bat wrappers cannot be executed directly by
         # create_subprocess_exec — they must be run via "cmd /c".
@@ -34,12 +71,13 @@ class CodingToolCLIProvider(LLMProvider):
             ["cmd", "/c"] if sys.platform == "win32" and resolved.lower().endswith((".cmd", ".bat"))
             else []
         )
+        self._resolved_binary = resolved  # absolute path, avoids PATH issues at exec time
         self._model = model
         self._timeout = timeout or None
 
     @abstractmethod
-    def _build_command(self) -> list[str]:
-        """Return the subprocess argv list (prompt is passed via stdin, not here)."""
+    def _build_command(self, binary: str) -> list[str]:
+        """Return the subprocess argv list using *binary* (absolute path). Prompt is via stdin."""
 
     @abstractmethod
     def _parse_output(self, raw: str) -> CompletionResponse:
@@ -62,7 +100,7 @@ class CodingToolCLIProvider(LLMProvider):
     async def complete(self, messages: list[Message], system: Optional[str] = None,
                        temperature: float = 0.0, max_tokens: int = 4096) -> CompletionResponse:
         prompt = self._build_prompt(messages, system)
-        cmd = self._cmd_prefix + self._build_command()
+        cmd = self._cmd_prefix + self._build_command(self._resolved_binary)
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -107,8 +145,8 @@ class ClaudeCodeCLIProvider(CodingToolCLIProvider):
     """
     _tool_binary = "claude"
 
-    def _build_command(self) -> list[str]:
-        cmd = ["claude", "-p", "--output-format", "json"]
+    def _build_command(self, binary: str) -> list[str]:
+        cmd = [binary, "-p", "--output-format", "json"]
         if self._model:
             cmd += ["--model", self._model]
         return cmd
@@ -146,8 +184,8 @@ class OpencodeProvider(CodingToolCLIProvider):
     """
     _tool_binary = "opencode"
 
-    def _build_command(self) -> list[str]:
-        cmd = ["opencode", "run", "--format", "json"]
+    def _build_command(self, binary: str) -> list[str]:
+        cmd = [binary, "run", "--format", "json"]
         if self._model:
             cmd += ["--model", self._model]
         return cmd

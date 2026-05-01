@@ -130,15 +130,16 @@ def test_claude_is_quota_exhausted_false():
 
 def test_claude_build_command_no_model():
     provider = _make_claude_provider()
-    cmd = provider._build_command()
-    assert cmd == ["claude", "-p", "--output-format", "json"]
-
+    cmd = provider._build_command(provider._resolved_binary)
+    assert cmd[0] == provider._resolved_binary
+    assert "-p" in cmd
+    assert "--output-format" in cmd
 
 def test_claude_build_command_with_model():
     with patch("shutil.which", return_value="/usr/bin/claude"):
         from synthadoc.providers.coding_tool import ClaudeCodeCLIProvider
         provider = ClaudeCodeCLIProvider(model="claude-sonnet-4-5", timeout=30)
-    cmd = provider._build_command()
+    cmd = provider._build_command(provider._resolved_binary)
     assert "--model" in cmd
     assert "claude-sonnet-4-5" in cmd
 
@@ -212,14 +213,16 @@ def test_opencode_is_quota_exhausted_false():
 
 def test_opencode_build_command_no_model():
     provider = _make_opencode_provider()
-    assert provider._build_command() == ["opencode", "run", "--format", "json"]
-
+    cmd = provider._build_command(provider._resolved_binary)
+    assert cmd[0] == provider._resolved_binary
+    assert "run" in cmd
+    assert "--format" in cmd
 
 def test_opencode_build_command_with_model():
     with patch("shutil.which", return_value="/usr/bin/opencode"):
         from synthadoc.providers.coding_tool import OpencodeProvider
         provider = OpencodeProvider(model="anthropic/claude-sonnet-4-5", timeout=30)
-    cmd = provider._build_command()
+    cmd = provider._build_command(provider._resolved_binary)
     assert "--model" in cmd
     assert "anthropic/claude-sonnet-4-5" in cmd
 
