@@ -1176,6 +1176,8 @@ class PurgeJobsModal extends Modal {
 }
 
 class ScaffoldModal extends Modal {
+    private _pollTimer: number | null = null;
+
     onOpen() {
         const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
         if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
@@ -1194,6 +1196,7 @@ class ScaffoldModal extends Modal {
         const btn = row.createEl("button", { text: "Scaffold" });
 
         const out = contentEl.createEl("p");
+        out.style.cssText = "font-size:12px;min-height:18px;-webkit-user-select:text;user-select:text";
 
         // Pre-fill domain from status if available
         api.status().then((s: any) => {
@@ -1207,21 +1210,56 @@ class ScaffoldModal extends Modal {
             const domain = input.value.trim();
             if (!domain) return;
             btn.disabled = true;
-            out.setText("Queuing scaffold job…");
+            input.disabled = true;
+            out.setText("⏳ Queuing scaffold job…");
             try {
                 const r = await api.scaffold(domain) as any;
-                out.setText(`Queued — job ${r.job_id}. index.md, AGENTS.md, and purpose.md will be updated shortly.`);
-                new Notice(`Synthadoc: scaffold queued (job ${r.job_id})`);
+                const jobId: string = r.job_id;
+                out.setText(`⏳ Queued — job ${jobId.slice(0, 8)}…`);
+                new Notice(`Synthadoc: scaffold queued (job ${jobId})`);
+
+                this._pollTimer = window.setInterval(async () => {
+                    try {
+                        const job = await api.job(jobId) as any;
+                        const status: string = job.status;
+
+                        if (status === "pending") { out.setText(`⏳ Queued — job ${jobId.slice(0, 8)}…`); return; }
+                        if (status === "in_progress") { out.setText(`⏳ Generating scaffold… (job ${jobId.slice(0, 8)})`); return; }
+
+                        window.clearInterval(this._pollTimer!);
+                        this._pollTimer = null;
+                        btn.disabled = false;
+                        input.disabled = false;
+
+                        if (status === "completed") {
+                            out.setText("✅ Done — index.md, AGENTS.md, and purpose.md updated.");
+                            new Notice("Synthadoc: scaffold complete");
+                        } else if (status === "skipped") {
+                            out.setText("⏭️ Skipped — already up to date.");
+                        } else {
+                            out.setText(`❌ ${status}${job.error ? `: ${job.error}` : ""}`);
+                        }
+                    } catch { /* server unreachable — keep polling */ }
+                }, 2000);
             } catch {
-                out.setText("Error: is synthadoc serve running?");
-            } finally { btn.disabled = false; }
+                out.setText("❌ Error: is synthadoc serve running?");
+                btn.disabled = false;
+                input.disabled = false;
+            }
         };
 
         btn.onclick = submit;
         input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
         setTimeout(() => input.focus(), 50);
     }
-    onClose() { this.contentEl.empty(); }
+
+    onClose() {
+        if (this._pollTimer !== null) {
+            window.clearInterval(this._pollTimer);
+            this._pollTimer = null;
+        }
+        this.contentEl.empty();
+    }
 }
 
 class AuditHistoryModal extends Modal {

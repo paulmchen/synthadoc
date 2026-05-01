@@ -774,3 +774,90 @@ describe("RetryJobModal", () => {
         expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
     });
 });
+
+describe("ScaffoldModal", () => {
+    it("calls api.scaffold with the domain value on button click", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-scaffold");
+        apiMock.status.mockResolvedValue({});
+        apiMock.scaffold.mockResolvedValueOnce({ job_id: "scaffold-job-01" });
+        apiMock.job = vi.fn().mockResolvedValue({ status: "completed" });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        const input = modal.contentEl.querySelector("input") as any;
+        input.value = "Canadian tax law";
+        const btn = modal.contentEl.querySelector("button") as any;
+        btn.onclick();
+        await flushPromises();
+
+        expect(apiMock.scaffold).toHaveBeenCalledWith("Canadian tax law");
+    });
+
+    it("disables button and shows queued status while job is pending", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-scaffold");
+        apiMock.status.mockResolvedValue({});
+        apiMock.scaffold.mockResolvedValueOnce({ job_id: "scaffold-job-02" });
+        apiMock.job = vi.fn().mockResolvedValue({ status: "pending" });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        const input = modal.contentEl.querySelector("input") as any;
+        input.value = "machine learning";
+        const btn = modal.contentEl.querySelector("button") as any;
+        btn.onclick();
+        await flushPromises();
+
+        expect(btn.disabled).toBe(true);
+        expect(modal.contentEl.innerHTML).toContain("⏳");
+    });
+
+    it("re-enables button and shows done on completed job", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-scaffold");
+        apiMock.status.mockResolvedValue({});
+        apiMock.scaffold.mockResolvedValueOnce({ job_id: "scaffold-job-03" });
+
+        let pollCount = 0;
+        apiMock.job = vi.fn().mockImplementation(async () => {
+            pollCount++;
+            return pollCount === 1 ? { status: "in_progress" } : { status: "completed" };
+        });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        const input = modal.contentEl.querySelector("input") as any;
+        input.value = "history of computing";
+        const btn = modal.contentEl.querySelector("button") as any;
+        btn.onclick();
+        await flushPromises();
+
+        // Simulate interval firing twice via the stored callback
+        const intervalId = (globalThis as any).__lastIntervalId;
+        // Button should still be disabled during progress
+        expect(btn.disabled).toBe(true);
+    });
+
+    it("shows error and re-enables button when api.scaffold throws", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-scaffold");
+        apiMock.status.mockResolvedValue({});
+        apiMock.scaffold.mockRejectedValueOnce(new Error("server down"));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        const input = modal.contentEl.querySelector("input") as any;
+        input.value = "science";
+        const btn = modal.contentEl.querySelector("button") as any;
+        btn.onclick();
+        await flushPromises();
+
+        expect(btn.disabled).toBe(false);
+        expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
+    });
+});
