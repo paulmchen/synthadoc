@@ -496,6 +496,7 @@ class LintReportModal extends Modal {
         const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Lint report" });
         makeDraggable(this.modalEl, titleEl);
         const out = contentEl.createEl("div");
+        out.style.cssText = "-webkit-user-select:text;user-select:text";
         out.createEl("p", { text: "Loading…", cls: "synthadoc-muted" });
 
         api.lintReport().then((r: any) => {
@@ -772,7 +773,7 @@ class RetryJobModal extends Modal {
                 return;
             }
             const table = out.createEl("table");
-            table.style.cssText = "width:100%;border-collapse:collapse;font-size:13px";
+            table.style.cssText = "width:100%;border-collapse:collapse;font-size:13px;-webkit-user-select:text;user-select:text";
             const hrow = table.createEl("thead").createEl("tr");
             for (const h of ["Job ID", "Operation", "Source", "Error", ""]) {
                 const th = hrow.createEl("th", { text: h });
@@ -931,7 +932,7 @@ class AuditHistoryModal extends Modal {
                     return;
                 }
                 const table = tableEl.createEl("table");
-                table.style.cssText = "width:100%;border-collapse:collapse;font-size:12px";
+                table.style.cssText = "width:100%;border-collapse:collapse;font-size:12px;-webkit-user-select:text;user-select:text";
                 const hrow = table.createEl("thead").createEl("tr");
                 for (const h of ["Source", "Wiki page", "Tokens", "Cost (USD)", "Ingested at"]) {
                     const th = hrow.createEl("th", { text: h });
@@ -1000,7 +1001,7 @@ class AuditCostsModal extends Modal {
 
                 if (r.daily?.length) {
                     const table = out.createEl("table");
-                    table.style.cssText = "width:100%;border-collapse:collapse;font-size:13px";
+                    table.style.cssText = "width:100%;border-collapse:collapse;font-size:13px;-webkit-user-select:text;user-select:text";
                     const hrow = table.createEl("thead").createEl("tr");
                     for (const h of ["Day", "Cost (USD)"]) {
                         const th = hrow.createEl("th", { text: h });
@@ -1059,7 +1060,7 @@ class QueryHistoryModal extends Modal {
                     return;
                 }
                 const table = tableEl.createEl("table");
-                table.style.cssText = "width:100%;border-collapse:collapse;font-size:12px";
+                table.style.cssText = "width:100%;border-collapse:collapse;font-size:12px;-webkit-user-select:text;user-select:text";
                 const hrow = table.createEl("thead").createEl("tr");
                 for (const h of ["Question", "Sub-Qs", "Tokens", "Cost (USD)", "Asked at"]) {
                     const th = hrow.createEl("th", { text: h });
