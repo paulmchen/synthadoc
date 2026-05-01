@@ -471,6 +471,8 @@ class JobsModal extends Modal {
 }
 
 class LintRunModal extends Modal {
+    private _pollTimer: number | null = null;
+
     onOpen() {
         const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
         if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
@@ -495,25 +497,83 @@ class LintRunModal extends Modal {
         btnRow.style.cssText = "display:flex;justify-content:flex-end";
         const btn = btnRow.createEl("button", { text: "Run lint" });
 
-        const out = contentEl.createEl("p");
+        const out = contentEl.createEl("div");
         out.style.cssText = "margin-top:12px;-webkit-user-select:text;user-select:text";
 
         btn.onclick = async () => {
             const autoResolve = cb.checked;
             btn.disabled = true;
-            out.setText(autoResolve ? "Running lint with auto-resolve…" : "Running lint…");
+            cb.disabled = true;
+            out.empty();
+            out.createEl("p", { text: autoResolve ? "⏳ Enqueueing lint with auto-resolve…" : "⏳ Enqueueing lint…" });
             try {
                 const r = await api.lint("all", autoResolve) as any;
-                const contradictions = r.contradictions_found ?? 0;
-                const orphans = r.orphans?.length ?? 0;
-                out.setText(`Done — ${contradictions} contradiction(s), ${orphans} orphan(s).`);
-                new Notice(`Synthadoc: lint done — ${contradictions} contradictions, ${orphans} orphans`);
+                const jobId: string = r.job_id;
+                out.empty();
+                out.createEl("p", { text: `⏳ Lint running… (job ${jobId.slice(0, 8)})` });
+
+                this._pollTimer = window.setInterval(async () => {
+                    try {
+                        const job = await api.job(jobId) as any;
+                        const status: string = job.status;
+
+                        if (status === "in_progress" || status === "pending") {
+                            out.empty();
+                            out.createEl("p", { text: `⏳ Lint ${status === "pending" ? "queued" : "running"}… (job ${jobId.slice(0, 8)})` });
+                            return;
+                        }
+
+                        // Job settled — stop polling
+                        window.clearInterval(this._pollTimer!);
+                        this._pollTimer = null;
+
+                        if (status === "completed") {
+                            // Fetch the actual lint report for contradiction/orphan counts
+                            try {
+                                const report = await api.lintReport() as any;
+                                const contradictions: string[] = report.contradictions ?? [];
+                                const orphans: string[] = report.orphans ?? [];
+                                out.empty();
+                                const summary = out.createEl("p");
+                                summary.style.cssText = "font-weight:bold;margin-bottom:6px";
+                                summary.setText(`✅ Done — ${contradictions.length} contradiction(s), ${orphans.length} orphan(s).`);
+                                if (contradictions.length > 0) {
+                                    out.createEl("p", { text: `Contradictions: ${contradictions.join(", ")}` }).style.cssText = "font-size:12px;color:var(--text-error)";
+                                }
+                                if (orphans.length > 0) {
+                                    out.createEl("p", { text: `Orphans: ${orphans.join(", ")}` }).style.cssText = "font-size:12px;color:var(--text-muted)";
+                                }
+                                new Notice(`Synthadoc: lint done — ${contradictions.length} contradictions, ${orphans.length} orphans`);
+                            } catch {
+                                out.empty();
+                                out.createEl("p", { text: "✅ Lint complete. Could not load report." });
+                            }
+                        } else {
+                            out.empty();
+                            out.createEl("p", { text: `❌ Lint ${status}${job.error ? `: ${job.error}` : ""}` }).style.cssText = "color:var(--text-error)";
+                        }
+                        btn.disabled = false;
+                        cb.disabled = false;
+                    } catch {
+                        // server unreachable — keep polling silently
+                    }
+                }, 2000);
             } catch {
-                out.setText("Error: is synthadoc serve running?");
-            } finally { btn.disabled = false; }
+                out.empty();
+                out.createEl("p", { text: "❌ Error: is synthadoc serve running?" });
+                btn.disabled = false;
+                cb.disabled = false;
+            }
         };
     }
-    onClose() { this.contentEl.empty(); }
+
+    onClose() {
+        if (this._pollTimer !== null) {
+            window.clearInterval(this._pollTimer);
+            this._pollTimer = null;
+        }
+        this.contentEl.empty();
+    }
 }
 
 class LintReportModal extends Modal {
