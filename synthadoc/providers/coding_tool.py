@@ -246,9 +246,15 @@ class OpencodeProvider(CodingToolCLIProvider):
                 seen_types.append(etype)
 
             # --- text content ---
-            # Known layout A: {"type":"text","data":"..."}
+            # Layout A: {"type":"text","data":"..."}
+            # Layout D (current opencode): {"type":"text","part":{"text":"...",...}}
             if etype == "text":
-                chunk = event.get("data") or event.get("text") or ""
+                chunk = (
+                    event.get("data")
+                    or event.get("text")
+                    or (event.get("part") or {}).get("text")
+                    or ""
+                )
                 if chunk:
                     text_parts.append(chunk)
 
