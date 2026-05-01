@@ -33,18 +33,48 @@ def _extra_binary_dirs() -> list[Path]:
 
 
 def _find_binary(name: str) -> Optional[str]:
-    """Locate *name* in the process PATH first, then common extra locations."""
+    """Locate *name* using three escalating strategies.
+
+    1. shutil.which with the current process PATH (fast path).
+    2. shutil.which with well-known npm/nvm/Homebrew/Go directories appended.
+    3. Ask the user's login shell (zsh/bash -lc "which <name>") so that
+       ~/.zshrc, ~/.zprofile, ~/.bashrc etc. are sourced — handles Go, Cargo,
+       custom install scripts and anything else that modifies PATH at shell init.
+    """
+    import subprocess
+
+    # 1. Current PATH
     found = shutil.which(name)
     if found:
         return found
-    # Extend the search to directories not in the current PATH
+
+    # 2. Well-known extra dirs
     current_path = os.environ.get("PATH", "")
     extra = os.pathsep.join(
         str(d) for d in _extra_binary_dirs()
         if str(d) not in current_path and d.is_dir()
     )
     augmented = extra + os.pathsep + current_path if extra else current_path
-    return shutil.which(name, path=augmented)
+    found = shutil.which(name, path=augmented)
+    if found:
+        return found
+
+    # 3. Login shell — loads user profile so all PATH mutations are visible
+    if sys.platform != "win32":
+        shell = os.environ.get("SHELL", "/bin/zsh")
+        try:
+            result = subprocess.run(
+                [shell, "-lc", f"which {name}"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0:
+                candidate = result.stdout.strip()
+                if candidate and Path(candidate).is_file():
+                    return candidate
+        except Exception:
+            pass
+
+    return None
 
 
 class CodingToolCLIProvider(LLMProvider):
