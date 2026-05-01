@@ -177,7 +177,7 @@ def test_opencode_parse_output_no_text_events_raises():
         json.dumps({"type": "step_start"}),
         json.dumps({"type": "step_finish", "reason": "stop", "tokens": {}}),
     ]
-    with pytest.raises(ValueError, match="no text events"):
+    with pytest.raises(ValueError, match="no text content"):
         provider._parse_output("\n".join(lines))
 
 
@@ -196,7 +196,7 @@ def test_opencode_parse_output_step_finish_error_raises():
 def test_opencode_parse_output_truncated_jsonl_raises():
     """Truncated JSONL (no step_finish, no text) → ValueError."""
     provider = _make_opencode_provider()
-    with pytest.raises(ValueError, match="no text events"):
+    with pytest.raises(ValueError, match="no text content"):
         provider._parse_output('{"type": "step_start"}\n{"type": "ste')
 
 

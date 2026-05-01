@@ -11,7 +11,11 @@ from abc import abstractmethod
 from pathlib import Path
 from typing import Optional
 
+import logging as _logging
+
 from synthadoc.providers.base import CompletionResponse, LLMProvider, Message
+
+_logger = _logging.getLogger(__name__)
 
 # Common locations where npm-installed CLIs (claude, opencode) live on macOS/Linux
 # that are absent from the minimal PATH seen by GUI apps and non-login shells.
@@ -221,9 +225,13 @@ class OpencodeProvider(CodingToolCLIProvider):
         return cmd
 
     def _parse_output(self, raw: str) -> CompletionResponse:
+        _logger.debug("opencode raw output (%d bytes):\n%s", len(raw), raw[:4000])
+
         text_parts: list[str] = []
         input_tokens = 0
         output_tokens = 0
+        seen_types: list[str] = []
+
         for line in raw.splitlines():
             line = line.strip()
             if not line:
@@ -232,17 +240,61 @@ class OpencodeProvider(CodingToolCLIProvider):
                 event = _json.loads(line)
             except _json.JSONDecodeError:
                 continue
-            etype = event.get("type")
+
+            etype = event.get("type", "")
+            if etype:
+                seen_types.append(etype)
+
+            # --- text content ---
+            # Known layout A: {"type":"text","data":"..."}
             if etype == "text":
-                text_parts.append(event.get("data", ""))
+                chunk = event.get("data") or event.get("text") or ""
+                if chunk:
+                    text_parts.append(chunk)
+
+            # Known layout B: {"type":"PartTextEvent","properties":{"part":{"type":"text","text":"..."}}}
+            elif etype == "PartTextEvent":
+                part = (event.get("properties") or {}).get("part") or {}
+                chunk = part.get("text") or part.get("data") or ""
+                if chunk:
+                    text_parts.append(chunk)
+
+            # Known layout C: {"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}}
+            elif etype == "assistant":
+                msg = event.get("message") or event
+                for block in msg.get("content") or []:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        chunk = block.get("text") or block.get("data") or ""
+                        if chunk:
+                            text_parts.append(chunk)
+
+            # --- token counts ---
             elif etype == "step_finish":
                 if event.get("reason") == "error":
                     raise RuntimeError("opencode: step finished with error")
                 tokens = event.get("tokens") or {}
                 input_tokens = int(tokens.get("input", 0))
                 output_tokens = int(tokens.get("output", 0))
+
+            elif etype in ("message_finish", "session_end"):
+                info = event.get("info") or event.get("properties") or {}
+                usage = info.get("tokens") or info.get("usage") or {}
+                if usage:
+                    input_tokens = int(usage.get("input", 0) or usage.get("input_tokens", 0))
+                    output_tokens = int(usage.get("output", 0) or usage.get("output_tokens", 0))
+
         if not text_parts:
-            raise ValueError("opencode: no text events in JSONL output")
+            _logger.warning(
+                "opencode: no text content extracted. Event types seen: %s\n"
+                "Raw output (first 2000 chars):\n%s",
+                sorted(set(seen_types)), raw[:2000],
+            )
+            raise ValueError(
+                f"opencode: no text content in JSONL output. "
+                f"Event types seen: {sorted(set(seen_types))}. "
+                f"Check DEBUG logs for the full raw output."
+            )
+
         return CompletionResponse(
             text="".join(text_parts),
             input_tokens=input_tokens,
