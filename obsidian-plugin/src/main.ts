@@ -83,7 +83,7 @@ export default class SynthadocPlugin extends Plugin {
 
         this.addCommand({
             id: "synthadoc-jobs-retry-dead",
-            name: "Jobs: retry dead job...",
+            name: "Jobs: retry failed or dead jobs...",
             callback: () => new RetryJobModal(this.app).open(),
         });
 
@@ -993,62 +993,148 @@ class WebSearchModal extends Modal {
 }
 
 class RetryJobModal extends Modal {
+    private _pollTimer: number | null = null;
+
     onOpen() {
+        this.modalEl.style.width = "clamp(560px, 70vw, 960px)";
         const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
         if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
         const { contentEl } = this;
-        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Retry dead job" });
+        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Retry failed or dead jobs" });
         makeDraggable(this.modalEl, titleEl);
 
-        const out = contentEl.createEl("div");
-        out.createEl("p", { text: "Loading dead jobs…", cls: "synthadoc-muted" });
+        const listEl = contentEl.createEl("div");
+        listEl.style.cssText = "max-height:40vh;overflow-y:auto;margin-bottom:12px";
 
-        api.jobs("dead").then((jobs: any[]) => {
-            out.empty();
-            if (!jobs.length) {
-                out.createEl("p", { text: "No dead jobs." });
+        const statusEl = contentEl.createEl("p");
+        statusEl.style.cssText = "font-size:12px;min-height:18px;margin-bottom:8px;-webkit-user-select:text;user-select:text";
+
+        const btnRow = contentEl.createEl("div");
+        btnRow.style.cssText = "display:flex;gap:8px;justify-content:flex-end";
+        const retryBtn = btnRow.createEl("button", { text: "Retry selected" });
+        const refreshBtn = btnRow.createEl("button", { text: "Refresh" });
+
+        // Track checkboxes: jobId → checkbox element
+        const checkboxMap = new Map<string, HTMLInputElement>();
+
+        const load = async () => {
+            listEl.empty();
+            checkboxMap.clear();
+            statusEl.setText("Loading…");
+            try {
+                const [failed, dead] = await Promise.all([
+                    api.jobs("failed") as Promise<any[]>,
+                    api.jobs("dead") as Promise<any[]>,
+                ]);
+                const jobs = [...failed, ...dead];
+                statusEl.setText("");
+
+                if (!jobs.length) {
+                    listEl.createEl("p", { text: "No failed or dead jobs." }).style.cssText = "color:var(--text-muted);font-size:13px";
+                    retryBtn.disabled = true;
+                    return;
+                }
+
+                retryBtn.disabled = false;
+                const table = listEl.createEl("table");
+                table.style.cssText = "width:100%;border-collapse:collapse;font-size:13px;-webkit-user-select:text;user-select:text";
+                const hrow = table.createEl("thead").createEl("tr");
+                for (const h of ["", "Status", "Job ID", "Operation", "Source", "Error"]) {
+                    const th = hrow.createEl("th", { text: h });
+                    th.style.cssText = "text-align:left;padding:4px 8px;border-bottom:1px solid var(--background-modifier-border)";
+                }
+                const tbody = table.createEl("tbody");
+                for (const job of jobs) {
+                    const tr = tbody.createEl("tr");
+                    const source = job.payload?.source
+                        ? job.payload.source.split(/[\\/]/).pop()
+                        : job.operation;
+                    const icon = STATUS_EMOJI[job.status] ?? "";
+
+                    // Checkbox
+                    const cbTd = tr.createEl("td");
+                    cbTd.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle)";
+                    const cb = cbTd.createEl("input", { type: "checkbox" }) as HTMLInputElement;
+                    cb.checked = true;
+                    checkboxMap.set(job.id, cb);
+
+                    for (const text of [`${icon} ${job.status}`, job.id, job.operation, source, job.error ?? "—"]) {
+                        const td = tr.createEl("td", { text });
+                        td.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle);font-size:12px";
+                    }
+                }
+            } catch {
+                listEl.empty();
+                listEl.createEl("p", { text: "Error: is synthadoc serve running?" }).style.cssText = "color:var(--text-error)";
+                retryBtn.disabled = true;
+            }
+        };
+
+        refreshBtn.onclick = load;
+
+        retryBtn.onclick = async () => {
+            const selected = [...checkboxMap.entries()]
+                .filter(([, cb]) => cb.checked)
+                .map(([id]) => id);
+            if (!selected.length) {
+                statusEl.setText("No jobs selected.");
                 return;
             }
-            const table = out.createEl("table");
-            table.style.cssText = "width:100%;border-collapse:collapse;font-size:13px;-webkit-user-select:text;user-select:text";
-            const hrow = table.createEl("thead").createEl("tr");
-            for (const h of ["Job ID", "Operation", "Source", "Error", ""]) {
-                const th = hrow.createEl("th", { text: h });
-                th.style.cssText = "text-align:left;padding:4px 8px;border-bottom:1px solid var(--background-modifier-border)";
+
+            retryBtn.disabled = true;
+            refreshBtn.disabled = true;
+            statusEl.setText(`⏳ Re-queuing ${selected.length} job(s)…`);
+
+            // Re-queue all selected
+            let queued = 0;
+            for (const jobId of selected) {
+                try {
+                    await api.retryJob(jobId);
+                    queued++;
+                } catch { /* ignore individual failures — status will show */ }
             }
-            const tbody = table.createEl("tbody");
-            for (const job of jobs) {
-                const tr = tbody.createEl("tr");
-                const source = job.payload?.source
-                    ? job.payload.source.split(/[\\/]/).pop()
-                    : job.operation;
-                for (const text of [job.id, job.operation, source, job.error ?? "—"]) {
-                    const td = tr.createEl("td", { text });
-                    td.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle)";
-                }
-                const btnTd = tr.createEl("td");
-                btnTd.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle)";
-                const btn = btnTd.createEl("button", { text: "Retry" });
-                btn.onclick = async () => {
-                    btn.disabled = true;
-                    btn.setText("…");
-                    try {
-                        await api.retryJob(job.id);
-                        new Notice(`Synthadoc: job ${job.id} re-queued`);
-                        tr.remove();
-                    } catch {
-                        new Notice("Synthadoc: retry failed — is the server running?");
-                        btn.disabled = false;
-                        btn.setText("Retry");
+            statusEl.setText(`⏳ ${queued} job(s) re-queued — monitoring progress…`);
+
+            // Poll until all re-queued jobs have settled
+            const pending = new Set(selected);
+            this._pollTimer = window.setInterval(async () => {
+                try {
+                    const allJobs = await api.jobs() as any[];
+                    let inProgress = 0;
+                    let done = 0;
+                    for (const jobId of [...pending]) {
+                        const job = allJobs.find((j: any) => j.id === jobId);
+                        if (!job) { pending.delete(jobId); done++; continue; }
+                        if (["completed", "failed", "dead", "skipped"].includes(job.status)) {
+                            pending.delete(jobId);
+                            done++;
+                        } else {
+                            inProgress++;
+                        }
                     }
-                };
-            }
-        }).catch(() => {
-            out.empty();
-            out.createEl("p", { text: "Error: is synthadoc serve running?" });
-        });
+                    statusEl.setText(`⏳ ${inProgress} running, ${done} settled of ${selected.length}…`);
+                    if (pending.size === 0) {
+                        window.clearInterval(this._pollTimer!);
+                        this._pollTimer = null;
+                        statusEl.setText(`✅ All ${selected.length} job(s) settled. Refreshing list…`);
+                        retryBtn.disabled = false;
+                        refreshBtn.disabled = false;
+                        await load();
+                    }
+                } catch { /* server unreachable — keep polling */ }
+            }, 2000);
+        };
+
+        load();
     }
-    onClose() { this.contentEl.empty(); }
+
+    onClose() {
+        if (this._pollTimer !== null) {
+            window.clearInterval(this._pollTimer);
+            this._pollTimer = null;
+        }
+        this.contentEl.empty();
+    }
 }
 
 class PurgeJobsModal extends Modal {

@@ -2,6 +2,9 @@
 // Copyright (C) 2026 Paul Chen / axoviq.com
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 
+// Obsidian plugins use `window.setInterval`; make it available in node test env
+(globalThis as any).window = globalThis;
+
 vi.mock("obsidian", () => ({
     Plugin: class {
         app: any;
@@ -351,12 +354,14 @@ describe("SynthadocPlugin lint commands", () => {
 });
 
 describe("SynthadocPlugin new commands registered", () => {
-    it("retry-dead command is registered", async () => {
+    it("retry-dead command is registered with updated name", async () => {
         const { default: SynthadocPlugin } = await import("./main");
         const plugin = new SynthadocPlugin();
         await plugin.onload();
-        const ids = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].id);
-        expect(ids).toContain("synthadoc-jobs-retry-dead");
+        const cmds = (plugin.addCommand as any).mock.calls.map((c: any) => c[0]);
+        const retryCmd = cmds.find((c: any) => c.id === "synthadoc-jobs-retry-dead");
+        expect(retryCmd).toBeDefined();
+        expect(retryCmd.name).toBe("Jobs: retry failed or dead jobs...");
     });
 
     it("purge command is registered", async () => {
@@ -701,6 +706,71 @@ describe("IngestConfirmModal", () => {
         await flushPromises();
 
         expect(btn.disabled).toBe(false);
+        expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
+    });
+});
+
+describe("RetryJobModal", () => {
+    it("loads both failed and dead jobs and shows them in a table", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-jobs-retry-dead");
+        apiMock.jobs
+            .mockResolvedValueOnce([{ id: "job-f1", status: "failed", operation: "ingest", payload: { source: "doc.pdf" }, error: "timeout" }])
+            .mockResolvedValueOnce([{ id: "job-d1", status: "dead", operation: "ingest", payload: { source: "page.md" }, error: "max retries" }]);
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(apiMock.jobs).toHaveBeenCalledWith("failed");
+        expect(apiMock.jobs).toHaveBeenCalledWith("dead");
+        expect(modal.contentEl.innerHTML).toContain("job-f1");
+        expect(modal.contentEl.innerHTML).toContain("job-d1");
+    });
+
+    it("shows empty message when no failed or dead jobs exist", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-jobs-retry-dead");
+        apiMock.jobs.mockResolvedValue([]);
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("No failed or dead jobs");
+    });
+
+    it("calls api.retryJob for each checked job when Retry selected is clicked", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-jobs-retry-dead");
+        apiMock.jobs
+            .mockResolvedValueOnce([{ id: "job-f1", status: "failed", operation: "ingest", payload: { source: "a.pdf" }, error: "err" }])
+            .mockResolvedValueOnce([])
+            .mockResolvedValue([]); // subsequent poll calls
+        apiMock.retryJob = vi.fn().mockResolvedValue(undefined);
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        // Find the Retry selected button (inside the btnRow div)
+        const btnRow = modal.contentEl._children.find((c: any) =>
+            c._children?.some((b: any) => b._html === "Retry selected")
+        );
+        const retryBtn = btnRow?._children?.find((b: any) => b._html === "Retry selected");
+
+        expect(retryBtn).toBeDefined();
+        retryBtn.onclick();
+        await flushPromises();
+
+        expect(apiMock.retryJob).toHaveBeenCalledWith("job-f1");
+    });
+
+    it("shows server error message when jobs cannot be loaded", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-jobs-retry-dead");
+        apiMock.jobs.mockRejectedValue(new Error("network error"));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
         expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
     });
 });
