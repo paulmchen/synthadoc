@@ -280,7 +280,7 @@ function makeDraggable(modalEl: HTMLElement, handle: HTMLElement): void {
     let dragging = false;
     let startX = 0, startY = 0, origLeft = 0, origTop = 0;
 
-    handle.addEventListener("mousedown", (e: MouseEvent) => {
+    const startDrag = (e: MouseEvent) => {
         dragging = true;
         startX = e.clientX;
         startY = e.clientY;
@@ -293,6 +293,16 @@ function makeDraggable(modalEl: HTMLElement, handle: HTMLElement): void {
         modalEl.style.margin = "0";
         handle.style.cursor = "grabbing";
         e.preventDefault();
+    };
+
+    // Drag from the title bar
+    handle.addEventListener("mousedown", startDrag);
+
+    // Also drag from the modal frame/padding — but not from inside the content area
+    modalEl.addEventListener("mousedown", (e: MouseEvent) => {
+        if (handle.contains(e.target as Node)) return; // already handled above
+        if (handle.parentElement && handle.parentElement.contains(e.target as Node)) return; // inside content
+        startDrag(e);
     });
 
     document.addEventListener("mousemove", (e: MouseEvent) => {
