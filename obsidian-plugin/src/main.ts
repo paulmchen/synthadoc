@@ -630,6 +630,8 @@ class LintReportModal extends Modal {
 }
 
 class IngestUrlModal extends Modal {
+    private _pollTimer: number | null = null;
+
     onOpen() {
         const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
         if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
@@ -643,26 +645,86 @@ class IngestUrlModal extends Modal {
         input.style.cssText = "flex:1;padding:4px 8px";
         const btn = row.createEl("button", { text: "Ingest" });
 
-        const out = contentEl.createEl("p");
+        const out = contentEl.createEl("div");
+        out.style.cssText = "margin-top:4px;-webkit-user-select:text;user-select:text";
+
+        const setStatus = (text: string, color?: string) => {
+            out.empty();
+            const p = out.createEl("p", { text });
+            if (color) p.style.cssText = `color:${color}`;
+        };
+
+        const startPolling = (jobId: string) => {
+            this._pollTimer = window.setInterval(async () => {
+                try {
+                    const job = await api.job(jobId) as any;
+                    const status: string = job.status;
+
+                    if (status === "pending") {
+                        setStatus(`⏳ Queued — job ${jobId.slice(0, 8)}`);
+                        return;
+                    }
+                    if (status === "in_progress") {
+                        setStatus(`⏳ Ingesting… (job ${jobId.slice(0, 8)})`);
+                        return;
+                    }
+
+                    // Settled
+                    window.clearInterval(this._pollTimer!);
+                    this._pollTimer = null;
+                    btn.disabled = false;
+                    input.disabled = false;
+
+                    if (status === "completed") {
+                        const r = job.result ?? {};
+                        const parts: string[] = [];
+                        if (r.pages_created?.length) parts.push(`created: ${r.pages_created.join(", ")}`);
+                        if (r.pages_updated?.length) parts.push(`updated: ${r.pages_updated.join(", ")}`);
+                        if (r.pages_flagged?.length) parts.push(`flagged: ${r.pages_flagged.join(", ")}`);
+                        out.empty();
+                        out.createEl("p", { text: "✅ Done." }).style.cssText = "font-weight:bold;margin-bottom:4px";
+                        if (parts.length) out.createEl("p", { text: parts.join(" · ") }).style.cssText = "font-size:12px;color:var(--text-muted)";
+                        new Notice(`Synthadoc: ingest done (job ${jobId.slice(0, 8)})`);
+                    } else if (status === "skipped") {
+                        setStatus(`⏭️ Skipped — already ingested.`, "var(--text-muted)");
+                    } else {
+                        setStatus(`❌ ${status}${job.error ? `: ${job.error}` : ""}`, "var(--text-error)");
+                    }
+                } catch {
+                    // server unreachable — keep polling silently
+                }
+            }, 2000);
+        };
 
         const submit = async () => {
             const url = input.value.trim();
             if (!url) return;
             btn.disabled = true;
-            out.setText("Queuing…");
+            input.disabled = true;
+            setStatus("⏳ Queuing…");
             try {
                 const r = await api.ingest(url) as any;
-                out.setText(`Queued — job ${r.job_id}`);
-                new Notice(`Synthadoc: ingest queued (job ${r.job_id})`);
+                const jobId: string = r.job_id;
+                setStatus(`⏳ Queued — job ${jobId.slice(0, 8)}`);
+                startPolling(jobId);
             } catch {
-                out.setText("Error: is synthadoc serve running?");
-            } finally { btn.disabled = false; }
+                setStatus("❌ Error: is synthadoc serve running?", "var(--text-error)");
+                btn.disabled = false;
+                input.disabled = false;
+            }
         };
 
         btn.onclick = submit;
         input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
     }
-    onClose() { this.contentEl.empty(); }
+
+    onClose() {
+        if (this._pollTimer !== null) {
+            window.clearInterval(this._pollTimer);
+            this._pollTimer = null;
+        }
+        this.contentEl.empty();
+    }
 }
 
 class WebSearchModal extends Modal {
