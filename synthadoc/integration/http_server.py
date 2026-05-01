@@ -467,4 +467,9 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
         records = await app.state.orch._audit.list_queries(limit=limit)
         return {"records": records, "count": len(records)}
 
+    @app.get("/audit/events")
+    async def audit_events(limit: int = 100):
+        records = await app.state.orch._audit.list_events(limit=limit)
+        return {"records": records, "count": len(records)}
+
     return app

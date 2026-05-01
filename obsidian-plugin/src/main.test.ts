@@ -272,7 +272,7 @@ describe("SynthadocPlugin.ingestAllSources", () => {
 });
 
 describe("SynthadocPlugin command registration", () => {
-    it("registers all 14 expected command IDs on onload", async () => {
+    it("registers all 15 expected command IDs on onload", async () => {
         const { default: SynthadocPlugin } = await import("./main");
         const plugin = new SynthadocPlugin();
         await plugin.onload();
@@ -293,6 +293,7 @@ describe("SynthadocPlugin command registration", () => {
             "synthadoc-audit-history",
             "synthadoc-audit-costs",
             "synthadoc-audit-queries",
+            "synthadoc-audit-events",
         ];
         for (const id of expected) {
             expect(ids).toContain(id);
@@ -427,6 +428,9 @@ function makeSmartContentEl(): any {
             onclick: null,
             disabled: false,
             value: "",
+            min: "",
+            max: "",
+            focus: vi.fn(),
             _html: opts?.text ?? "",
             get innerHTML(): string {
                 const childHtml = el._children.map((c: any) => c.innerHTML).join("");
@@ -438,11 +442,17 @@ function makeSmartContentEl(): any {
                 el._listeners[event] = handler;
             }),
             empty: vi.fn(() => {
+                // Remove only this element's direct children from the shared index
+                for (const child of el._children) {
+                    const bucket = tagIndex.get(child._tag);
+                    if (bucket) {
+                        const idx = bucket.indexOf(child);
+                        if (idx !== -1) bucket.splice(idx, 1);
+                        if (!bucket.length) tagIndex.delete(child._tag);
+                    }
+                }
                 el._children = [];
                 el._html = "";
-                // remove from tagIndex any children that were registered
-                // (simpler: just clear the whole index since this is called on `out`)
-                tagIndex.clear();
             }),
             setText: vi.fn((text: string) => { el._html = text; }),
             createEl: vi.fn((childTag: string, childOpts?: any) => {
@@ -467,11 +477,18 @@ function makeSmartContentEl(): any {
         const tag2 = selector.replace(/^[.#]/, "");
         return tagIndex.get(tag2)?.[0] ?? null;
     });
-    // empty() clears children and index
+    // empty() removes root's direct children from the index then clears root
     root.empty = vi.fn(() => {
+        for (const child of root._children) {
+            const bucket = tagIndex.get(child._tag);
+            if (bucket) {
+                const idx = bucket.indexOf(child);
+                if (idx !== -1) bucket.splice(idx, 1);
+                if (!bucket.length) tagIndex.delete(child._tag);
+            }
+        }
         root._children = [];
         root._html = "";
-        tagIndex.clear();
     });
     return root;
 }
@@ -577,7 +594,7 @@ async function getModal(commandId: string, appOverride?: any): Promise<{ ModalCl
             ingest: vi.fn(), lint: vi.fn(), lintReport: vi.fn(), status: vi.fn(),
             query: vi.fn(), health: vi.fn(), jobs: vi.fn(),
             retryJob: vi.fn(), purgeJobs: vi.fn(), scaffold: vi.fn(),
-            auditHistory: vi.fn(), auditCosts: vi.fn(), queryHistory: vi.fn(),
+            auditHistory: vi.fn(), auditCosts: vi.fn(), queryHistory: vi.fn(), auditEvents: vi.fn(),
         },
         setBase: vi.fn(),
     };
@@ -858,6 +875,100 @@ describe("ScaffoldModal", () => {
         await flushPromises();
 
         expect(btn.disabled).toBe(false);
+        expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
+    });
+});
+
+describe("AuditEventsModal", () => {
+    it("audit-events command is registered", async () => {
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+        const cmds = (plugin.addCommand as any).mock.calls.map((c: any) => c[0]);
+        const cmd = cmds.find((c: any) => c.id === "synthadoc-audit-events");
+        expect(cmd).toBeDefined();
+        expect(cmd.name).toBe("Audit: events...");
+    });
+
+    it("loads events on open and renders a table", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-events");
+        apiMock.auditEvents.mockResolvedValueOnce({
+            records: [
+                { timestamp: "2026-05-01T10:23:45Z", job_id: "abcd1234efgh", event: "job_started", metadata: "ingest" },
+                { timestamp: "2026-05-01T10:24:00Z", job_id: "abcd1234efgh", event: "job_completed", metadata: null },
+            ],
+            count: 2,
+        });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(apiMock.auditEvents).toHaveBeenCalledWith(100);
+        const html = modal.contentEl.innerHTML;
+        expect(html).toContain("job_started");
+        expect(html).toContain("job_completed");
+        expect(html).toContain("abcd1234");
+        expect(html).toContain("2026-05-01 10:23");
+    });
+
+    it("shows empty message when no events exist", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-events");
+        apiMock.auditEvents.mockResolvedValueOnce({ records: [], count: 0 });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("No audit events found");
+    });
+
+    it("calls api.auditEvents with the user-specified limit on Load click", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-events");
+        apiMock.auditEvents
+            .mockResolvedValueOnce({ records: [], count: 0 })
+            .mockResolvedValueOnce({ records: [], count: 0 });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        const input = modal.contentEl.querySelector("input") as any;
+        input.value = "500";
+        const btn = modal.contentEl.querySelector("button") as any;
+        btn.onclick();
+        await flushPromises();
+
+        expect(apiMock.auditEvents).toHaveBeenCalledWith(500);
+    });
+
+    it("clamps limit to 1000 when user enters a value above the max", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-events");
+        apiMock.auditEvents
+            .mockResolvedValueOnce({ records: [], count: 0 })
+            .mockResolvedValueOnce({ records: [], count: 0 });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        const input = modal.contentEl.querySelector("input") as any;
+        input.value = "9999";
+        const btn = modal.contentEl.querySelector("button") as any;
+        btn.onclick();
+        await flushPromises();
+
+        expect(apiMock.auditEvents).toHaveBeenCalledWith(1000);
+    });
+
+    it("shows server error when api.auditEvents throws", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-events");
+        apiMock.auditEvents.mockRejectedValueOnce(new Error("network error"));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
         expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
     });
 });

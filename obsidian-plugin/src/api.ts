@@ -37,4 +37,5 @@ export const api = {
     auditHistory:  (limit = 50)               => call(`/audit/history?limit=${limit}`),
     auditCosts:    (days = 30)                => call(`/audit/costs?days=${days}`),
     queryHistory:  (limit = 50)               => call(`/audit/queries?limit=${limit}`),
+    auditEvents:   (limit = 100)              => call(`/audit/events?limit=${limit}`),
 };

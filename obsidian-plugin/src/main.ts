@@ -117,6 +117,12 @@ export default class SynthadocPlugin extends Plugin {
             callback: () => new QueryHistoryModal(this.app).open(),
         });
 
+        this.addCommand({
+            id: "synthadoc-audit-events",
+            name: "Audit: events...",
+            callback: () => new AuditEventsModal(this.app).open(),
+        });
+
         this.addRibbonIcon("book-open", "Synthadoc status", async () => {
             const [healthRes, statusRes] = await Promise.allSettled([
                 api.health(),
@@ -1450,6 +1456,71 @@ class QueryHistoryModal extends Modal {
         };
 
         btn.onclick = load;
+        load();
+    }
+    onClose() { this.contentEl.empty(); }
+}
+
+class AuditEventsModal extends Modal {
+    onOpen() {
+        this.modalEl.style.width = "clamp(560px, 70vw, 960px)";
+        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
+        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
+        const { contentEl } = this;
+        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Audit events" });
+        makeDraggable(this.modalEl, titleEl);
+
+        const row = contentEl.createEl("div");
+        row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px";
+        row.createEl("label", { text: "Last" });
+        const input = row.createEl("input", { type: "number" }) as HTMLInputElement;
+        input.value = "100";
+        input.min = "1";
+        input.max = "1000";
+        input.style.cssText = "width:70px;padding:4px 8px";
+        row.createEl("span", { text: "events (max 1000)" });
+        const btn = row.createEl("button", { text: "Load" });
+
+        const tableEl = contentEl.createEl("div");
+        tableEl.style.cssText = "max-height:60vh;overflow-y:auto";
+
+        const load = async () => {
+            let limit = parseInt(input.value) || 100;
+            if (limit < 1) limit = 1;
+            if (limit > 1000) limit = 1000;
+            input.value = String(limit);
+            tableEl.setText("Loading…");
+            try {
+                const r = await api.auditEvents(limit) as any;
+                tableEl.empty();
+                if (!r.records.length) {
+                    tableEl.createEl("p", { text: "No audit events found." });
+                    return;
+                }
+                const table = tableEl.createEl("table");
+                table.style.cssText = "width:100%;border-collapse:collapse;font-size:12px;-webkit-user-select:text;user-select:text";
+                const hrow = table.createEl("thead").createEl("tr");
+                for (const h of ["Timestamp", "Job ID", "Event", "Metadata"]) {
+                    const th = hrow.createEl("th", { text: h });
+                    th.style.cssText = "text-align:left;padding:4px 8px;border-bottom:1px solid var(--background-modifier-border);white-space:nowrap";
+                }
+                const tbody = table.createEl("tbody");
+                for (const rec of r.records) {
+                    const tr = tbody.createEl("tr");
+                    const ts = rec.timestamp ? rec.timestamp.slice(0, 16).replace("T", " ") : "—";
+                    const jobId = rec.job_id ? rec.job_id.slice(0, 8) : "—";
+                    for (const text of [ts, jobId, rec.event ?? "—", rec.metadata ?? "—"]) {
+                        const td = tr.createEl("td", { text });
+                        td.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle);font-size:11px";
+                    }
+                }
+            } catch {
+                tableEl.setText("Error: is synthadoc serve running?");
+            }
+        };
+
+        btn.onclick = load;
+        input.addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
         load();
     }
     onClose() { this.contentEl.empty(); }
