@@ -32,7 +32,7 @@ export default class SynthadocPlugin extends Plugin {
             callback: () => {
                 const file = this.app.workspace.getActiveFile();
                 if (file) {
-                    this.ingestFile(file);
+                    new IngestConfirmModal(this.app, file).open();
                 } else {
                     new IngestPickerModal(this.app, this).open();
                 }
@@ -176,6 +176,93 @@ export default class SynthadocPlugin extends Plugin {
     }
 }
 
+class IngestConfirmModal extends Modal {
+    private _file: TFile;
+    private _pollTimer: number | null = null;
+
+    constructor(app: App, file: TFile) {
+        super(app);
+        this._file = file;
+    }
+
+    onOpen() {
+        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
+        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
+        const { contentEl } = this;
+        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Ingest file" });
+        makeDraggable(this.modalEl, titleEl);
+
+        const infoEl = contentEl.createEl("div");
+        infoEl.style.cssText = "margin-bottom:16px;padding:8px 10px;background:var(--background-secondary);border-radius:4px;-webkit-user-select:text;user-select:text";
+        infoEl.createEl("div", { text: this._file.name }).style.cssText = "font-weight:bold;font-size:13px";
+        infoEl.createEl("div", { text: this._file.path }).style.cssText = "font-size:11px;color:var(--text-muted);margin-top:2px";
+
+        const btnRow = contentEl.createEl("div");
+        btnRow.style.cssText = "display:flex;justify-content:flex-end";
+        const btn = btnRow.createEl("button", { text: "Ingest" });
+
+        const out = contentEl.createEl("div");
+        out.style.cssText = "margin-top:12px;-webkit-user-select:text;user-select:text";
+
+        const setStatus = (text: string, color?: string) => {
+            out.empty();
+            const p = out.createEl("p", { text });
+            if (color) p.style.cssText = `color:${color}`;
+        };
+
+        btn.onclick = async () => {
+            btn.disabled = true;
+            setStatus("⏳ Queuing…");
+            try {
+                const r = await api.ingest(this._file.path) as any;
+                const jobId: string = r.job_id;
+                setStatus(`⏳ Queued — job ${jobId.slice(0, 8)}`);
+
+                this._pollTimer = window.setInterval(async () => {
+                    try {
+                        const job = await api.job(jobId) as any;
+                        const status: string = job.status;
+
+                        if (status === "pending") { setStatus(`⏳ Queued — job ${jobId.slice(0, 8)}`); return; }
+                        if (status === "in_progress") { setStatus(`⏳ Ingesting… (job ${jobId.slice(0, 8)})`); return; }
+
+                        window.clearInterval(this._pollTimer!);
+                        this._pollTimer = null;
+                        btn.disabled = false;
+
+                        if (status === "completed") {
+                            const res = job.result ?? {};
+                            const parts: string[] = [];
+                            if (res.pages_created?.length) parts.push(`created: ${res.pages_created.join(", ")}`);
+                            if (res.pages_updated?.length) parts.push(`updated: ${res.pages_updated.join(", ")}`);
+                            if (res.pages_flagged?.length) parts.push(`flagged: ${res.pages_flagged.join(", ")}`);
+                            out.empty();
+                            out.createEl("p", { text: "✅ Done." }).style.cssText = "font-weight:bold;margin-bottom:4px";
+                            if (parts.length) out.createEl("p", { text: parts.join(" · ") }).style.cssText = "font-size:12px;color:var(--text-muted)";
+                            new Notice(`Synthadoc: ingest done — ${this._file.name}`);
+                        } else if (status === "skipped") {
+                            setStatus("⏭️ Skipped — already ingested.", "var(--text-muted)");
+                        } else {
+                            setStatus(`❌ ${status}${job.error ? `: ${job.error}` : ""}`, "var(--text-error)");
+                        }
+                    } catch { /* server unreachable — keep polling */ }
+                }, 2000);
+            } catch {
+                setStatus("❌ Error: is synthadoc serve running?", "var(--text-error)");
+                btn.disabled = false;
+            }
+        };
+    }
+
+    onClose() {
+        if (this._pollTimer !== null) {
+            window.clearInterval(this._pollTimer);
+            this._pollTimer = null;
+        }
+        this.contentEl.empty();
+    }
+}
+
 class IngestPickerModal extends SuggestModal<TFile> {
     private plugin: SynthadocPlugin;
 
@@ -202,7 +289,7 @@ class IngestPickerModal extends SuggestModal<TFile> {
     }
 
     onChooseSuggestion(file: TFile): void {
-        this.plugin.ingestFile(file);
+        new IngestConfirmModal(this.app, file).open();
     }
 }
 
