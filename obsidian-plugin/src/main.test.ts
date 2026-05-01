@@ -300,18 +300,24 @@ describe("SynthadocPlugin command registration", () => {
         }
     });
 
-    it("command names use group prefixes for palette sorting", async () => {
+    it("command names have zero-padded numeric prefixes for palette sort order", async () => {
         const { default: SynthadocPlugin } = await import("./main");
         const plugin = new SynthadocPlugin();
         await plugin.onload();
 
         const names: string[] = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].name);
-        expect(names.some(n => n.startsWith("Ingest:"))).toBe(true);
-        expect(names.some(n => n.startsWith("Query:"))).toBe(true);
-        expect(names.some(n => n.startsWith("Lint:"))).toBe(true);
-        expect(names.some(n => n.startsWith("Jobs:"))).toBe(true);
-        expect(names.some(n => n.startsWith("Wiki:"))).toBe(true);
-        expect(names.some(n => n.startsWith("Audit:"))).toBe(true);
+        // All names should start with a two-digit prefix
+        expect(names.every(n => /^\d{2}\./.test(n))).toBe(true);
+        // Verify the exact sort order by checking sorted names match the registered order
+        const sorted = [...names].sort();
+        expect(sorted).toEqual(names);
+        // Spot-check the most important group prefixes are present
+        expect(names.some(n => n.includes("Query:"))).toBe(true);
+        expect(names.some(n => n.includes("Ingest:"))).toBe(true);
+        expect(names.some(n => n.includes("Lint:"))).toBe(true);
+        expect(names.some(n => n.includes("Jobs:"))).toBe(true);
+        expect(names.some(n => n.includes("Wiki:"))).toBe(true);
+        expect(names.some(n => n.includes("Audit:"))).toBe(true);
     });
 });
 
@@ -325,7 +331,7 @@ describe("SynthadocPlugin lint commands", () => {
             (c: any) => c[0].id === "synthadoc-lint"
         );
         expect(cmd).toBeDefined();
-        expect(cmd[0].name).toBe("Lint: run...");
+        expect(cmd[0].name).toBe("10. Lint: run...");
         // callback opens a modal (no direct api.lint call at command level)
         expect(typeof cmd[0].callback).toBe("function");
     });
@@ -362,7 +368,7 @@ describe("SynthadocPlugin new commands registered", () => {
         const cmds = (plugin.addCommand as any).mock.calls.map((c: any) => c[0]);
         const retryCmd = cmds.find((c: any) => c.id === "synthadoc-jobs-retry-dead");
         expect(retryCmd).toBeDefined();
-        expect(retryCmd.name).toBe("Jobs: retry failed or dead jobs...");
+        expect(retryCmd.name).toBe("07. Jobs: retry failed or dead jobs...");
     });
 
     it("purge command is registered", async () => {
@@ -887,7 +893,7 @@ describe("AuditEventsModal", () => {
         const cmds = (plugin.addCommand as any).mock.calls.map((c: any) => c[0]);
         const cmd = cmds.find((c: any) => c.id === "synthadoc-audit-events");
         expect(cmd).toBeDefined();
-        expect(cmd.name).toBe("Audit: events...");
+        expect(cmd.name).toBe("14. Audit: events...");
     });
 
     it("loads events on open and renders a table", async () => {
