@@ -282,6 +282,9 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
             if known:
                 logger.warning("LLM rate limit during query: %s", exc)
                 raise known from exc
+            if isinstance(exc, (EnvironmentError, OSError)) and "[ERR-PROV-" in str(exc):
+                logger.warning("Provider not available: %s", exc)
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
             logger.exception("Query failed")
             raise HTTPException(status_code=502, detail="LLM provider unavailable") from exc
         return {

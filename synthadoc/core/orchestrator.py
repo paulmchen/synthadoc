@@ -190,6 +190,10 @@ class Orchestrator:
         except (NotImplementedError, FileNotFoundError) as e:
             # Permanent failures — source is invalid, retry can never help
             await self._queue.fail_permanent(job_id, str(e))
+        except EnvironmentError as e:
+            # Provider binary not installed (ERR-PROV-003) — log cleanly, no traceback
+            logging.getLogger(__name__).warning("%s", e)
+            await self._queue.fail_permanent(job_id, str(e))
         except Exception as e:
             import httpx
             import logging
