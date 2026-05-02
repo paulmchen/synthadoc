@@ -210,37 +210,51 @@ class QueryAgent:
             else:
                 _discriminating_term = min(_term_doc_freq, key=lambda t: _term_doc_freq[t])
 
-            # A page is on-topic if it mentions ANY specific term with sufficient freq.
-            _pages_with_overlap = sum(
-                1 for r in candidates
-                if (p := self._store.read_page(r.slug)) and
-                   any(p.content.lower().count(t) >= _MIN_TERM_FREQ for t in _specific)
-            )
+            # Single pass: compute both signal 3 (any specific term ≥ freq) and
+            # per-term qualifying page counts (needed for signal 5).
+            _term_qualifying_pages: dict[str, int] = {t: 0 for t in _specific}
+            _pages_with_overlap = 0
+            for _r in candidates:
+                _p = self._store.read_page(_r.slug)
+                if not _p:
+                    continue
+                _content = _p.content.lower()
+                _page_on_topic = False
+                for _t in _specific:
+                    if _content.count(_t) >= _MIN_TERM_FREQ:
+                        _term_qualifying_pages[_t] += 1
+                        _page_on_topic = True
+                if _page_on_topic:
+                    _pages_with_overlap += 1
 
-            # Signal 5: discriminating term (rarest non-generic specific term) appears
-            # with meaningful frequency (≥ MIN_TERM_FREQ) in fewer than 2 candidates.
-            # Catches the "quantum error correction" case: "quantum" has freq=1 (an
-            # index mention) so signal 4 doesn't fire (no zero-freq terms), while
-            # "error"/"correction" incidentally give on_topic_pages=2 so signal 3
-            # also doesn't fire.  But "quantum" itself never appears ≥ 2 times in
-            # any page, definitively showing the defining concept is absent.
-            _discriminating_term_pages = (
-                sum(
-                    1 for r in candidates
-                    if (p := self._store.read_page(r.slug)) and
-                       p.content.lower().count(_discriminating_term) >= _MIN_TERM_FREQ
-                )
-                if _discriminating_term else 0
+            # Signal 5: at least one specific topic term never appears with meaningful
+            # frequency (≥ MIN_TERM_FREQ) in any single candidate page.
+            #
+            # A term that appears scattered (once per page across many pages) is
+            # incidentally present — the wiki touches the vocabulary but lacks a page
+            # that actually discusses the concept.
+            #
+            # "quantum error correction": "quantum" and "correction" each appear in
+            # 1 page with ≥ 2 occurrences (transistor and bombe respectively), but
+            # "error" appears only once each in 2 separate pages (never ≥ 2 in any
+            # one page) — min qualifying = 0 → gap.
+            #
+            # "unix open-source movement": every specific term ("open-source",
+            # "movement", "influence") has at least 1 page where it appears ≥ 2 times
+            # — min qualifying ≥ 1 → no gap.
+            _min_specific_qualifying = (
+                min(_term_qualifying_pages.values())
+                if _term_qualifying_pages else 0
             )
             _defining_term_absent = (
                 bool(_specific)
                 and len(_term_doc_freq) >= 2
-                and _discriminating_term_pages < 2
+                and _min_specific_qualifying == 0
             )
         else:
             _discriminating_term = ""
             _pages_with_overlap = len(candidates)   # no key terms → skip check
-            _discriminating_term_pages = len(candidates)
+            _min_specific_qualifying = len(candidates)
 
         _gap = self._gap_score_threshold > 0 and (
             len(candidates) < 3                          # signal 1: too few pages
@@ -253,9 +267,9 @@ class QueryAgent:
         # Always log retrieval quality so operators can tune gap_score_threshold.
         logger.info(
             "query retrieval — pages=%d, max_score=%.2f, "
-            "discriminating_term=%r, on_topic_pages=%d, discriminating_pages=%d, gap=%s",
+            "discriminating_term=%r, on_topic_pages=%d, min_qualifying=%d, gap=%s",
             len(candidates), _max_score, _discriminating_term,
-            _pages_with_overlap, _discriminating_term_pages, _gap,
+            _pages_with_overlap, _min_specific_qualifying, _gap,
         )
         if _gap:
             _suggested = await SearchDecomposeAgent(self._provider).decompose(question)

@@ -948,20 +948,27 @@ async def test_no_gap_multi_aspect_query_with_generic_corpus_term(tmp_wiki):
 
 @pytest.mark.asyncio
 async def test_gap_signal5_defining_term_barely_present(tmp_wiki):
-    """Signal 5: gap triggers when the discriminating (rarest specific) term appears
-    with meaningful frequency (≥ 2 times) in zero candidate pages, even though other
-    key terms appear incidentally in 2+ pages (so signal 3 passes).
+    """Signal 5: gap triggers when at least one specific key term never appears ≥ 2
+    times in any single candidate page, even though it exists in the wiki (freq > 0
+    across pages) so signal 4 does not fire.
 
     Real-world case: "quantum error correction" in a history-of-computing wiki.
-    "quantum" appears once in the index page (freq=1, so signal 4 doesn't fire) while
-    "error" and "correction" appear in Bombe/AI pages incidentally (on_topic_pages=2).
-    Signal 5 catches this: "quantum" never appears ≥ 2 times in any page.
+    "quantum" is present in 2 candidate pages but only once per page (passing mention).
+    "error" and "correction" each appear ≥ 2 times in dedicated Bombe pages.
+
+    Signal breakdown for this test:
+    - Signal 1: 8 candidates ≥ 3 → no fire
+    - Signal 2: gap_score_threshold=0.01 → no fire
+    - Signal 3: 2 pages have error/correction ≥ 2 → on_topic_pages=2 ≥ 2 → no fire
+    - Signal 4: all 3 terms have doc_freq > 0 → no zero-freq → no fire
+    - Signal 5: quantum_qualifying_pages=0 (never ≥ 2 in any page) →
+                min(quantum=0, error=2, correction=2)=0 → gap=True ✓
 
     bm25_search is mocked so BM25 IDF behaviour does not affect this test.
     """
     store = WikiStorage(tmp_wiki / "wiki")
 
-    # 2 pages where "error" and "correction" appear ≥ 2 times (incidental matches).
+    # 2 pages where "error" and "correction" appear ≥ 2 times (Bombe incidental matches).
     for i in range(2):
         store.write_page(f"bombe-page-{i}", WikiPage(
             title=f"The Bombe Machine {i}", tags=["history"],
@@ -973,8 +980,19 @@ async def test_gap_signal5_defining_term_barely_present(tmp_wiki):
             ),
             status="active", confidence="high", sources=[],
         ))
-    # 6 pages with no "error"/"correction" but also no "quantum".
-    for i in range(6):
+    # 2 pages that each mention "quantum" exactly once — present but not covered.
+    for i in range(2):
+        store.write_page(f"quantum-mention-{i}", WikiPage(
+            title=f"Computing Frontiers {i}", tags=["history"],
+            content=(
+                "Transistors replaced vacuum tubes in the 1950s, paving the way for "
+                "integrated circuits. Researchers have since explored quantum computing "
+                "as the next frontier, but this wiki does not yet cover that topic."
+            ),
+            status="active", confidence="high", sources=[],
+        ))
+    # 4 filler pages with none of the key terms.
+    for i in range(4):
         store.write_page(f"other-page-{i}", WikiPage(
             title=f"Computing History {i}", tags=["history"],
             content=(
@@ -983,18 +1001,11 @@ async def test_gap_signal5_defining_term_barely_present(tmp_wiki):
             ),
             status="active", confidence="high", sources=[],
         ))
-    # Index page that mentions "quantum" exactly once (passing mention, not coverage).
-    store.write_page("index", WikiPage(
-        title="Index", tags=["index"],
-        content=(
-            "Topics: transistors, microchips, bombe, artificial intelligence, quantum (not yet covered)."
-        ),
-        status="active", confidence="high", sources=[],
-    ))
 
     all_slugs = (
         [f"bombe-page-{i}" for i in range(2)]
-        + [f"other-page-{i}" for i in range(6)]
+        + [f"quantum-mention-{i}" for i in range(2)]
+        + [f"other-page-{i}" for i in range(4)]
     )
     search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
     provider = AsyncMock()
@@ -1010,9 +1021,6 @@ async def test_gap_signal5_defining_term_barely_present(tmp_wiki):
                        gap_score_threshold=0.01)  # signal 2 disabled
     with patch.object(agent._search, "bm25_search", return_value=_fake_results(all_slugs)):
         result = await agent.query("What is quantum error correction?")
-    # "quantum" is the discriminating term. It appears in the index page once but is
-    # NOT in the 8 mocked candidates (all_slugs excludes "index"). So discriminating
-    # pages = 0 < 2 → signal 5 fires → gap=True.
-    # Signal 3 would NOT fire alone: "error"/"correction" appear ≥ 2 times in 2 pages.
+    # "quantum" never appears ≥ 2 times in any candidate → min_qualifying=0 → signal 5.
     assert result.knowledge_gap is True
     assert len(result.suggested_searches) >= 1
