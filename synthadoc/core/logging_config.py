@@ -21,7 +21,7 @@ File handler
 
 Root logger
     Level  : DEBUG — lets each handler decide what to show/store.
-    Third-party noise (httpx, uvicorn access) is suppressed to WARNING.
+    Third-party noise (httpx, uvicorn access, aiosqlite, asyncio) is suppressed to WARNING.
 
 Configuration (in .synthadoc/config.toml)
 ------------------------------------------
@@ -158,7 +158,8 @@ def setup_logging(
     root.addHandler(file_handler)
 
     # --- Suppress noisy third-party loggers ---
-    for noisy in ("httpx", "httpcore", "uvicorn.access", "anthropic", "openai"):
+    for noisy in ("httpx", "httpcore", "uvicorn.access", "anthropic", "openai",
+                  "aiosqlite", "asyncio"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
     logging.getLogger(__name__).info(
