@@ -158,6 +158,7 @@ class QueryAgent:
         # Zero-freq terms (synonyms like "backyard" vs "garden") are excluded;
         # they reflect vocabulary mismatch, not missing content.
         _MIN_TERM_FREQ = 2
+        _any_term_missing = False   # signal 4 default
         if _key_terms and candidates:
             # Count how many candidates contain each key term (doc frequency).
             _term_doc_freq = {
@@ -169,6 +170,24 @@ class QueryAgent:
             }
             _covered = {t: f for t, f in _term_doc_freq.items() if f > 0}
 
+            # Signal 4: a defining concept word is entirely absent from the wiki.
+            # When a query has ≥ 2 key terms and at least one appears in zero
+            # retrieved pages, the topic's core vocabulary is missing — not a
+            # synonym/vocabulary mismatch.  E.g. "quantum error correction" in a
+            # history-of-computing wiki: "error" and "correction" hit Bombe pages
+            # (high BM25 score, signal 3 passes), but "quantum" has zero coverage,
+            # definitively flagging the topic as absent.
+            #
+            # Coverage guard: if non-zero terms appear in >80% of candidates they
+            # are generic corpus words ("plant", "garden"), not topic discriminators.
+            # In that case the zero-freq term is a synonym mismatch, not a true gap.
+            _any_term_missing = (
+                bool(_covered)
+                and len(_term_doc_freq) >= 2
+                and any(f == 0 for f in _term_doc_freq.values())
+                and max(_covered.values()) / len(candidates) <= 0.8
+            )
+
             # Drop hyper-generic terms that appear in >80% of candidates.
             # Using 80% (not 60%) so moderately-common topic words like "partial"
             # (present in ~60-70% of pages in a shade-focused wiki) are kept as
@@ -179,7 +198,7 @@ class QueryAgent:
                 _specific = _covered  # all terms are corpus-generic; use full covered set
             # If every term in _specific appears in only one page it is too rare to
             # discriminate topic coverage — expand to include all covered terms.
-            elif max(_specific.values()) <= 1:
+            elif max(_specific.values(), default=0) <= 1:
                 _specific = _covered
 
             # Log the rarest specific term as a representative discriminator.
@@ -204,6 +223,7 @@ class QueryAgent:
             len(candidates) < 3                          # signal 1: too few pages
             or _max_score < self._gap_score_threshold    # signal 2: low BM25 scores
             or _pages_with_overlap < 2                   # signal 3: no dedicated coverage
+            or _any_term_missing                         # signal 4: defining concept absent
         )
 
         # Always log retrieval quality so operators can tune gap_score_threshold.
