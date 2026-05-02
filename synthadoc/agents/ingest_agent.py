@@ -92,12 +92,6 @@ _OVERVIEW_PROMPT = (
     "Pages:\n{pages}"
 )
 
-_VISION_PROMPT = (
-    "Extract all text and key information from this image. "
-    "Return plain text only, preserving the structure and content faithfully."
-)
-
-
 _SLUG_BLACKLIST = frozenset({
     "wikilinks", "wikilink", "wiki", "obsidian", "dataview",
     # URL path segments that are never meaningful topic names
@@ -182,6 +176,7 @@ class IngestAgent:
         self._skill_agent = SkillAgent(skill_kwargs={
             "url": {"fetch_timeout": fetch_timeout},
             "youtube": {"provider": self._provider},
+            "image": {"provider": self._provider},
         })
         self._purpose = self._load_purpose()
 
@@ -347,31 +342,13 @@ class IngestAgent:
             result.child_sources = extracted.metadata["child_sources"]
             return result
 
-        # Pass 0: Vision extraction for image files
-        if extracted.metadata.get("is_image"):
-            if not getattr(self._provider, "supports_vision", True):
-                raise NotImplementedError(
-                    "Image ingest requires a vision-capable model. "
-                    f"Current provider/model does not support vision. "
-                    "Switch to anthropic (claude-*) or gemini (gemini-*) for image sources."
-                )
-            b64 = extracted.metadata.get("base64", "")
-            media_type = extracted.metadata.get("media_type", "image/png")
-            vision_resp = await self._provider.complete(
-                messages=[Message(role="user", content=[
-                    {"type": "image", "source": {
-                        "type": "base64", "media_type": media_type, "data": b64,
-                    }},
-                    {"type": "text", "text": _VISION_PROMPT},
-                ])],
-                temperature=0.0,
-            )
-            result.tokens_used += vision_resp.total_tokens
-            result.input_tokens += vision_resp.input_tokens
-            result.output_tokens += vision_resp.output_tokens
-            text = vision_resp.text[:8000]
-        else:
-            text = extracted.text[:8000]
+        # Skill-level token costs (e.g. vision pre-pass in ImageSkill)
+        if extracted.metadata.get("tokens_input"):
+            result.tokens_used += extracted.metadata["tokens_input"] + extracted.metadata.get("tokens_output", 0)
+            result.input_tokens += extracted.metadata["tokens_input"]
+            result.output_tokens += extracted.metadata.get("tokens_output", 0)
+
+        text = extracted.text[:8000]
 
         # Step 1: analysis pass (cached separately from decision)
         analysis = await self._analyse(text, bust_cache=bust_cache)

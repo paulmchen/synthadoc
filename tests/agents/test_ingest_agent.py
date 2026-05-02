@@ -722,23 +722,19 @@ async def test_analyse_coerces_dict_entities_to_strings(tmp_wiki):
 
 @pytest.mark.asyncio
 async def test_ingest_vision_path_extracts_text_from_image(tmp_wiki):
-    """When extracted.metadata['is_image'] is True, the provider is called with image content."""
+    """ImageSkill returns extracted text; IngestAgent ingests it and accounts for vision tokens."""
     import itertools
-    import base64
-    from unittest.mock import AsyncMock, patch, MagicMock
+    from unittest.mock import AsyncMock, patch
     from synthadoc.providers.base import CompletionResponse
 
     provider = AsyncMock()
-    vision_resp = CompletionResponse(
-        text="A diagram showing a CPU architecture.", input_tokens=30, output_tokens=15)
     entity_resp = CompletionResponse(
         text='{"entities":["CPU","architecture"],"tags":["hardware"],"summary":"CPU diagram.","relevant":true}',
         input_tokens=40, output_tokens=20)
     decision_resp = CompletionResponse(
         text='{"action":"create","target":"","new_slug":"cpu-architecture","update_content":""}',
         input_tokens=50, output_tokens=25)
-    provider.complete = AsyncMock(side_effect=itertools.cycle(
-        [vision_resp, entity_resp, decision_resp]))
+    provider.complete = AsyncMock(side_effect=itertools.cycle([entity_resp, decision_resp]))
     provider.supports_vision = True
 
     store = WikiStorage(tmp_wiki / "wiki")
@@ -749,19 +745,15 @@ async def test_ingest_vision_path_extracts_text_from_image(tmp_wiki):
     cache = CacheManager(tmp_wiki / ".synthadoc" / "cache.db")
     await cache.init()
 
-    # Fake image source: write a dummy PNG-like file
     img_path = tmp_wiki / "raw_sources" / "diagram.png"
     img_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
 
+    # ImageSkill now returns populated text + token counts in metadata
     from synthadoc.skills.base import ExtractedContent
     fake_extracted = ExtractedContent(
-        text="",
+        text="A diagram showing a CPU architecture.",
         source_path=str(img_path),
-        metadata={
-            "is_image": True,
-            "base64": base64.b64encode(img_path.read_bytes()).decode(),
-            "media_type": "image/png",
-        },
+        metadata={"tokens_input": 30, "tokens_output": 15},
     )
 
     agent = IngestAgent(provider=provider, store=store, search=search,
@@ -772,15 +764,11 @@ async def test_ingest_vision_path_extracts_text_from_image(tmp_wiki):
         with patch.object(IngestAgent, "_update_overview", AsyncMock()):
             result = await agent.ingest(str(img_path))
 
-    # Vision call must be the first LLM call (multimodal message)
-    first_call_args = provider.complete.call_args_list[0]
-    messages = first_call_args[1].get("messages") or first_call_args[0][0]
-    content = messages[0].content
-    assert isinstance(content, list), "Vision call must use a list content (multimodal)"
-    assert any(block.get("type") == "image" for block in content if isinstance(block, dict))
-
     assert not result.skipped
     assert result.pages_created
+    # Vision tokens surfaced by the skill are tracked in the ingest result
+    assert result.input_tokens >= 30
+    assert result.output_tokens >= 15
 
 
 @pytest.mark.asyncio
