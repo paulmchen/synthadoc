@@ -209,65 +209,96 @@ describe("SynthadocPlugin web search command", () => {
     });
 });
 
-describe("SynthadocPlugin.ingestAllSources", () => {
-    it("queues every file under rawSourcesFolder and shows summary", async () => {
-        const { api } = await import("./api");
-        const { Notice } = await import("obsidian");
-        (api.ingest as any).mockResolvedValue({ job_id: "job-1" });
-
-        const { default: SynthadocPlugin } = await import("./main");
-        const plugin = new SynthadocPlugin();
-        plugin.app = {
-            vault: {
-                getFiles: () => [
-                    { path: "raw_sources/file-a.pdf", extension: "pdf" },
-                    { path: "raw_sources/file-b.png", extension: "png" },
-                    { path: "wiki/page.md",           extension: "md"  },  // excluded (wrong folder)
-                    { path: "raw_sources/script.py",  extension: "py"  },  // excluded (unsupported)
-                ],
-            },
-        } as any;
-        await plugin.ingestAllSources();
-
-        expect(api.ingest).toHaveBeenCalledTimes(2);
-        expect(api.ingest).toHaveBeenCalledWith("raw_sources/file-a.pdf");
-        expect(api.ingest).toHaveBeenCalledWith("raw_sources/file-b.png");
-        expect(Notice).toHaveBeenCalledWith(expect.stringContaining("2 job(s) queued"));
+describe("IngestAllModal", () => {
+    const makeVault = (files: { path: string; extension: string }[]) => ({
+        workspace: { getActiveFile: () => null },
+        vault: { getFiles: () => files },
     });
 
-    it("shows warning when no files found in folder", async () => {
-        const { Notice } = await import("obsidian");
-
-        const { default: SynthadocPlugin } = await import("./main");
-        const plugin = new SynthadocPlugin();
-        plugin.app = {
-            vault: { getFiles: () => [{ path: "wiki/page.md", extension: "md" }] },
-        } as any;
-        await plugin.ingestAllSources();
-
-        expect(Notice).toHaveBeenCalledWith(expect.stringContaining("no files found"));
+    it("pre-fills the folder input with the plugin's rawSourcesFolder setting", async () => {
+        const { ModalClass } = await getModal("synthadoc-ingest-all",
+            makeVault([{ path: "raw_sources/a.pdf", extension: "pdf" }])
+        );
+        const modal = new ModalClass();
+        modal.onOpen();
+        const input = modal.contentEl.querySelector("input") as any;
+        expect(input.value).toBe("raw_sources");
     });
 
-    it("reports partial failures", async () => {
-        const { api } = await import("./api");
-        const { Notice } = await import("obsidian");
-        (api.ingest as any)
+    it("calls api.ingest for each supported file in the folder on Ingest click", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-ingest-all",
+            makeVault([
+                { path: "raw_sources/file-a.pdf", extension: "pdf" },
+                { path: "raw_sources/file-b.png", extension: "png" },
+                { path: "wiki/page.md",           extension: "md"  }, // excluded: wrong folder
+                { path: "raw_sources/script.py",  extension: "py"  }, // excluded: unsupported
+            ])
+        );
+        apiMock.ingest
             .mockResolvedValueOnce({ job_id: "job-1" })
-            .mockRejectedValueOnce(new Error("timeout"));
+            .mockResolvedValueOnce({ job_id: "job-2" });
+        apiMock.jobs.mockResolvedValue([
+            { id: "job-1", status: "completed" },
+            { id: "job-2", status: "completed" },
+        ]);
 
-        const { default: SynthadocPlugin } = await import("./main");
-        const plugin = new SynthadocPlugin();
-        plugin.app = {
-            vault: {
-                getFiles: () => [
-                    { path: "raw_sources/ok.pdf",  extension: "pdf" },
-                    { path: "raw_sources/bad.pdf", extension: "pdf" },
-                ],
-            },
-        } as any;
-        await plugin.ingestAllSources();
+        const modal = new ModalClass();
+        modal.onOpen();
+        const btn = modal.contentEl.querySelector("button") as any;
+        btn.onclick();
+        await flushPromises();
 
-        expect(Notice).toHaveBeenCalledWith(expect.stringContaining("1 queued, 1 failed"));
+        expect(apiMock.ingest).toHaveBeenCalledTimes(2);
+        expect(apiMock.ingest).toHaveBeenCalledWith("raw_sources/file-a.pdf");
+        expect(apiMock.ingest).toHaveBeenCalledWith("raw_sources/file-b.png");
+    });
+
+    it("disables the Ingest button while jobs are in flight", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-ingest-all",
+            makeVault([{ path: "raw_sources/a.pdf", extension: "pdf" }])
+        );
+        apiMock.ingest.mockResolvedValueOnce({ job_id: "job-1" });
+        apiMock.jobs.mockResolvedValue([{ id: "job-1", status: "pending" }]);
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        const btn = modal.contentEl.querySelector("button") as any;
+        btn.onclick();
+        await flushPromises();
+
+        expect(btn.disabled).toBe(true);
+    });
+
+    it("shows empty-folder message when no supported files found", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-ingest-all",
+            makeVault([{ path: "wiki/page.md", extension: "md" }])
+        );
+        apiMock.ingest.mockResolvedValue({ job_id: "job-1" });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        const btn = modal.contentEl.querySelector("button") as any;
+        btn.onclick();
+        await flushPromises();
+
+        expect(apiMock.ingest).not.toHaveBeenCalled();
+        expect(modal.contentEl.innerHTML).toContain("No supported files found");
+    });
+
+    it("shows error and re-enables button when all queuing fails", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-ingest-all",
+            makeVault([{ path: "raw_sources/a.pdf", extension: "pdf" }])
+        );
+        apiMock.ingest.mockRejectedValueOnce(new Error("server down"));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        const btn = modal.contentEl.querySelector("button") as any;
+        btn.onclick();
+        await flushPromises();
+
+        expect(btn.disabled).toBe(false);
+        expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
     });
 });
 
@@ -618,11 +649,17 @@ async function getModal(commandId: string, appOverride?: any): Promise<{ ModalCl
         .filter(([k]) => k.startsWith("_") && k !== "_pollTimer")
         .map(([, v]) => v);
     const capturedFile = (lastInstance as any)._file;
+    const capturedFolder = (lastInstance as any)._folder;
     const ModalClass = class {
         constructor() {
-            const inst = capturedFile
-                ? new CapturedModalClass(undefined, capturedFile)
-                : new CapturedModalClass(undefined);
+            let inst: any;
+            if (capturedFile) {
+                inst = new CapturedModalClass(appOverride, capturedFile);
+            } else if (capturedFolder !== undefined) {
+                inst = new CapturedModalClass(appOverride, capturedFolder);
+            } else {
+                inst = new CapturedModalClass(appOverride);
+            }
             inst.contentEl = makeSmartContentEl();
             inst.modalEl = { style: {}, addEventListener: vi.fn() };
             inst.containerEl = { querySelector: vi.fn().mockReturnValue({ addEventListener: vi.fn() }) };

@@ -41,7 +41,7 @@ export default class SynthadocPlugin extends Plugin {
         this.addCommand({
             id: "synthadoc-ingest-all",
             name: "Ingest: all sources in folder",
-            callback: () => this.ingestAllSources(),
+            callback: () => new IngestAllModal(this.app, this.settings.rawSourcesFolder).open(),
         });
 
         this.addCommand({
@@ -152,33 +152,134 @@ export default class SynthadocPlugin extends Plugin {
         } catch { new Notice("Synthadoc: ingest failed — is the server running?"); }
     }
 
-    async ingestAllSources() {
-        const folder = this.settings.rawSourcesFolder.replace(/\/$/, "");
-        const files = this.app.vault.getFiles().filter(f => {
-            if (!f.path.startsWith(folder + "/")) return false;
-            const ext = f.extension?.toLowerCase() ?? "";
-            return SUPPORTED_EXTENSIONS.has(ext);
-        });
-        if (files.length === 0) {
-            new Notice(`Synthadoc: no files found in '${folder}'`);
-            return;
-        }
-        new Notice(`Synthadoc: queuing ${files.length} source(s)…`);
-        let queued = 0;
-        let failed = 0;
-        for (const file of files) {
-            try {
-                await api.ingest(file.path);
-                queued++;
-            } catch {
-                failed++;
+}
+
+class IngestAllModal extends Modal {
+    private _folder: string;
+    private _pollTimer: number | null = null;
+
+    constructor(app: App, folder: string) {
+        super(app);
+        this._folder = folder.replace(/\/$/, "") || "raw_sources";
+    }
+
+    onOpen() {
+        this.modalEl.style.width = "clamp(460px, 55vw, 720px)";
+        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
+        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
+        const { contentEl } = this;
+        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Ingest all sources in folder" });
+        makeDraggable(this.modalEl, titleEl);
+
+        // Folder input row
+        const folderRow = contentEl.createEl("div");
+        folderRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:16px";
+        folderRow.createEl("label", { text: "Folder" }).style.cssText = "white-space:nowrap;font-size:13px";
+        const folderInput = folderRow.createEl("input", { type: "text" }) as HTMLInputElement;
+        folderInput.value = this._folder;
+        folderInput.style.cssText = "flex:1;padding:4px 8px;font-size:13px";
+
+        // Status area
+        const statusEl = contentEl.createEl("div");
+        statusEl.style.cssText = "min-height:40px;margin-bottom:12px;font-size:13px;-webkit-user-select:text;user-select:text";
+
+        // Button row
+        const btnRow = contentEl.createEl("div");
+        btnRow.style.cssText = "display:flex;gap:8px;justify-content:flex-end;align-items:center";
+        const ingestBtn = btnRow.createEl("button", { text: "Ingest" });
+        ingestBtn.style.cssText = "font-weight:bold";
+
+        // Jobs list link — hidden until ingest completes
+        const jobsLink = btnRow.createEl("a", { text: "View jobs list →" });
+        jobsLink.style.cssText = "display:none;font-size:12px;cursor:pointer;color:var(--link-color)";
+        jobsLink.onclick = () => {
+            this.close();
+            (this.app as any).commands?.executeCommandById("synthadoc-jobs");
+        };
+
+        const setStatus = (html: string) => { statusEl.innerHTML = html; };
+
+        ingestBtn.onclick = async () => {
+            const folder = folderInput.value.trim().replace(/\/$/, "");
+            if (!folder) return;
+
+            const files = (this.app.vault.getFiles() as any[]).filter((f: any) => {
+                if (!f.path.startsWith(folder + "/")) return false;
+                const ext = (f.extension ?? "").toLowerCase();
+                return SUPPORTED_EXTENSIONS.has(ext);
+            });
+
+            if (!files.length) {
+                setStatus(`<span style="color:var(--text-muted)">No supported files found in <em>${folder}</em>.</span>`);
+                return;
             }
+
+            ingestBtn.disabled = true;
+            folderInput.disabled = true;
+            jobsLink.style.display = "none";
+            setStatus(`⏳ Queuing ${files.length} file(s)…`);
+
+            // Enqueue all files and collect job IDs
+            const jobIds: string[] = [];
+            let queueFailed = 0;
+            for (const file of files) {
+                try {
+                    const r = await api.ingest(file.path) as any;
+                    if (r?.job_id) jobIds.push(r.job_id);
+                } catch {
+                    queueFailed++;
+                }
+            }
+
+            if (!jobIds.length) {
+                setStatus(`<span style="color:var(--text-error)">❌ All ${files.length} file(s) failed to queue — is synthadoc serve running?</span>`);
+                ingestBtn.disabled = false;
+                folderInput.disabled = false;
+                return;
+            }
+
+            setStatus(`⏳ Queued ${jobIds.length} job(s)${queueFailed ? ` (${queueFailed} failed to queue)` : ""}. Monitoring progress…`);
+
+            // Poll until all queued jobs have settled
+            const pending = new Set(jobIds);
+            let done = 0;
+
+            this._pollTimer = window.setInterval(async () => {
+                try {
+                    const allJobs = await api.jobs() as any[];
+                    for (const jobId of [...pending]) {
+                        const job = allJobs.find((j: any) => j.id === jobId);
+                        if (!job) { pending.delete(jobId); done++; continue; }
+                        if (["completed", "failed", "dead", "skipped"].includes(job.status)) {
+                            pending.delete(jobId);
+                            done++;
+                        }
+                    }
+                    const running = jobIds.length - done;
+                    setStatus(`⏳ ${running} running, ${done} of ${jobIds.length} settled…`);
+
+                    if (pending.size === 0) {
+                        window.clearInterval(this._pollTimer!);
+                        this._pollTimer = null;
+                        setStatus(
+                            `✅ All ${jobIds.length} job(s) complete.` +
+                            (queueFailed ? ` (${queueFailed} file(s) failed to queue.)` : "")
+                        );
+                        ingestBtn.disabled = false;
+                        folderInput.disabled = false;
+                        jobsLink.style.display = "";
+                    }
+                } catch { /* server unreachable — keep polling */ }
+            }, 2000);
+        };
+    }
+
+    onClose() {
+        if (this._pollTimer !== null) {
+            window.clearInterval(this._pollTimer);
+            this._pollTimer = null;
         }
-        if (failed === 0) {
-            new Notice(`Synthadoc: ${queued} job(s) queued`);
-        } else {
-            new Notice(`Synthadoc: ${queued} queued, ${failed} failed — is the server running?`);
-        }
+        this.contentEl.empty();
     }
 }
 
