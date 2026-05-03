@@ -866,6 +866,15 @@ All commands are accessible via the Command Palette (`Ctrl/Cmd+P` → type `Synt
 | `Synthadoc: Audit: query history...`  | Recent questions, sub-question counts, token usage, cost per query.                                |
 | `Synthadoc: Audit: events...`         | Table of system events — contradictions found, auto-resolutions, cost gate triggers. Customisable limit (default 100, max 1000). |
 
+**Supported event types:**
+
+| Event | When it is recorded |
+| ---------------------- | -------------------------------------------------------------------- |
+| `contradiction_found`  | Lint detected a page with contradicted status.                       |
+| `auto_resolved`        | Lint resolved a contradiction via `--auto-resolve`.                  |
+| `domain_auto_blocked`  | A domain was auto-blocked after repeated HTTP errors during ingest.  |
+| `job_deleted`          | A job was explicitly deleted by the user from the Jobs list.         |
+
 > **UX note:** All modals are draggable and support full text selection and copy-paste.
 
 ### Ribbon icon
