@@ -475,7 +475,7 @@ class IngestAgent:
                         body = page_content.strip()
                     else:
                         body = f"# {title}\n\n{text[:4000]}"
-                    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                    today = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
                     new_page = WikiPage(
                         title=title, tags=tags,
                         content=body,
