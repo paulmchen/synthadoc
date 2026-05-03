@@ -15,7 +15,8 @@ class JobStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     DEAD = "dead"
-    SKIPPED = "skipped"   # deliberately not retried (e.g. domain auto-blocked)
+    SKIPPED = "skipped"       # deliberately not retried (e.g. domain auto-blocked)
+    CANCELLED = "cancelled"   # pending job cancelled by user
 
 
 @dataclass
@@ -181,12 +182,12 @@ class JobQueue:
             await db.commit()
 
     async def cancel_pending(self) -> int:
-        """Mark all pending jobs as skipped. Returns the number of jobs cancelled."""
+        """Mark all pending jobs as cancelled. Returns the number of jobs cancelled."""
         async with aiosqlite.connect(self._path) as db:
             async with db.execute("SELECT COUNT(*) FROM jobs WHERE status='pending'") as cur:
                 count = (await cur.fetchone())[0]
             await db.execute(
-                "UPDATE jobs SET status='skipped', error='cancelled by user' WHERE status='pending'"
+                "UPDATE jobs SET status='cancelled', error='cancelled by user' WHERE status='pending'"
             )
             await db.commit()
         return count

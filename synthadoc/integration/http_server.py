@@ -452,6 +452,12 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
 
     @app.delete("/jobs/{job_id}")
     async def delete_job(job_id: str):
+        jobs = await app.state.orch.queue.list_jobs()
+        job = next((j for j in jobs if j.id == job_id), None)
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+        if job.status in ("pending", "in_progress"):
+            raise HTTPException(status_code=409, detail=f"Cannot delete a job with status {job.status!r}")
         await app.state.orch.queue.delete(job_id, app.state.orch._audit)
         return {"deleted": job_id}
 

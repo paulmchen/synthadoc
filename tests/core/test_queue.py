@@ -344,8 +344,8 @@ async def test_requeue_does_not_count_toward_max_retries(tmp_wiki):
 
 
 @pytest.mark.asyncio
-async def test_cancel_pending_marks_all_pending_as_skipped(tmp_wiki):
-    """cancel_pending() must skip all pending jobs and return the count."""
+async def test_cancel_pending_marks_all_pending_as_cancelled(tmp_wiki):
+    """cancel_pending() must mark all pending jobs as cancelled and return the count."""
     q = JobQueue(tmp_wiki / ".synthadoc" / "jobs.db")
     await q.init()
     ids = [await q.enqueue("ingest", {"source": f"url{i}.com"}) for i in range(4)]
@@ -359,7 +359,7 @@ async def test_cancel_pending_marks_all_pending_as_skipped(tmp_wiki):
         if jid == job.id:
             assert jobs[jid].status.value == "completed"
         else:
-            assert jobs[jid].status.value == "skipped"
+            assert jobs[jid].status.value == "cancelled"
 
 
 @pytest.mark.asyncio
