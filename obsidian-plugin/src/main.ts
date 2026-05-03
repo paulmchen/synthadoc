@@ -445,9 +445,10 @@ const STATUS_EMOJI: Record<string, string> = {
     failed:      "❌",
     skipped:     "⏭️",
     dead:        "💀",
+    cancelled:   "🚫",
 };
 
-const STATUS_FILTER_OPTIONS = ["pending", "in_progress", "completed", "failed", "skipped", "dead"] as const;
+const STATUS_FILTER_OPTIONS = ["pending", "in_progress", "completed", "failed", "skipped", "dead", "cancelled"] as const;
 
 function makeDraggable(modalEl: HTMLElement, handle: HTMLElement): void {
     if (typeof document === "undefined" || typeof handle.addEventListener !== "function") return;
@@ -497,6 +498,8 @@ function makeDraggable(modalEl: HTMLElement, handle: HTMLElement): void {
     });
 }
 
+const TERMINAL_STATUSES = new Set(["completed", "failed", "skipped", "dead", "cancelled"]);
+
 class JobsModal extends Modal {
     private _selected: Set<string> = new Set(["pending", "in_progress"]);
     private _intervalSecs = 10;
@@ -504,6 +507,8 @@ class JobsModal extends Modal {
     private _countdownTimer: number | null = null;
     private _tableEl: HTMLElement | null = null;
     private _countdownEl: HTMLElement | null = null;
+    private _deleteBtn: HTMLButtonElement | null = null;
+    private _checkedIds: Set<string> = new Set();
 
     onOpen() {
         this.modalEl.style.width = "clamp(560px, 65vw, 900px)";
@@ -550,6 +555,12 @@ class JobsModal extends Modal {
             this._intervalSecs = v;
             this._resetAndLoad();
         };
+
+        // Delete button — right-aligned on the interval row, always visible
+        this._deleteBtn = intervalRow.createEl("button", { text: "Delete selected" }) as HTMLButtonElement;
+        this._deleteBtn.disabled = true;
+        this._deleteBtn.style.cssText = "font-size:12px;margin-left:auto";
+        this._deleteBtn.onclick = () => this._deleteSelected();
 
         // Table
         this._tableEl = contentEl.createEl("div");
@@ -599,27 +610,65 @@ class JobsModal extends Modal {
         }
     }
 
+    private _updateDeleteBtn() {
+        if (this._deleteBtn) this._deleteBtn.disabled = this._checkedIds.size === 0;
+    }
+
+    private async _deleteSelected() {
+        if (!this._deleteBtn || this._checkedIds.size === 0) return;
+        this._deleteBtn.disabled = true;
+        const ids = [...this._checkedIds];
+        await Promise.allSettled(ids.map(id => api.deleteJob(id)));
+        this._checkedIds.clear();
+        this._load();
+    }
+
     private _renderTable(jobs: any[]) {
         if (!this._tableEl) return;
         this._tableEl.empty();
+
+        // Remove stale checked IDs that are no longer visible
+        const visibleIds = new Set(jobs.map((j: any) => j.id));
+        for (const id of this._checkedIds) {
+            if (!visibleIds.has(id)) this._checkedIds.delete(id);
+        }
+        this._updateDeleteBtn();
 
         if (jobs.length === 0) {
             this._tableEl.createEl("p", { text: "No jobs match the selected filters.", cls: "synthadoc-muted" });
             return;
         }
 
+        const terminalJobs = jobs.filter((j: any) => TERMINAL_STATUSES.has(j.status));
+        const hasTerminal = terminalJobs.length > 0;
+
         const table = this._tableEl.createEl("table");
         table.style.cssText = "width:100%;border-collapse:collapse;font-size:13px;-webkit-user-select:text;user-select:text";
 
         const hrow = table.createEl("thead").createEl("tr");
+
+        // Select-all checkbox header cell
+        const selectAllTh = hrow.createEl("th");
+        selectAllTh.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border);width:28px";
+        let selectAllCb: HTMLInputElement | null = null;
+        if (hasTerminal) {
+            selectAllCb = selectAllTh.createEl("input", { type: "checkbox" }) as HTMLInputElement;
+            selectAllCb.title = "Select all";
+            selectAllCb.checked = terminalJobs.every((j: any) => this._checkedIds.has(j.id));
+            selectAllCb.indeterminate = !selectAllCb.checked && terminalJobs.some((j: any) => this._checkedIds.has(j.id));
+        }
+
         for (const h of ["Job ID", "Status", "Operation", "Source", "Created"]) {
             const th = hrow.createEl("th", { text: h });
             th.style.cssText = "text-align:left;padding:4px 8px;border-bottom:1px solid var(--background-modifier-border)";
         }
 
+        const rowCheckboxes: HTMLInputElement[] = [];
+
         const tbody = table.createEl("tbody");
         for (const job of jobs) {
             const tr = tbody.createEl("tr");
+            const isTerminal = TERMINAL_STATUSES.has(job.status);
             const source = job.payload?.source
                 ? job.payload.source.split(/[\\/]/).pop()
                 : job.operation === "lint" ? "(lint)" : "—";
@@ -628,6 +677,24 @@ class JobsModal extends Modal {
                 ? new Date(job.created_at.replace(" ", "T") + "+00:00").toLocaleString()
                 : "—";
             const icon = STATUS_EMOJI[job.status] ?? "";
+
+            // Checkbox cell
+            const cbTd = tr.createEl("td");
+            cbTd.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle);width:28px";
+            if (isTerminal) {
+                const cb = cbTd.createEl("input", { type: "checkbox" }) as HTMLInputElement;
+                cb.checked = this._checkedIds.has(job.id);
+                cb.onchange = () => {
+                    if (cb.checked) this._checkedIds.add(job.id);
+                    else this._checkedIds.delete(job.id);
+                    if (selectAllCb) {
+                        selectAllCb.checked = terminalJobs.every((j: any) => this._checkedIds.has(j.id));
+                        selectAllCb.indeterminate = !selectAllCb.checked && terminalJobs.some((j: any) => this._checkedIds.has(j.id));
+                    }
+                    this._updateDeleteBtn();
+                };
+                rowCheckboxes.push(cb);
+            }
 
             // Job ID cell — monospace, full ID visible and selectable for copy
             const idTd = tr.createEl("td");
@@ -646,15 +713,31 @@ class JobsModal extends Modal {
                 if (r.pages_flagged?.length) detail.push(`flagged: ${r.pages_flagged.join(", ")}`);
                 if (detail.length) {
                     const dtd = tbody.createEl("tr").createEl("td", { text: detail.join(" · ") });
-                    dtd.colSpan = 5;
+                    dtd.colSpan = 6;
                     dtd.style.cssText = "padding:2px 8px 6px 8px;font-size:11px;color:var(--text-muted)";
                 }
             }
-            if (job.status === "failed" && job.error) {
+            if ((job.status === "failed" || job.status === "dead") && job.error) {
                 const etd = tbody.createEl("tr").createEl("td", { text: `Error: ${job.error}` });
-                etd.colSpan = 5;
+                etd.colSpan = 6;
                 etd.style.cssText = "padding:2px 8px 6px 8px;font-size:11px;color:var(--text-error)";
             }
+            if (job.status === "skipped" && job.error) {
+                const wtd = tbody.createEl("tr").createEl("td", { text: `Skipped: ${job.error}` });
+                wtd.colSpan = 6;
+                wtd.style.cssText = "padding:2px 8px 6px 8px;font-size:11px;color:var(--text-warning)";
+            }
+        }
+
+        if (selectAllCb) {
+            selectAllCb.onchange = () => {
+                for (const job of terminalJobs) {
+                    if (selectAllCb!.checked) this._checkedIds.add(job.id);
+                    else this._checkedIds.delete(job.id);
+                }
+                for (const cb of rowCheckboxes) cb.checked = selectAllCb!.checked;
+                this._updateDeleteBtn();
+            };
         }
     }
 

@@ -31,6 +31,7 @@ export const api = {
     lintReport:   ()                          => call("/lint/report"),
     jobs:         (status?: string)           => call(status ? `/jobs?status=${encodeURIComponent(status)}` : "/jobs"),
     retryJob:     (jobId: string)             => call(`/jobs/${jobId}/retry`, "POST"),
+    deleteJob:    (jobId: string)             => call(`/jobs/${jobId}`, "DELETE"),
     purgeJobs:    (olderThan: number)         => call(`/jobs?older_than=${olderThan}`, "DELETE"),
     scaffold:     (domain: string)            => call("/jobs/scaffold",   "POST", { domain }),
     job:           (jobId: string)             => call(`/jobs/${jobId}`),
