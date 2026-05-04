@@ -1152,6 +1152,8 @@ class WebSearchModal extends Modal {
                 const allChildrenSettled = childJobIds.length > 0 && (childDone + errors.length) >= childJobIds.length;
                 if (isDone && (childJobIds.length === 0 || allChildrenSettled)) {
                     this._stopPolling();
+                    btn.disabled = false;
+                    input.disabled = false;
                     if (job.status === "completed" || allChildrenSettled) {
                         statusEl.setText(`Done — ${pages.size} page(s) written.`);
                         new Notice(`Synthadoc: web search complete — ${pages.size} page(s)`);
