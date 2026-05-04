@@ -18,6 +18,7 @@ obsidian-plugin/node_modules/
 # synthadoc operational — never commit
 .synthadoc/
 docs/plans/
+docs/blog/
 docs/*.docx
 synthadoc/demos/*/log.md
 
