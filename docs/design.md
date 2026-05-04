@@ -854,6 +854,39 @@ Required environment variables per provider:
 | `deepseek` | `DEEPSEEK_API_KEY` | No (pay-per-token, very cheap) | No (text-only) |
 | `ollama` | _(none)_ | **Yes** — fully local | Model-dependent |
 
+### Coding tool CLI providers — no API key needed
+
+If you have an active **Claude Code** or **Opencode** subscription, you can use it as the LLM provider with no separate API key.
+
+**Requirements:** the CLI tool must be installed and reachable on `PATH`:
+- Claude Code: `claude` binary — install via `npm install -g @anthropic-ai/claude-code`
+- Opencode: `opencode` binary — install via `npm install -g opencode`
+
+**Configuration — set in `<wiki-root>/.synthadoc/config.toml`:**
+
+```toml
+[agents]
+default = { provider = "claude-code", model = "claude-opus-4-7" }
+lint    = { provider = "claude-code", model = "claude-haiku-4-5-20251001" }
+```
+
+For Opencode:
+
+```toml
+[agents]
+default = { provider = "opencode", model = "anthropic/claude-opus-4-7" }
+```
+
+**Runtime override** — bypasses config.toml for the current server session:
+
+```bash
+synthadoc serve -w <wiki-name> --provider claude-code
+```
+
+**Limitations:**
+- Vector search (`search.vector = true`) is not supported — search falls back to BM25-only. Sufficient for wikis up to a few hundred pages.
+- Quota is shared with your coding tool usage. Heavy batch ingest consumes from the same daily budget. Quota exhaustion permanently fails the job (no retry) with a clear message.
+
 ### Per-project config — `<wiki-root>/.synthadoc/config.toml`
 
 ```toml

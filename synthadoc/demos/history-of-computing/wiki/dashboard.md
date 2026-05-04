@@ -16,7 +16,7 @@ sources: []
 ## Contradicted pages — need review
 
 ```dataview
-TABLE status, confidence, created
+TABLE dateformat(created, "MMM dd, yyyy HH:mm:ss") AS "Created", status, confidence
 FROM "wiki"
 WHERE status = "contradicted"
 SORT created DESC
@@ -30,7 +30,7 @@ Open each one, resolve the conflict, then change `status` to `active`.*
 ## Orphan pages — no inbound links
 
 ```dataview
-TABLE status, created
+TABLE dateformat(created, "MMM dd, yyyy HH:mm:ss") AS "Created", status
 FROM "wiki"
 WHERE orphan = true
 SORT created DESC
@@ -45,7 +45,7 @@ Add `[[page-name]]` to a related page or to [[index]].*
 ## Recently added
 
 ```dataview
-TABLE status, confidence
+TABLE dateformat(created, "MMM dd, yyyy HH:mm:ss") AS "Added", status, confidence
 FROM "wiki"
 WHERE file.name != "index" AND file.name != "dashboard" AND file.name != "purpose"
 SORT created DESC

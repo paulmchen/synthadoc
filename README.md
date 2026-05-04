@@ -239,7 +239,7 @@ npm test         # runs Vitest unit tests
 
 ### Step 4 — Set your API keys
 
-**At least one LLM API key is required** — unless you use Claude Code or Opencode as your provider, in which case no separate API key is needed (see [Coding tool CLI providers](docs/design.md#provider-switching)).
+**At least one LLM API key is required** — unless you use Claude Code or Opencode as your provider, in which case no separate API key is needed (see [Coding tool CLI providers](docs/design.md#coding-tool-cli-providers--no-api-key-needed)).
 
 Synthadoc defaults to **Gemini Flash** as the LLM provider — it's free, requires no
 credit card, and offers 1 million tokens per day. Get a key at
