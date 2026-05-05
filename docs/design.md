@@ -1174,12 +1174,14 @@ The HTTP server always passes `auto_confirm=True` (no interactive terminal avail
 ### State transitions
 
 ```
-pending → in_progress → completed
-                      → failed     (non-retryable error; permanent, no retry)
-                      → pending    (retryable error; retries < max_retries, after backoff)
-                      → dead       (retryable error; retries == max_retries)
-                      → skipped    (system-initiated skip; e.g. auto-blocked domain)
-pending → cancelled   (user-initiated cancel via `synthadoc jobs cancel`)
+pending     → in_progress  (worker picks up job)
+pending     → cancelled    (user-initiated; `synthadoc jobs cancel`)
+
+in_progress → completed
+in_progress → failed       (non-retryable error; permanent, no retry)
+in_progress → pending      (retryable error; retries < max_retries, after backoff)
+in_progress → dead         (retryable error; retries == max_retries)
+in_progress → skipped      (system-initiated skip; e.g. auto-blocked domain)
 ```
 
 | Status | Meaning | Action |
@@ -1446,7 +1448,7 @@ echo "Event $event fired on wiki $wiki" | mail -s "Synthadoc notification" you@e
 - **OpenTelemetry** — traces, metrics, structured logs; OTLP export optional
 - **Cross-platform** — Windows, Linux, macOS
 
-### v0.2.0
+### v0.2.0 (Community Edition)
 
 - **Query decomposition** — `QueryAgent.decompose()` breaks complex questions into 1–N focused sub-questions (cap=4); parallel BM25 search per sub-question; merged and deduplicated by highest score; graceful fallback on LLM error; markdown fence stripping for cross-model robustness
 - **Query audit trail** — `queries` table in `audit.db`; every query recorded with question text, sub-question count, tokens, cost, timestamp; `cost_summary()` now aggregates ingest + query spend; exposed via `GET /audit/queries`, `synthadoc audit queries`, and Obsidian "Audit: query history..." command
@@ -1465,7 +1467,7 @@ echo "Event $event fired on wiki $wiki" | mail -s "Synthadoc notification" you@e
 - **Rate-limit requeue** — HTTP 429 responses from any LLM provider are detected and requeued via `requeue()` (retry counter unchanged), preserving the retry budget for real errors
 - **Bulk cancel (`jobs cancel`)** — `synthadoc jobs cancel [-w wiki] [--yes]` marks all pending jobs as `skipped` in one operation; also `POST /jobs/cancel-pending`
 
-### v0.3.0
+### v0.3.0 (Community Edition)
 
 - **Session wiki resolution (`synthadoc use`)** — `synthadoc use <name>` writes the default wiki to `~/.synthadoc/default_wiki`; all commands resolve it automatically via priority chain: `-w` flag > `SYNTHADOC_WIKI` env var > saved default > CWD fallback; hint messages simplified to `[wiki: <name>]`; `-w .` omitted from job hints when CWD is the active wiki
 - **MiniMax reasoning-model fixes** — `OpenAIProvider` now handles three failure modes of reasoning models (e.g. MiniMax-M2.5): (1) `choices=null` response converted from silent `TypeError` to a descriptive `RuntimeError` with error code logged; (2) `content=null` with prose answer in `reasoning_content` — think-tag stripping then full-text fallback so query synthesis returns a real answer; (3) `APITimeoutError` caught, logged with the config key to set, then re-raised
