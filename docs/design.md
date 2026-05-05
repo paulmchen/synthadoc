@@ -106,12 +106,13 @@ Every ingest, lint, and scheduled operation runs as a job:
 
 ```
 pending → in_progress → completed
-                      → failed      (retryable; will retry with backoff)
-                      → dead        (max_retries exceeded; requires manual intervention)
-                      → skipped     (deliberately not retried; e.g. auto-blocked domain)
+                      → failed
+                      → dead
+                      → skipped
+pending → cancelled
 ```
 
-Jobs persist across server restarts. A dead job can be reset to `pending` with `synthadoc jobs retry <id>`.
+Jobs persist across server restarts. See [§14 Job Queue](#14-job-queue) for full state transition rules, retry backoff, and status descriptions.
 
 ### Slug
 
