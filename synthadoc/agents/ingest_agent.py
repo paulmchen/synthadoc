@@ -91,6 +91,13 @@ _OVERVIEW_PROMPT = (
     "Pages:\n{pages}"
 )
 
+_CONFIDENCE_RANK = {"high": 3, "medium": 2, "low": 1}
+
+
+def _confidence_passes_threshold(confidence: str, min_confidence: str) -> bool:
+    return _CONFIDENCE_RANK.get(confidence, 0) >= _CONFIDENCE_RANK.get(min_confidence, 0)
+
+
 _SLUG_BLACKLIST = frozenset({
     "wikilinks", "wikilink", "wiki", "obsidian", "dataview",
     # URL path segments that are never meaningful topic names
@@ -163,7 +170,8 @@ class IngestAgent:
                  max_pages: int = 15, wiki_root: Optional[Path] = None,
                  cache_version: str = CACHE_VERSION,
                  fetch_timeout: int = 30,
-                 routing_path: Optional[Path] = None) -> None:
+                 routing_path: Optional[Path] = None,
+                 cfg=None) -> None:
         self._provider = provider
         self._store = store
         self._search = search
@@ -173,6 +181,7 @@ class IngestAgent:
         self._max_pages = max_pages
         self._wiki_root = Path(wiki_root) if wiki_root is not None else None
         self._routing_path = Path(routing_path) if routing_path is not None else None
+        self._cfg = cfg
         self._cache_version = cache_version
         self._skill_agent = SkillAgent(skill_kwargs={
             "url": {"fetch_timeout": fetch_timeout},
@@ -506,18 +515,38 @@ class IngestAgent:
                         )],
                         created=today,
                     )
-                    with self._store.page_lock(slug):
-                        self._store.write_page(slug, new_page)
-                        self._search.invalidate_index()
-                    result.pages_created.append(slug)
-                    self._store.append_to_index(slug, new_page.title)
-                    if self._routing_path:
-                        from synthadoc.core.routing import RoutingIndex
-                        ri = RoutingIndex.parse(self._routing_path)
-                        if ri.branches:
-                            branch = await self._pick_routing_branch(slug, new_page, ri)
-                            ri.add_slug(slug, branch)
-                            ri.save(self._routing_path)
+
+                    # Staging fork: route to candidates/ based on policy
+                    policy = self._cfg.ingest.staging_policy if self._cfg else "off"
+                    go_to_candidates = False
+                    if policy == "all":
+                        go_to_candidates = True
+                    elif policy == "threshold":
+                        min_conf = self._cfg.ingest.staging_confidence_min
+                        go_to_candidates = not _confidence_passes_threshold(
+                            new_page.confidence, min_conf
+                        )
+
+                    if go_to_candidates and self._wiki_root:
+                        from synthadoc.storage.wiki import WikiStorage as _WS
+                        cand_dir = self._wiki_root / "wiki" / "candidates"
+                        cand_dir.mkdir(exist_ok=True)
+                        cand_store = _WS(cand_dir)
+                        cand_store.write_page(slug, new_page)
+                        result.pages_created.append(slug)
+                    else:
+                        with self._store.page_lock(slug):
+                            self._store.write_page(slug, new_page)
+                            self._search.invalidate_index()
+                        result.pages_created.append(slug)
+                        self._store.append_to_index(slug, new_page.title)
+                        if self._routing_path:
+                            from synthadoc.core.routing import RoutingIndex
+                            ri = RoutingIndex.parse(self._routing_path)
+                            if ri.branches:
+                                branch = await self._pick_routing_branch(slug, new_page, ri)
+                                ri.add_slug(slug, branch)
+                                ri.save(self._routing_path)
 
         if result.pages_created or result.pages_updated:
             await self._update_overview()

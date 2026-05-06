@@ -129,6 +129,7 @@ class Orchestrator:
             _is_web_search = bool(_WEB_SEARCH_RE.match(source))
             if _is_web_search:
                 await self._queue.update_progress(job_id, {"phase": "searching"})
+            _routing_path = self._root / "ROUTING.md"
             agent = IngestAgent(
                 provider=make_provider("ingest", self._cfg),
                 store=self._store, search=self._search,
@@ -136,6 +137,9 @@ class Orchestrator:
                 cache=self._cache, max_pages=self._cfg.ingest.max_pages_per_ingest,
                 cache_version=self._cfg.cache.version,
                 fetch_timeout=self._cfg.ingest.fetch_timeout_seconds,
+                wiki_root=self._root,
+                routing_path=_routing_path if _routing_path.exists() else None,
+                cfg=self._cfg,
             )
             result = await agent.ingest(source, force=force, bust_cache=force)
             _agent_cfg = self._cfg.agents.resolve("ingest")
