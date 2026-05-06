@@ -153,3 +153,33 @@ async def test_scaffold_cjk_categories_produce_wikilinks():
     assert "- [[神经网络]]" in result.index_md
     assert "- [[机器学习]]" in result.index_md
     assert "- [[自然语言处理]]" in result.index_md
+
+
+# ── Protected scaffold zone ───────────────────────────────────────────────────
+
+def test_scaffold_preserves_user_content_above_marker():
+    from synthadoc.agents.scaffold_agent import SCAFFOLD_MARKER, preserve_user_zone
+
+    existing = "My custom intro.\n\n<!-- synthadoc:scaffold -->\n\n## Old Section\n- [[old]]\n"
+    new_scaffold = "## People\n- [[alan-turing]]\n"
+    result = preserve_user_zone(existing, new_scaffold)
+    assert "My custom intro." in result
+    assert "## People" in result
+    assert "## Old Section" not in result
+    assert SCAFFOLD_MARKER in result
+
+
+def test_scaffold_no_marker_returns_new_content():
+    from synthadoc.agents.scaffold_agent import preserve_user_zone
+    result = preserve_user_zone("", "## People\n- [[alan-turing]]\n")
+    assert result == "## People\n- [[alan-turing]]\n"
+
+
+def test_scaffold_marker_without_user_zone():
+    from synthadoc.agents.scaffold_agent import SCAFFOLD_MARKER, preserve_user_zone
+    existing = f"{SCAFFOLD_MARKER}\n\n## Old Section\n"
+    new_scaffold = "## New Section\n"
+    result = preserve_user_zone(existing, new_scaffold)
+    assert SCAFFOLD_MARKER in result
+    assert "## New Section" in result
+    assert "## Old Section" not in result

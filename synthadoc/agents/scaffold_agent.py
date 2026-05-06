@@ -13,6 +13,8 @@ from synthadoc.providers.base import LLMProvider, Message
 
 logger = logging.getLogger(__name__)
 
+SCAFFOLD_MARKER = "<!-- synthadoc:scaffold -->"
+
 _FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
 
 _SYSTEM_PROMPT = (
@@ -79,6 +81,17 @@ This wiki covers: {domain}.
 Include: {include}
 Exclude: {exclude}
 """
+
+
+def preserve_user_zone(existing_content: str, new_scaffold_content: str) -> str:
+    """Return index.md content preserving the user zone above SCAFFOLD_MARKER.
+
+    If the marker is absent, returns new_scaffold_content unchanged (full rewrite).
+    """
+    if SCAFFOLD_MARKER not in existing_content:
+        return new_scaffold_content
+    user_zone = existing_content.split(SCAFFOLD_MARKER)[0].rstrip()
+    return f"{user_zone}\n\n{SCAFFOLD_MARKER}\n\n{new_scaffold_content}"
 
 
 @dataclass
