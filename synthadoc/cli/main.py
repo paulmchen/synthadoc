@@ -109,3 +109,5 @@ from synthadoc.cli import cache  # noqa: F401, E402
 from synthadoc.cli import scaffold  # noqa: F401, E402
 from synthadoc.cli.audit import audit_app  # noqa: F401, E402
 app.add_typer(audit_app)
+from synthadoc.cli.routing import routing_app  # noqa: F401, E402
+app.add_typer(routing_app)
