@@ -146,3 +146,19 @@ def test_deepseek_is_a_valid_provider(tmp_path):
     cfg = load_config(project_config=toml)
     assert cfg.agents.default.provider == "deepseek"
     assert cfg.agents.default.model == "deepseek-chat"
+
+
+def test_staging_policy_defaults_to_off(tmp_path):
+    toml_file = tmp_path / "config.toml"
+    toml_file.write_text('[server]\nport = 7070\n')
+    cfg = load_config(project_config=toml_file)
+    assert cfg.ingest.staging_policy == "off"
+    assert cfg.ingest.staging_confidence_min == "high"
+
+
+def test_staging_policy_reads_from_toml(tmp_path):
+    toml_file = tmp_path / "config.toml"
+    toml_file.write_text('[ingest]\nstaging_policy = "all"\nstaging_confidence_min = "medium"\n')
+    cfg = load_config(project_config=toml_file)
+    assert cfg.ingest.staging_policy == "all"
+    assert cfg.ingest.staging_confidence_min == "medium"
