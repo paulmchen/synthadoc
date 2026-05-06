@@ -57,9 +57,12 @@ def context_build(
     wiki_root: Optional[str] = typer.Option(None, "--wiki-root"),
 ) -> None:
     """Build a token-bounded, cited evidence pack from the wiki."""
-    from synthadoc.cli._wiki import resolve_wiki
-    wiki_name = wiki or resolve_wiki(None)
     wiki_root_path = Path(wiki_root) if wiki_root else None
+    if not wiki_root_path:
+        from synthadoc.cli._wiki import resolve_wiki
+        wiki_name = wiki or resolve_wiki(None)
+    else:
+        wiki_name = wiki
 
     markdown = _build_context_pack(wiki_root_path or wiki_name, goal, tokens)
 
