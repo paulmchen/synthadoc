@@ -11,7 +11,7 @@ from typing import Optional
 import yaml
 from filelock import FileLock
 
-_FRONTMATTER_FIELDS = ("title", "tags", "status", "confidence", "created", "sources", "orphan", "categories")
+_FRONTMATTER_FIELDS = ("title", "tags", "status", "confidence", "created", "sources", "orphan", "categories", "aliases")
 
 
 @dataclass
@@ -33,6 +33,7 @@ class WikiPage:
     created: Optional[str] = None
     orphan: bool = False
     categories: list[str] = field(default_factory=list)
+    aliases: list[str] = field(default_factory=list)
 
 
 def _sources_to_dicts(sources: list[SourceRef]) -> list[dict]:
@@ -96,6 +97,8 @@ class WikiStorage:
             }
             if page.categories:
                 fm["categories"] = page.categories
+            if page.aliases:
+                fm["aliases"] = page.aliases
             body = page.content
         else:
             fm = frontmatter or {}
@@ -125,6 +128,8 @@ class WikiStorage:
         sources = _sources_from_dicts(fm.get("sources", []))
         raw_cats = fm.get("categories", [])
         categories = raw_cats if isinstance(raw_cats, list) else [raw_cats] if raw_cats else []
+        raw_aliases = fm.get("aliases", [])
+        aliases = raw_aliases if isinstance(raw_aliases, list) else [raw_aliases] if raw_aliases else []
         return WikiPage(
             title=fm.get("title", ""),
             tags=fm.get("tags", []),
@@ -135,6 +140,7 @@ class WikiStorage:
             created=fm.get("created"),
             orphan=bool(fm.get("orphan", False)),
             categories=categories,
+            aliases=aliases,
         )
 
     def page_exists(self, slug: str) -> bool:

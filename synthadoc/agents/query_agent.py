@@ -54,6 +54,21 @@ class QueryAgent:
         self._top_n = top_n
         self._gap_score_threshold = gap_score_threshold
 
+    def _expand_aliases(self, question: str) -> str:
+        """Replace alias matches in question with canonical slug names."""
+        alias_map: dict[str, str] = {}
+        for slug in self._store.list_pages():
+            page = self._store.read_page(slug)
+            if page and page.aliases:
+                for alias in page.aliases:
+                    alias_map[alias.lower()] = slug
+        if not alias_map:
+            return question
+        q = question
+        for alias, slug in sorted(alias_map.items(), key=lambda x: -len(x[0])):
+            q = q.replace(alias, slug)
+        return q
+
     async def decompose(self, question: str) -> list[str]:
         """Break a question into focused sub-questions for independent retrieval.
 
@@ -94,6 +109,7 @@ class QueryAgent:
         return [question]
 
     async def query(self, question: str) -> QueryResult:
+        question = self._expand_aliases(question)
         sub_questions = await self.decompose(question)
 
         async def _search_one(sub_q: str):
