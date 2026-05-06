@@ -27,6 +27,9 @@ major engine feature. No setup beyond following the steps below is required.
 11. [Enrich the wiki with scaffold](#step-11--enrich-the-wiki-with-scaffold)
 12. [Audit features](#step-12--audit-features)
 13. [Scheduling recurring operations](#step-13--scheduling-recurring-operations)
+14. [Set up ROUTING.md — scoped search](#step-14--set-up-routingmd--scoped-search)
+15. [Configure candidates staging](#step-15--configure-candidates-staging)
+16. [Build a context pack](#step-16--build-a-context-pack)
 
 **Appendices**
 
@@ -678,6 +681,25 @@ To keep the index fresh without manual intervention:
 synthadoc schedule add --op "scaffold" --cron "0 4 * * 0"
 ```
 
+### Protect custom content with the scaffold marker
+
+By default, re-running scaffold rewrites the entire `index.md`. If you want to add your own
+intro text, notes, or links that survive future scaffold runs, add the marker on its own line:
+
+```markdown
+My custom wiki intro — maintained by hand.
+
+<!-- synthadoc:scaffold -->
+
+## Pioneers and Visionaries
+- [[alan-turing]]
+...
+```
+
+Everything **above** the marker is your protected zone — scaffold never touches it.
+Everything **below** is rewritten each time. If the marker is absent, scaffold rewrites
+the whole file as before.
+
 ---
 
 ## Step 12 — Audit features
@@ -1192,3 +1214,175 @@ Install and authenticate the coding tool first:
 
 - Claude Code: [claude.ai/code](https://claude.ai/code)
 - Opencode: [opencode.ai](https://opencode.ai)
+
+---
+
+## Step 14 — Set up ROUTING.md — scoped search
+
+As your wiki grows, BM25 searches the full corpus for every query. **ROUTING.md** groups pages
+into named topic branches so queries only search the most relevant slice, reducing noise and
+improving retrieval precision on large wikis.
+
+### Generate ROUTING.md from your current index
+
+```bash
+synthadoc routing init
+```
+
+This reads the `## Section` headings in `wiki/index.md` and writes `ROUTING.md` at the wiki
+root. Example output:
+
+```
+ROUTING.md created — 5 branches, 12 slugs.
+```
+
+Open `ROUTING.md` — it looks like this:
+
+```markdown
+## Pioneers and Visionaries
+- [[alan-turing]]
+- [[grace-hopper]]
+- [[ada-lovelace]]
+
+## Hardware Milestones
+- [[eniac]]
+- [[von-neumann-architecture]]
+```
+
+### Edit and extend
+
+Add new branches or move slugs by hand. ROUTING.md is just a Markdown file — the format is
+`## BranchName` headings with `- [[slug]]` entries. Slugs can appear in only one branch.
+
+### Validate and clean
+
+After deleting wiki pages, some slugs in ROUTING.md may dangle:
+
+```bash
+synthadoc routing validate   # report dangling slugs (dry run)
+synthadoc routing clean      # remove them
+```
+
+### How it works at query time
+
+When the server receives a query it asks the LLM to pick the 1-2 most relevant branches,
+then restricts BM25 to only those slugs. If no branch is clearly relevant it falls back to
+full-corpus search automatically.
+
+New pages created by ingest are auto-placed into the most appropriate branch.
+
+---
+
+## Step 15 — Configure candidates staging
+
+By default, every ingested source that produces a new page writes it directly to `wiki/`.
+**Candidates staging** lets you review new pages before they influence queries and lint.
+
+### Enable staging
+
+```bash
+synthadoc staging policy threshold
+```
+
+With `threshold` policy, pages whose confidence is below the minimum go to
+`wiki/candidates/` instead of `wiki/`. The default minimum is `high`:
+
+```bash
+# Lower the bar — medium-confidence pages also go to candidates/
+synthadoc staging policy threshold --min-confidence medium
+```
+
+Or stage everything for full manual review:
+
+```bash
+synthadoc staging policy all
+```
+
+Changes take effect on the next ingest job — no server restart needed.
+
+### Review candidates after an ingest run
+
+```bash
+synthadoc candidates list
+```
+
+Example output:
+
+```
+Candidates (3):
+  early-internet-history           confidence: medium   ingested: 2026-05-06T14:22:11
+  punch-card-era                   confidence: low      ingested: 2026-05-06T14:22:45
+  vacuum-tube-computers            confidence: medium   ingested: 2026-05-06T14:23:01
+```
+
+### Promote or discard
+
+```bash
+synthadoc candidates promote early-internet-history   # move to wiki/
+synthadoc candidates discard punch-card-era           # delete
+synthadoc candidates promote --all                    # promote everything
+```
+
+### Turn staging off
+
+```bash
+synthadoc staging policy off
+```
+
+---
+
+## Step 16 — Build a context pack
+
+A **context pack** is a token-bounded evidence bundle assembled from the wiki — useful for
+feeding targeted wiki knowledge into an LLM prompt, a writing session, or an AI assistant.
+
+### Build a pack from the CLI
+
+```bash
+synthadoc context build "early computing pioneers"
+```
+
+Output is Markdown printed to the terminal:
+
+```markdown
+# Context Pack: early computing pioneers
+Generated: 2026-05-06T15:10:42
+Token budget: 4000 | Used: 1823
+
+---
+
+## [[alan-turing]] — relevance: 3.42
+> Alan Turing developed the theoretical basis of modern computation...
+Source: `wiki/alan-turing.md` | Confidence: high | Tags: mathematics, computation
+
+## [[grace-hopper]] — relevance: 2.91
+> Grace Hopper pioneered compiler development and coined "debugging"...
+Source: `wiki/grace-hopper.md` | Confidence: high | Tags: programming, navy
+```
+
+### Save to a file
+
+```bash
+synthadoc context build "early computing pioneers" --output context.md
+```
+
+### Adjust the token budget
+
+```bash
+synthadoc context build "early computing pioneers" --tokens 2000
+```
+
+Set a permanent default in `synthadoc.toml`:
+
+```toml
+[query]
+context_token_budget = 6000
+```
+
+### Save directly to the wiki
+
+```bash
+synthadoc context build "early computing pioneers" --save
+```
+
+Writes to `wiki/context/early-computing-pioneers.md` — queryable like any other wiki page.
