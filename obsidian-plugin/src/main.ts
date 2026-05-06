@@ -884,6 +884,7 @@ class LintReportModal extends Modal {
         api.lintReport().then((r: any) => {
             out.empty();
             const contradictions: string[] = r.contradictions ?? [];
+            const details: any[] = r.contradiction_details ?? contradictions.map((s: string) => ({ slug: s }));
             const orphanDetails: Array<{ slug: string; index_suggestion: string }> =
                 r.orphan_details ?? (r.orphans ?? []).map((s: string) => ({ slug: s, index_suggestion: `- [[${s}]]` }));
 
@@ -892,13 +893,21 @@ class LintReportModal extends Modal {
                 return;
             }
 
-            if (contradictions.length > 0) {
-                out.createEl("h4", { text: `❌ Contradicted pages (${contradictions.length})` });
+            if (details.length > 0) {
+                out.createEl("h4", { text: `❌ Contradicted pages (${details.length})` });
                 const ul = out.createEl("ul");
-                contradictions.forEach(slug => {
+                details.forEach(({ slug, contradiction_note, unresolved_note }) => {
                     const li = ul.createEl("li");
                     li.createEl("code", { text: slug });
                     li.appendText(" — open the page, resolve the conflict, set status: active");
+                    if (contradiction_note) {
+                        const n = li.createEl("div", { text: `Why flagged: ${contradiction_note}` });
+                        n.style.cssText = "font-size:11px;color:var(--text-muted);margin-top:2px";
+                    }
+                    if (unresolved_note) {
+                        const n = li.createEl("div", { text: `⚠ Auto-resolve failed: ${unresolved_note}` });
+                        n.style.cssText = "font-size:11px;color:var(--text-warning);margin-top:2px";
+                    }
                 });
             }
 
