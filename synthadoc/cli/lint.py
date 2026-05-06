@@ -133,7 +133,12 @@ def lint_report(
     if contradicted:
         typer.echo(f"\nContradicted pages ({len(contradicted)}) - need review:\n")
         for slug in contradicted:
+            fm = _parse_frontmatter(page_texts.get(slug, ""))
             typer.echo(f"  {slug}")
+            if fm.get("contradiction_note"):
+                typer.echo(f"    Why flagged: {fm['contradiction_note']}")
+            if fm.get("unresolved_note"):
+                typer.echo(f"    Auto-resolve failed: {fm['unresolved_note']}")
             typer.echo(f"    -> Open wiki/{slug}.md, resolve the conflict, then set status: active")
             typer.echo(f"    -> Or re-run: synthadoc lint -w {wiki} --auto-resolve")
 

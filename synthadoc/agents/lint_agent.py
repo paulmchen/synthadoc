@@ -14,6 +14,7 @@ from synthadoc.storage.wiki import WikiStorage
 class LintReport:
     contradictions_found: int = 0
     contradictions_resolved: int = 0
+    contradictions_unresolved: list[dict] = field(default_factory=list)  # [{slug, reason}]
     orphan_slugs: list[str] = field(default_factory=list)
     tokens_used: int = 0
 
@@ -89,19 +90,48 @@ class LintAgent:
                         await self._audit.record_audit_event(
                             job_id, "contradiction_found", {"slug": slug})
                     if auto_resolve:
+                        note = page.contradiction_note or ""
+                        prompt = (
+                            "A wiki page has been flagged as contradicted. Decide if you can resolve it.\n"
+                            "Return ONLY valid JSON, no markdown fences:\n"
+                            '{"resolvable": true|false, "reason": "one sentence explaining why or why not", '
+                            '"resolution": "rewritten page content if resolvable, else empty string"}\n\n'
+                            f"Contradiction note: {note}\n\n"
+                            f"Current page content:\n{page.content[:1000]}"
+                        )
                         resp = await self._provider.complete(
-                            messages=[Message(role="user",
-                                content=f"Propose resolution:\n{page.content[:500]}")],
+                            messages=[Message(role="user", content=prompt)],
                             temperature=0.0,
                         )
                         report.tokens_used += resp.total_tokens
-                        page.status = "active"
-                        page.content += f"\n\n**Resolution:** {resp.text}"
-                        self._store.write_page(slug, page)
-                        report.contradictions_resolved += 1
-                        if self._audit:
-                            await self._audit.record_audit_event(
-                                job_id, "auto_resolved", {"slug": slug})
+                        try:
+                            import json as _json
+                            raw = resp.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+                            decision = _json.loads(raw)
+                        except Exception:
+                            decision = {"resolvable": False, "reason": "auto-resolve returned unparseable output", "resolution": ""}
+                        if decision.get("resolvable"):
+                            page.status = "active"
+                            page.contradiction_note = None
+                            page.unresolved_note = None
+                            resolution = decision.get("resolution", "").strip()
+                            if resolution:
+                                page.content = resolution
+                            else:
+                                page.content += f"\n\n**Auto-resolved:** {decision.get('reason', '')}"
+                            self._store.write_page(slug, page)
+                            report.contradictions_resolved += 1
+                            if self._audit:
+                                await self._audit.record_audit_event(
+                                    job_id, "auto_resolved", {"slug": slug})
+                        else:
+                            reason = decision.get("reason", "Could not determine a confident resolution.")
+                            page.unresolved_note = reason
+                            self._store.write_page(slug, page)
+                            report.contradictions_unresolved.append({"slug": slug, "reason": reason})
+                            if self._audit:
+                                await self._audit.record_audit_event(
+                                    job_id, "auto_resolve_failed", {"slug": slug, "reason": reason})
 
         if scope in ("all", "orphans"):
             report.orphan_slugs = self._find_orphans(slugs)

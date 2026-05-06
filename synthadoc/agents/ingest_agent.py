@@ -430,6 +430,12 @@ class IngestAgent:
                 page = self._store.read_page(target)
                 if page:
                     page.status = "contradicted"
+                    page.unresolved_note = None  # clear any previous auto-resolve failure
+                    reasoning = decisions.get("reasoning", "")
+                    page.contradiction_note = (
+                        f"Flagged while ingesting '{p.name}': {reasoning}" if reasoning
+                        else f"Flagged while ingesting '{p.name}'"
+                    )
                     self._store.write_page(target, page)
                     self._search.invalidate_index()
             result.pages_flagged.append(target)

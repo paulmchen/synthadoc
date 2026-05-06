@@ -771,7 +771,13 @@ class LintRunModal extends Modal {
         hint.style.cssText = "font-size:11px;color:var(--text-muted);margin-bottom:16px;-webkit-user-select:text;user-select:text";
 
         const btnRow = contentEl.createEl("div");
-        btnRow.style.cssText = "display:flex;justify-content:flex-end";
+        btnRow.style.cssText = "display:flex;align-items:center;gap:8px;justify-content:flex-end";
+        const reportLink = btnRow.createEl("a", { text: "Lint report →" });
+        reportLink.style.cssText = "display:none;font-size:12px;cursor:pointer;color:var(--link-color)";
+        reportLink.onclick = () => {
+            this.close();
+            setTimeout(() => new LintReportModal(this.app).open(), 150);
+        };
         const btn = btnRow.createEl("button", { text: "Run lint" });
 
         const out = contentEl.createEl("div");
@@ -781,6 +787,7 @@ class LintRunModal extends Modal {
             const autoResolve = cb.checked;
             btn.disabled = true;
             cb.disabled = true;
+            reportLink.style.display = "none";
             out.empty();
             out.createEl("p", { text: autoResolve ? "⏳ Enqueueing lint with auto-resolve…" : "⏳ Enqueueing lint…" });
             try {
@@ -808,14 +815,23 @@ class LintRunModal extends Modal {
                             // Fetch the actual lint report for contradiction/orphan counts
                             try {
                                 const report = await api.lintReport() as any;
+                                const details: any[] = report.contradiction_details ?? [];
                                 const contradictions: string[] = report.contradictions ?? [];
                                 const orphans: string[] = report.orphans ?? [];
                                 out.empty();
                                 const summary = out.createEl("p");
                                 summary.style.cssText = "font-weight:bold;margin-bottom:6px";
                                 summary.setText(`✅ Done — ${contradictions.length} contradiction(s), ${orphans.length} orphan(s).`);
-                                if (contradictions.length > 0) {
-                                    out.createEl("p", { text: `Contradictions: ${contradictions.join(", ")}` }).style.cssText = "font-size:12px;color:var(--text-error)";
+                                for (const d of details) {
+                                    const block = out.createEl("div");
+                                    block.style.cssText = "margin-bottom:6px";
+                                    block.createEl("span", { text: `❌ ${d.slug}` }).style.cssText = "font-size:12px;color:var(--text-error);font-weight:600";
+                                    if (d.contradiction_note) {
+                                        block.createEl("div", { text: `Why flagged: ${d.contradiction_note}` }).style.cssText = "font-size:11px;color:var(--text-muted);margin-top:2px";
+                                    }
+                                    if (d.unresolved_note) {
+                                        block.createEl("div", { text: `⚠ Auto-resolve failed: ${d.unresolved_note}` }).style.cssText = "font-size:11px;color:var(--text-warning);margin-top:2px";
+                                    }
                                 }
                                 if (orphans.length > 0) {
                                     out.createEl("p", { text: `Orphans: ${orphans.join(", ")}` }).style.cssText = "font-size:12px;color:var(--text-muted)";
@@ -831,6 +847,7 @@ class LintRunModal extends Modal {
                         }
                         btn.disabled = false;
                         cb.disabled = false;
+                        reportLink.style.display = "";
                     } catch {
                         // server unreachable — keep polling silently
                     }
@@ -867,6 +884,7 @@ class LintReportModal extends Modal {
         api.lintReport().then((r: any) => {
             out.empty();
             const contradictions: string[] = r.contradictions ?? [];
+            const details: any[] = r.contradiction_details ?? contradictions.map((s: string) => ({ slug: s }));
             const orphanDetails: Array<{ slug: string; index_suggestion: string }> =
                 r.orphan_details ?? (r.orphans ?? []).map((s: string) => ({ slug: s, index_suggestion: `- [[${s}]]` }));
 
@@ -875,13 +893,21 @@ class LintReportModal extends Modal {
                 return;
             }
 
-            if (contradictions.length > 0) {
-                out.createEl("h4", { text: `❌ Contradicted pages (${contradictions.length})` });
+            if (details.length > 0) {
+                out.createEl("h4", { text: `❌ Contradicted pages (${details.length})` });
                 const ul = out.createEl("ul");
-                contradictions.forEach(slug => {
+                details.forEach(({ slug, contradiction_note, unresolved_note }) => {
                     const li = ul.createEl("li");
                     li.createEl("code", { text: slug });
                     li.appendText(" — open the page, resolve the conflict, set status: active");
+                    if (contradiction_note) {
+                        const n = li.createEl("div", { text: `Why flagged: ${contradiction_note}` });
+                        n.style.cssText = "font-size:11px;color:var(--text-muted);margin-top:2px";
+                    }
+                    if (unresolved_note) {
+                        const n = li.createEl("div", { text: `⚠ Auto-resolve failed: ${unresolved_note}` });
+                        n.style.cssText = "font-size:11px;color:var(--text-warning);margin-top:2px";
+                    }
                 });
             }
 
