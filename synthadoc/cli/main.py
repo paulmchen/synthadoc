@@ -112,3 +112,4 @@ app.add_typer(audit_app)
 from synthadoc.cli.routing import routing_app  # noqa: F401, E402
 app.add_typer(routing_app)
 from synthadoc.cli import candidates  # noqa: F401, E402  — registers staging + candidates sub-apps
+from synthadoc.cli import context  # noqa: F401, E402  — registers context sub-app
