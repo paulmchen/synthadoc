@@ -353,7 +353,13 @@ class Orchestrator:
                 confidence_threshold=self._cfg.cost.auto_resolve_confidence_threshold,
                 audit_db=self._audit,
             ).lint(scope=scope, auto_resolve=auto_resolve, job_id=job_id)
-            await self._queue.complete(job_id)
+            await self._queue.complete(job_id, result={
+                "contradictions_found": report.contradictions_found,
+                "contradictions_resolved": report.contradictions_resolved,
+                "contradictions_unresolved": report.contradictions_unresolved,
+                "orphans": report.orphan_slugs,
+                "tokens_used": report.tokens_used,
+            })
             self._hooks.fire("on_lint_complete", {
                 "event": "on_lint_complete", "wiki": str(self._root),
                 "contradictions_found": report.contradictions_found,
