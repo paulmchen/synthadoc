@@ -44,7 +44,7 @@ def _make_synthetic_wiki(tmp_path: Path, page_count: int,
 
 
 @pytest.mark.benchmark
-@pytest.mark.parametrize("page_count", [100, 500, 1000])
+@pytest.mark.parametrize("page_count", [100, 500, 1000, 10000])
 def test_bm25_query_latency_with_routing(benchmark, tmp_path, page_count):
     """BM25 query latency with routing-scoped search at 100/500/1000 pages."""
     wiki_dir, ri = _make_synthetic_wiki(tmp_path, page_count)
@@ -71,7 +71,7 @@ def test_bm25_query_latency_with_routing(benchmark, tmp_path, page_count):
 
 
 @pytest.mark.benchmark
-@pytest.mark.parametrize("page_count", [100, 500, 1000])
+@pytest.mark.parametrize("page_count", [100, 500, 1000, 10000])
 def test_bm25_query_latency_full_corpus(benchmark, tmp_path, page_count):
     """BM25 query latency without scoping — baseline comparison."""
     wiki_dir, _ = _make_synthetic_wiki(tmp_path, page_count)

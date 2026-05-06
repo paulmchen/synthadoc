@@ -39,6 +39,7 @@ major engine feature. No setup beyond following the steps below is required.
 - [Appendix D — Tavily web search key](#appendix-d--tavily-web-search-key)
 - [Appendix E — Configuration](#appendix-e--configuration)
 - [Appendix G — Using a Coding Tool as Your LLM Provider](#appendix-g--using-a-coding-tool-as-your-llm-provider)
+- [Appendix H — BM25 Routing Performance Benchmarks](#appendix-h--bm25-routing-performance-benchmarks)
 
 ---
 
@@ -1386,3 +1387,37 @@ synthadoc context build "early computing pioneers" --save
 ```
 
 Writes to `wiki/context/early-computing-pioneers.md` — queryable like any other wiki page.
+
+---
+
+## Appendix H — BM25 Routing Performance Benchmarks
+
+Measured on Windows 11, Python 3.14, pytest-benchmark 5.2.3 (`time.perf_counter`).
+Synthetic wiki with 10 branches; scoped tests search 2 branches (~20% of corpus).
+Each result is the median of 5 rounds.
+
+### Scoped search (2 of 10 branches)
+
+| Pages | Median | Min   | Max   |
+|------:|-------:|------:|------:|
+|   100 |  14 ms |  5 ms | 36 ms |
+|   500 |  16 ms |  7 ms | 19 ms |
+|  1000 |   9 ms |  8 ms | 12 ms |
+| 10000 |  41 ms | 39 ms | 50 ms |
+
+Routing keeps latency nearly flat across corpus sizes — the search is bounded by branch size, not total page count.
+
+### Full-corpus search (no routing)
+
+| Pages | Median | Min   | Max    |
+|------:|-------:|------:|-------:|
+|   100 |   7 ms |  6 ms |  32 ms |
+|   500 |  14 ms | 14 ms |  16 ms |
+|  1000 |  22 ms | 21 ms |  31 ms |
+| 10000 | 191 ms |184 ms | 210 ms |
+
+Full-corpus BM25 scales roughly linearly with page count. At 10000 pages the median is 191 ms — comfortably within a 500 ms interactive budget.
+
+### Takeaway
+
+For wikis under ~1000 pages the difference between scoped and full-corpus is negligible (both under 25 ms). At 10000 pages routing delivers a **4–5× speedup** (41 ms vs. 191 ms). Enable ROUTING.md ([Step 14](#step-14--set-up-routingmd--scoped-search)) once your wiki exceeds a few hundred pages.
