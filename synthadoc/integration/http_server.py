@@ -398,17 +398,28 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
 
         page_texts: dict[str, str] = {p.stem: p.read_text(encoding="utf-8") for p in pages}
 
-        contradicted = [
-            stem for stem, text in page_texts.items()
-            if stem not in LINT_SKIP_SLUGS and "status: contradicted" in text
-        ]
+        contradiction_details = []
+        for stem, text in page_texts.items():
+            if stem not in LINT_SKIP_SLUGS and "status: contradicted" in text:
+                fm_m = _FM_RE.match(text)
+                fm: dict = {}
+                if fm_m:
+                    try:
+                        fm = _yaml.safe_load(fm_m.group(1)) or {}
+                    except Exception:
+                        pass
+                contradiction_details.append({
+                    "slug": stem,
+                    "contradiction_note": fm.get("contradiction_note") or None,
+                    "unresolved_note": fm.get("unresolved_note") or None,
+                })
 
         orphan_slugs = find_orphan_slugs(page_texts)
 
         orphan_details = []
         for slug in orphan_slugs:
             fm_m = _FM_RE.match(page_texts.get(slug, ""))
-            fm: dict = {}
+            fm = {}
             if fm_m:
                 try:
                     fm = _yaml.safe_load(fm_m.group(1)) or {}
@@ -426,7 +437,8 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
             })
 
         return {
-            "contradictions": contradicted,
+            "contradictions": [d["slug"] for d in contradiction_details],
+            "contradiction_details": contradiction_details,
             "orphans": [d["slug"] for d in orphan_details],
             "orphan_details": orphan_details,
         }

@@ -235,7 +235,10 @@ async def test_lint_records_auto_resolved_audit_event(tmp_wiki):
     log = LogWriter(tmp_wiki / "wiki" / "log.md")
     audit = AsyncMock(spec=AuditDB)
     provider = AsyncMock()
-    provider.complete.return_value = CompletionResponse(text="Resolved.", input_tokens=10, output_tokens=5)
+    provider.complete.return_value = CompletionResponse(
+        text='{"resolvable": true, "reason": "Claims reconciled.", "resolution": "Reconciled content."}',
+        input_tokens=10, output_tokens=5,
+    )
     agent = LintAgent(provider=provider, store=store, log_writer=log, audit_db=audit)
     await agent.lint(scope="contradictions", auto_resolve=True, job_id="job-456")
     calls = [c.args for c in audit.record_audit_event.await_args_list]

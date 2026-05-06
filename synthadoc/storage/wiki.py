@@ -11,7 +11,8 @@ from typing import Optional
 import yaml
 from filelock import FileLock
 
-_FRONTMATTER_FIELDS = ("title", "tags", "status", "confidence", "created", "sources", "orphan", "categories", "aliases")
+_FRONTMATTER_FIELDS = ("title", "tags", "status", "confidence", "created", "sources", "orphan", "categories",
+                       "aliases", "contradiction_note", "unresolved_note")
 
 
 @dataclass
@@ -34,6 +35,8 @@ class WikiPage:
     orphan: bool = False
     categories: list[str] = field(default_factory=list)
     aliases: list[str] = field(default_factory=list)
+    contradiction_note: Optional[str] = None   # why this page was flagged during ingest
+    unresolved_note: Optional[str] = None      # why auto-resolve could not fix it
 
 
 def _sources_to_dicts(sources: list[SourceRef]) -> list[dict]:
@@ -99,6 +102,10 @@ class WikiStorage:
                 fm["categories"] = page.categories
             if page.aliases:
                 fm["aliases"] = page.aliases
+            if page.contradiction_note:
+                fm["contradiction_note"] = page.contradiction_note
+            if page.unresolved_note:
+                fm["unresolved_note"] = page.unresolved_note
             body = page.content
         else:
             fm = frontmatter or {}
@@ -141,6 +148,8 @@ class WikiStorage:
             orphan=bool(fm.get("orphan", False)),
             categories=categories,
             aliases=aliases,
+            contradiction_note=fm.get("contradiction_note") or None,
+            unresolved_note=fm.get("unresolved_note") or None,
         )
 
     def page_exists(self, slug: str) -> bool:
