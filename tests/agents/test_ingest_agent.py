@@ -1125,3 +1125,87 @@ async def test_ingest_cjk_tags_stored_in_page(tmp_wiki):
     page = store.read_page("深度学习")
     assert page is not None
     assert "深度学习" in page.tags or "机器学习" in page.tags
+
+
+@pytest.mark.asyncio
+async def test_ingest_adds_slug_to_routing(tmp_wiki):
+    """After a CREATE action, IngestAgent places the new slug in ROUTING.md."""
+    from synthadoc.core.routing import RoutingIndex
+
+    store = WikiStorage(tmp_wiki / "wiki")
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    audit = AuditDB(tmp_wiki / ".synthadoc" / "audit.db")
+    await audit.init()
+    cache = CacheManager(tmp_wiki / ".synthadoc" / "cache.db")
+    await cache.init()
+
+    routing_path = tmp_wiki / "ROUTING.md"
+    RoutingIndex({"People": ["alan-turing"]}).save(routing_path)
+
+    source = tmp_wiki / "raw_sources" / "grace-hopper.md"
+    source.write_text("Grace Hopper pioneered compiler development.", encoding="utf-8")
+
+    provider = AsyncMock()
+    provider.complete.side_effect = [
+        CompletionResponse(
+            text='{"entities":["Grace Hopper"],"concepts":["compiler"],"tags":["computing"]}',
+            input_tokens=100, output_tokens=50,
+        ),
+        CompletionResponse(
+            text='{"reasoning":"new topic","action":"create","target":"","new_slug":"grace-hopper","update_content":"","page_content":""}',
+            input_tokens=100, output_tokens=50,
+        ),
+        CompletionResponse(text="People", input_tokens=10, output_tokens=5),
+        CompletionResponse(text="Overview text.", input_tokens=10, output_tokens=5),
+    ]
+
+    agent = IngestAgent(
+        provider=provider, store=store, search=search,
+        log_writer=log, audit_db=audit, cache=cache, max_pages=15,
+        wiki_root=tmp_wiki, routing_path=routing_path,
+    )
+    result = await agent.ingest(str(source))
+
+    assert "grace-hopper" in result.pages_created
+    content = routing_path.read_text()
+    assert "[[grace-hopper]]" in content
+
+
+@pytest.mark.asyncio
+async def test_ingest_no_routing_path_skips_routing(tmp_wiki):
+    """When routing_path is not set, IngestAgent creates pages without touching routing."""
+    store = WikiStorage(tmp_wiki / "wiki")
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    audit = AuditDB(tmp_wiki / ".synthadoc" / "audit.db")
+    await audit.init()
+    cache = CacheManager(tmp_wiki / ".synthadoc" / "cache.db")
+    await cache.init()
+
+    source = tmp_wiki / "raw_sources" / "ada-lovelace.md"
+    source.write_text("Ada Lovelace wrote the first algorithm.", encoding="utf-8")
+
+    import itertools
+    provider = AsyncMock()
+    provider.complete.side_effect = itertools.cycle([
+        CompletionResponse(
+            text='{"entities":["Ada Lovelace"],"concepts":["algorithm"],"tags":["computing"]}',
+            input_tokens=100, output_tokens=50,
+        ),
+        CompletionResponse(
+            text='{"reasoning":"new topic","action":"create","target":"","new_slug":"ada-lovelace","update_content":"","page_content":""}',
+            input_tokens=100, output_tokens=50,
+        ),
+    ])
+
+    agent = IngestAgent(
+        provider=provider, store=store, search=search,
+        log_writer=log, audit_db=audit, cache=cache, max_pages=15,
+        wiki_root=tmp_wiki,
+    )
+    result = await agent.ingest(str(source))
+
+    assert "ada-lovelace" in result.pages_created
+    # Provider was called for analysis + decision + overview (not branch pick)
+    assert provider.complete.call_count == 3
