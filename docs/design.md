@@ -1427,6 +1427,148 @@ echo "Event $event fired on wiki $wiki" | mail -s "Synthadoc notification" you@e
 
 ---
 
+## 18. Routing
+
+### ROUTING.md format
+
+`ROUTING.md` lives at `<wiki-root>/ROUTING.md`. It groups page slugs under topic branch headings:
+
+```markdown
+## People
+- [[alan-turing]]
+- [[grace-hopper]]
+
+## Hardware
+- [[eniac]]
+- [[von-neumann-architecture]]
+```
+
+### RoutingIndex
+
+`synthadoc.core.routing.RoutingIndex` parses the file, exposes a `branches: dict[str, list[str]]` mapping, and provides:
+
+- `parse(path)` — class method; returns an empty index if the file is absent
+- `validate(existing_slugs)` — returns `(branch, slug)` pairs present in ROUTING.md but not in the wiki
+- `clean(existing_slugs)` — removes dangling entries in-place; returns removed pairs
+- `add_slug(slug, branch)` — idempotent append
+- `slugs_for_branches(branch_names)` — flat list of slugs across the named branches
+- `save(path)` — serialises back to disk
+
+### Query routing
+
+When `routing_path` is passed to `QueryAgent`, each query first picks the 1–2 most relevant branches via a lightweight LLM call (returns `[]` on any failure) and restricts the BM25 corpus to those slugs. Falls back to full-corpus search when no branch is selected.
+
+### Ingest placement
+
+When `routing_path` is passed to `IngestAgent`, newly created pages are automatically placed into the most appropriate branch via a lightweight LLM call after the page is written.
+
+### Alias expansion
+
+Pages may carry an `aliases:` list in YAML frontmatter. `QueryAgent._expand_aliases` replaces alias matches in the question with the canonical slug before BM25 search (longest alias first to avoid partial-match conflicts).
+
+### Protected scaffold zone
+
+`SCAFFOLD_MARKER = "<!-- synthadoc:scaffold -->"` separates user-authored content (above) from scaffold-managed content (below) in `wiki/index.md`. The `preserve_user_zone(existing, new_scaffold)` helper in `synthadoc.agents.scaffold_agent` preserves the user zone when re-running the scaffold command. If the marker is absent, scaffold rewrites the whole file (original behaviour).
+
+### CLI commands
+
+| Command | Description |
+|---|---|
+| `synthadoc routing init` | Generate ROUTING.md from current index.md branch structure |
+| `synthadoc routing validate` | Report dangling slugs (dry run) |
+| `synthadoc routing clean` | Remove dangling slugs from ROUTING.md |
+
+All commands accept `--wiki-root <path>`.
+
+---
+
+## 19. Candidates Staging
+
+### Staging policy
+
+New pages can be routed to `wiki/candidates/` instead of `wiki/` based on the `[ingest] staging_policy` setting:
+
+| Value | Behaviour |
+|---|---|
+| `off` | All new pages go directly to `wiki/` (default) |
+| `all` | All new pages go to `wiki/candidates/` |
+| `threshold` | Pages below `staging_confidence_min` go to `wiki/candidates/` |
+
+`staging_confidence_min` values: `high` (default), `medium`, `low`. Confidence ordering: `high > medium > low`.
+
+### Exclusion from search
+
+`wiki/candidates/` is excluded from `WikiStorage.list_pages()` and therefore from BM25, lint, and contradiction detection. Candidates are invisible to all agents until promoted.
+
+### CLI commands
+
+| Command | Description |
+|---|---|
+| `synthadoc staging policy [off\|all\|threshold]` | Show or set the staging policy |
+| `synthadoc staging policy --min-confidence <level>` | Set minimum confidence threshold |
+| `synthadoc candidates list` | List all candidate pages with confidence and date |
+| `synthadoc candidates promote <slug>` | Move a candidate to `wiki/` |
+| `synthadoc candidates promote --all` | Promote all candidates |
+| `synthadoc candidates discard <slug>` | Delete a candidate |
+| `synthadoc candidates discard --all` | Delete all candidates |
+
+Policy changes take effect on the next ingest job — no server restart needed.
+
+---
+
+## 20. Context Packs
+
+### ContextAgent
+
+`synthadoc.agents.context_agent.ContextAgent` builds a token-bounded evidence pack from the wiki:
+
+1. Decomposes the goal into sub-questions (reuses `QueryAgent.decompose`)
+2. Runs BM25 hybrid search per sub-question in parallel
+3. Merges results, keeping the best score per slug
+4. Packs pages greedily within the token budget (word count / 0.75 approximation)
+5. Records omissions when the budget is exhausted
+
+Constructor: `ContextAgent(provider, store, search, token_budget=4000, top_n=8)`
+
+Method: `await agent.build(goal, token_budget=None) → ContextPack`
+
+### ContextPack
+
+| Field | Type | Description |
+|---|---|---|
+| `goal` | `str` | The input goal string |
+| `token_budget` | `int` | Effective budget used |
+| `tokens_used` | `int` | Tokens consumed by included pages |
+| `pages` | `list[ContextPage]` | Included pages, ranked by relevance |
+| `omitted` | `list[ContextPage]` | Pages excluded due to budget |
+
+`ContextPack.to_markdown()` renders a human-readable evidence pack. `ContextPack.to_dict()` returns a JSON-serialisable dict for the REST API.
+
+### Default token budget
+
+The default token budget is configured via `[query] context_token_budget` in `synthadoc.toml` (default: 4000). The HTTP request body and CLI `--tokens` flag can override it per call.
+
+### REST API
+
+```
+POST /context/build
+Content-Type: application/json
+
+{"goal": "early computing pioneers", "token_budget": 2000}
+```
+
+Response: `ContextPack.to_dict()` — keys `goal`, `token_budget`, `tokens_used`, `pages`, `omitted`.
+
+### CLI command
+
+```bash
+synthadoc context build "early computing pioneers" --tokens 2000
+synthadoc context build "..." --output context.md
+synthadoc context build "..." --save   # saves to wiki/context/<slug>.md
+```
+
+---
+
 ## Appendix A — Release Feature Index
 
 ### v0.1.0 (Community Edition)
@@ -1484,3 +1626,14 @@ echo "Event $event fired on wiki $wiki" | mail -s "Synthadoc notification" you@e
 - **ImageSkill standalone refactor** — `ImageSkill` now accepts `provider=` and performs the vision LLM call itself, returning populated text and token counts in `ExtractedContent`. `IngestAgent` injects its provider via `skill_kwargs` (same pattern as `YoutubeSkill`) and no longer contains a special `is_image` branch. The skill is now usable independently of the Synthadoc pipeline.
 - **YouTube executive summary** — each ingested YouTube video page opens with an LLM-generated executive summary (what the video is about, main topics, key takeaway) followed by the full timestamped transcript. Summary is generated once and cached; CJK transcripts receive a higher word-limit for the summary. YouTube Shorts are fully supported alongside standard-length videos.
 - **Obsidian UX improvements** — all modals are draggable and support full text selection and copy-paste; `Lint: run...` consolidates lint and auto-resolve into a single modal with an auto-resolve checkbox; `Jobs: retry failed or dead jobs...` shows a multi-select table with all checkboxes pre-ticked and polls progress live; `Synthadoc: Audit: events...` command added (table of system events with configurable limit); `Ingest: from URL...`, `Ingest: current file`, and `Wiki: regenerate scaffold...` modals all poll job status live.
+
+### v0.4.0 (Community Edition)
+
+- **Routing layer** — `ROUTING.md` groups wiki pages into named topic branches; `QueryAgent` picks 1–2 branches via a lightweight LLM call and restricts BM25 to those slugs, reducing noise on large wikis; falls back to full-corpus search when no branch is selected; `IngestAgent` auto-places new pages into the best branch on create
+- **Alias expansion** — pages may carry `aliases:` in YAML frontmatter; `QueryAgent._expand_aliases` substitutes alias matches in the question with the canonical slug before search (longest-first to avoid partial-match conflicts)
+- **Protected scaffold zone** — `<!-- synthadoc:scaffold -->` marker in `index.md` separates user-authored content (preserved) from scaffold-managed content (rewritten); absent marker → full rewrite (original behaviour)
+- **Routing CLI** — `synthadoc routing init / validate / clean` commands manage `ROUTING.md` offline; `init` builds it from the current `index.md` branch structure; `validate` reports dangling slugs; `clean` removes them
+- **Candidates staging** — new pages can be routed to `wiki/candidates/` based on `[ingest] staging_policy` (`off` / `all` / `threshold`); `threshold` mode compares page confidence against `staging_confidence_min`; candidates are excluded from BM25, lint, and contradiction detection until promoted
+- **Candidates CLI** — `synthadoc staging policy` shows/sets the staging policy; `synthadoc candidates list / promote / discard` manage the candidate queue; policy changes take effect on next ingest without a server restart
+- **ContextAgent** — `ContextAgent.build(goal)` decomposes the goal, runs parallel BM25 searches, merges by best score per slug, and greedily packs pages within a configurable token budget; omissions are recorded; output is a `ContextPack` with `to_markdown()` and `to_dict()` renderers
+- **Context CLI + REST endpoint** — `synthadoc context build "..."` with `--tokens`, `--output`, `--save` flags; `POST /context/build` JSON endpoint; default token budget configurable via `[query] context_token_budget` (default 4000)

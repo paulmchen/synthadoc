@@ -12,7 +12,7 @@ import yaml
 from filelock import FileLock
 
 _FRONTMATTER_FIELDS = ("title", "tags", "status", "confidence", "created", "sources", "orphan", "categories",
-                       "contradiction_note", "unresolved_note")
+                       "aliases", "contradiction_note", "unresolved_note")
 
 
 @dataclass
@@ -34,6 +34,7 @@ class WikiPage:
     created: Optional[str] = None
     orphan: bool = False
     categories: list[str] = field(default_factory=list)
+    aliases: list[str] = field(default_factory=list)
     contradiction_note: Optional[str] = None   # why this page was flagged during ingest
     unresolved_note: Optional[str] = None      # why auto-resolve could not fix it
 
@@ -99,6 +100,8 @@ class WikiStorage:
             }
             if page.categories:
                 fm["categories"] = page.categories
+            if page.aliases:
+                fm["aliases"] = page.aliases
             if page.contradiction_note:
                 fm["contradiction_note"] = page.contradiction_note
             if page.unresolved_note:
@@ -132,6 +135,8 @@ class WikiStorage:
         sources = _sources_from_dicts(fm.get("sources", []))
         raw_cats = fm.get("categories", [])
         categories = raw_cats if isinstance(raw_cats, list) else [raw_cats] if raw_cats else []
+        raw_aliases = fm.get("aliases", [])
+        aliases = raw_aliases if isinstance(raw_aliases, list) else [raw_aliases] if raw_aliases else []
         return WikiPage(
             title=fm.get("title", ""),
             tags=fm.get("tags", []),
@@ -142,6 +147,7 @@ class WikiStorage:
             created=fm.get("created"),
             orphan=bool(fm.get("orphan", False)),
             categories=categories,
+            aliases=aliases,
             contradiction_note=fm.get("contradiction_note") or None,
             unresolved_note=fm.get("unresolved_note") or None,
         )
@@ -151,6 +157,10 @@ class WikiStorage:
 
     def list_pages(self) -> list[str]:
         return [p.stem for p in self._root.glob("*.md")]
+
+    def all_slugs(self) -> list[str]:
+        """Return all page slugs, excluding wiki/candidates/ subdirectory."""
+        return self.list_pages()
 
     def append_to_index(self, slug: str, title: str) -> None:
         """Append a newly created page entry to wiki/index.md under 'Recently Added'.

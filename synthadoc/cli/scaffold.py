@@ -146,7 +146,11 @@ def scaffold_cmd(
             "Set your API key (e.g. ANTHROPIC_API_KEY) and try again.",
         )
 
-    (dest / "wiki" / "index.md").write_text(result.index_md, encoding="utf-8", newline="\n")
+    from synthadoc.agents.scaffold_agent import preserve_user_zone
+    index_path = dest / "wiki" / "index.md"
+    existing = index_path.read_text(encoding="utf-8") if index_path.exists() else ""
+    final_index = preserve_user_zone(existing, result.index_md)
+    index_path.write_text(final_index, encoding="utf-8", newline="\n")
     (dest / "AGENTS.md").write_text(result.agents_md, encoding="utf-8", newline="\n")
     (dest / "wiki" / "purpose.md").write_text(result.purpose_md, encoding="utf-8", newline="\n")
 

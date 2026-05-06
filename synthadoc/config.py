@@ -78,11 +78,14 @@ class IngestConfig:
     chunk_size: int = 1500
     chunk_overlap: int = 150
     fetch_timeout_seconds: int = 30
+    staging_policy: str = "off"           # "off" | "all" | "threshold"
+    staging_confidence_min: str = "high"  # "high" | "medium" | "low"
 
 
 @dataclass
 class QueryConfig:
     gap_score_threshold: float = 2.0   # BM25 score below which gap is detected
+    context_token_budget: int = 4000   # default token budget for context pack builds
 
 
 @dataclass
@@ -262,12 +265,15 @@ def _raw_to_config(raw: dict, source_has_agents: bool) -> Config:
         chunk_size=ig.get("chunk_size", 1500),
         chunk_overlap=ig.get("chunk_overlap", 150),
         fetch_timeout_seconds=ig.get("fetch_timeout_seconds", 30),
+        staging_policy=ig.get("staging_policy", "off"),
+        staging_confidence_min=ig.get("staging_confidence_min", "high"),
     )
 
     # --- query ---
     q_section = raw.get("query", {})
     query = QueryConfig(
         gap_score_threshold=q_section.get("gap_score_threshold", 2.0),
+        context_token_budget=int(q_section.get("context_token_budget", 4000)),
     )
 
     # --- queue ---

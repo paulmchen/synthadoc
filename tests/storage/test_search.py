@@ -473,3 +473,58 @@ def test_embed_text_returns_float_list(tmp_wiki):
     assert isinstance(result, list)
     assert len(result) == 3
     assert abs(result[0] - 0.1) < 1e-5
+
+
+# ── routing-scoped search ─────────────────────────────────────────────────────
+
+def test_bm25_scoped_slugs_limits_results(tmp_wiki):
+    """bm25_search with scoped_slugs must only return results from the given slugs."""
+    store = WikiStorage(tmp_wiki / "wiki")
+    _write_page(store, "alan-turing", "Alan Turing developed the theoretical basis of computation.")
+    _write_page(store, "grace-hopper", "Grace Hopper pioneered compiler development.")
+    _write_page(store, "eniac", "ENIAC was the first general-purpose electronic computer.")
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+
+    results = search.bm25_search(["computer computation"], top_n=5,
+                                  scoped_slugs=["alan-turing", "grace-hopper"])
+    slugs = [r.slug for r in results]
+    assert "eniac" not in slugs
+    assert all(s in ("alan-turing", "grace-hopper") for s in slugs)
+
+
+def test_bm25_scoped_slugs_empty_scope_returns_empty(tmp_wiki):
+    """bm25_search with scoped_slugs=[] must return an empty list."""
+    store = WikiStorage(tmp_wiki / "wiki")
+    _write_page(store, "alan-turing", "Alan Turing developed theoretical computation.")
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    results = search.bm25_search(["computation"], top_n=5, scoped_slugs=[])
+    assert results == []
+
+
+def test_bm25_scoped_slugs_none_searches_full_corpus(tmp_wiki):
+    """bm25_search with scoped_slugs=None must search the full corpus."""
+    store = WikiStorage(tmp_wiki / "wiki")
+    _write_page(store, "alan-turing", "Alan Turing developed theoretical computation.")
+    _write_page(store, "eniac", "ENIAC was the first electronic computer.")
+    _write_page(store, "unrelated", "Cooking is a great hobby for relaxation.")
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    results = search.bm25_search(["computation computer"], top_n=5, scoped_slugs=None)
+    slugs = [r.slug for r in results]
+    assert "alan-turing" in slugs or "eniac" in slugs
+
+
+@pytest.mark.asyncio
+async def test_hybrid_search_scoped_slugs_limits_results(tmp_wiki):
+    """hybrid_search with scoped_slugs must restrict candidates to the given slugs."""
+    store = WikiStorage(tmp_wiki / "wiki")
+    _write_page(store, "alan-turing", "Alan Turing developed the theoretical basis of computation.")
+    _write_page(store, "grace-hopper", "Grace Hopper pioneered compiler development.")
+    _write_page(store, "eniac", "ENIAC was the first general-purpose electronic computer.")
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+
+    results = await search.hybrid_search(
+        ["computer computation"], top_n=5,
+        scoped_slugs=["alan-turing", "grace-hopper"]
+    )
+    slugs = [r.slug for r in results]
+    assert "eniac" not in slugs

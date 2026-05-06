@@ -91,6 +91,13 @@ _OVERVIEW_PROMPT = (
     "Pages:\n{pages}"
 )
 
+_CONFIDENCE_RANK = {"high": 3, "medium": 2, "low": 1}
+
+
+def _confidence_passes_threshold(confidence: str, min_confidence: str) -> bool:
+    return _CONFIDENCE_RANK.get(confidence, 0) >= _CONFIDENCE_RANK.get(min_confidence, 0)
+
+
 _SLUG_BLACKLIST = frozenset({
     "wikilinks", "wikilink", "wiki", "obsidian", "dataview",
     # URL path segments that are never meaningful topic names
@@ -162,7 +169,9 @@ class IngestAgent:
                  log_writer: LogWriter, audit_db: AuditDB, cache: CacheManager,
                  max_pages: int = 15, wiki_root: Optional[Path] = None,
                  cache_version: str = CACHE_VERSION,
-                 fetch_timeout: int = 30) -> None:
+                 fetch_timeout: int = 30,
+                 routing_path: Optional[Path] = None,
+                 cfg=None) -> None:
         self._provider = provider
         self._store = store
         self._search = search
@@ -171,6 +180,8 @@ class IngestAgent:
         self._cache = cache
         self._max_pages = max_pages
         self._wiki_root = Path(wiki_root) if wiki_root is not None else None
+        self._routing_path = Path(routing_path) if routing_path is not None else None
+        self._cfg = cfg
         self._cache_version = cache_version
         self._skill_agent = SkillAgent(skill_kwargs={
             "url": {"fetch_timeout": fetch_timeout},
@@ -178,6 +189,22 @@ class IngestAgent:
             "image": {"provider": self._provider},
         })
         self._purpose = self._load_purpose()
+
+    async def _pick_routing_branch(self, slug: str, page: WikiPage, ri) -> str:
+        """Ask LLM to select the best ROUTING.md branch for a newly created page."""
+        branch_list = "\n".join(f"- {b}" for b in ri.branches)
+        prompt = (
+            f"Wiki topic branches:\n{branch_list}\n\n"
+            f"New page slug: {slug}\nTitle: {page.title}\nTags: {', '.join(page.tags)}\n\n"
+            "Return the single most appropriate branch name for this page. "
+            "Return exactly one branch name from the list above."
+        )
+        resp = await self._provider.complete(
+            messages=[Message(role="user", content=prompt)],
+            temperature=0.0,
+        )
+        candidate = resp.text.strip().strip('"').strip()
+        return candidate if candidate in ri.branches else next(iter(ri.branches))
 
     async def _analyse(self, text: str, bust_cache: bool = False) -> dict:
         """Step 1 — analysis pass: entity extraction + summary. Cached by content hash."""
@@ -494,11 +521,38 @@ class IngestAgent:
                         )],
                         created=today,
                     )
-                    with self._store.page_lock(slug):
-                        self._store.write_page(slug, new_page)
-                        self._search.invalidate_index()
-                    result.pages_created.append(slug)
-                    self._store.append_to_index(slug, new_page.title)
+
+                    # Staging fork: route to candidates/ based on policy
+                    policy = self._cfg.ingest.staging_policy if self._cfg else "off"
+                    go_to_candidates = False
+                    if policy == "all":
+                        go_to_candidates = True
+                    elif policy == "threshold":
+                        min_conf = self._cfg.ingest.staging_confidence_min
+                        go_to_candidates = not _confidence_passes_threshold(
+                            new_page.confidence, min_conf
+                        )
+
+                    if go_to_candidates and self._wiki_root:
+                        from synthadoc.storage.wiki import WikiStorage as _WS
+                        cand_dir = self._wiki_root / "wiki" / "candidates"
+                        cand_dir.mkdir(exist_ok=True)
+                        cand_store = _WS(cand_dir)
+                        cand_store.write_page(slug, new_page)
+                        result.pages_created.append(slug)
+                    else:
+                        with self._store.page_lock(slug):
+                            self._store.write_page(slug, new_page)
+                            self._search.invalidate_index()
+                        result.pages_created.append(slug)
+                        self._store.append_to_index(slug, new_page.title)
+                        if self._routing_path:
+                            from synthadoc.core.routing import RoutingIndex
+                            ri = RoutingIndex.parse(self._routing_path)
+                            if ri.branches:
+                                branch = await self._pick_routing_branch(slug, new_page, ri)
+                                ri.add_slug(slug, branch)
+                                ri.save(self._routing_path)
 
         if result.pages_created or result.pages_updated:
             await self._update_overview()

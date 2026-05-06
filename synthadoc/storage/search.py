@@ -163,10 +163,18 @@ class HybridSearch:
         self._cached_corpus = (slugs, tokenized)
         return self._cached_corpus
 
-    def bm25_search(self, query_terms: list[str], top_n: int = 10) -> list[SearchResult]:
+    def bm25_search(self, query_terms: list[str], top_n: int = 10,
+                    scoped_slugs: list[str] | None = None) -> list[SearchResult]:
         slugs, corpus = self._corpus()
         if not corpus:
             return []
+        if scoped_slugs is not None:
+            scoped_set = set(scoped_slugs)
+            pairs = [(s, t) for s, t in zip(slugs, corpus) if s in scoped_set]
+            if not pairs:
+                return []
+            slugs = [p[0] for p in pairs]
+            corpus = [p[1] for p in pairs]
         bm25 = BM25Okapi(corpus)
         scores = bm25.get_scores(self._tokenize(" ".join(query_terms)))
         ranked = sorted(zip(slugs, scores), key=lambda x: x[1], reverse=True)
@@ -185,14 +193,15 @@ class HybridSearch:
         return results
 
     async def hybrid_search(self, query_terms: list[str],
-                            top_n: int = 10) -> list[SearchResult]:
+                            top_n: int = 10,
+                            scoped_slugs: list[str] | None = None) -> list[SearchResult]:
         """BM25 fetch + vector cosine re-rank when enabled; BM25-only otherwise."""
         top_candidates = (
             self._search_cfg.vector_top_candidates
             if self._vector_enabled() and self._search_cfg
             else top_n
         )
-        candidates = self.bm25_search(query_terms, top_n=top_candidates)
+        candidates = self.bm25_search(query_terms, top_n=top_candidates, scoped_slugs=scoped_slugs)
 
         if not self._vector_enabled() or self._vector_store is None or not candidates:
             return candidates[:top_n]

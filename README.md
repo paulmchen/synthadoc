@@ -27,9 +27,9 @@
 [![Hooks](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Faxoviq-ai%2Fsynthadoc%2Fmain%2Fdocs%2Fbadges.json&query=%24.hooks&label=Hook%20events&color=teal)](https://github.com/axoviq-ai/synthadoc/tree/main/hooks)
 [![CLI](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Faxoviq-ai%2Fsynthadoc%2Fmain%2Fdocs%2Fbadges.json&query=%24.cli_commands&label=CLI%20commands&color=darkblue)](https://github.com/axoviq-ai/synthadoc)
 [![Obsidian](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Faxoviq-ai%2Fsynthadoc%2Fmain%2Fdocs%2Fbadges.json&query=%24.obsidian_commands&label=Obsidian%20commands&color=blueviolet)](https://github.com/axoviq-ai/synthadoc/tree/main/obsidian-plugin)
-[![Version](https://img.shields.io/badge/Community%20Edition-v0.3.0-orange.svg)](https://github.com/axoviq-ai/synthadoc)
+[![Version](https://img.shields.io/badge/Community%20Edition-v0.4.0%20in%20progress-orange.svg)](https://github.com/axoviq-ai/synthadoc)
 
-**Document version: v0.3.0**
+**Document version: v0.4.0 (in progress)**
 
 **Engineered for solo users and enterprises alike, providing a domain-specific knowledge base that scales seamlessly while maintaining accuracy through autonomous self-optimization.**
 
@@ -144,6 +144,9 @@ As the wiki accumulates pages the `index.md` table of contents, domain scope (`p
 | Coding tool as LLM provider  | **Yes** (Claude Code, Opencode — no API key)                   | No          | No         | No        |
 | YouTube transcript ingest    | **Yes** (standard + Shorts, no API key, timestamped)           | No          | No         | No        |
 | Multilingual / CJK queries   | **Yes** (Chinese, Japanese, Korean — no false gaps)            | Limited     | No         | No        |
+| Query-scoped routing         | **Yes** (ROUTING.md — branch-scoped BM25, query auto-selects branch) | No     | No         | No        |
+| Candidates staging           | **Yes** (ingest to staging area, promote or discard)           | No          | No         | No        |
+| Context packs                | **Yes** (goal → sub-questions → token-budget evidence pack)    | No          | No         | No        |
 
 ### Key differentiators vs. RAG
 
@@ -346,6 +349,9 @@ The guide covers:
 11. Enrich the wiki with scaffold (regenerate/update index, purpose, AGENTS.md)
 12. Audit features (token cost, history, events)
 13. Schedule recurring operations
+14. Set up query-scoped routing with ROUTING.md
+15. Stage and review candidate pages before promoting them
+16. Build a context pack for grounded LLM prompts
 
 ---
 
@@ -648,6 +654,72 @@ synthadoc schedule list -w my-wiki
 
 # Remove a scheduled job
 synthadoc schedule remove <id> -w my-wiki
+```
+
+### Routing
+
+ROUTING.md maps wiki branches to page slugs so queries and ingest jobs are scoped to the relevant section of the wiki. Create it once from your existing `index.md`, then let Synthadoc maintain it automatically as new pages are added.
+
+```bash
+# Bootstrap ROUTING.md from current index.md branch structure (run once)
+synthadoc routing init --wiki-root ~/wikis/my-wiki
+
+# Report dangling slugs (pages listed in ROUTING.md that no longer exist)
+synthadoc routing validate --wiki-root ~/wikis/my-wiki
+
+# Auto-remove dangling slugs from ROUTING.md
+synthadoc routing clean --wiki-root ~/wikis/my-wiki
+```
+
+### Candidates staging
+
+When staging is enabled, ingest writes new pages to `wiki/candidates/` for human review instead of the main wiki. Useful when you want to approve AI-generated pages before they become canonical.
+
+```bash
+# Show current staging policy
+synthadoc staging policy --wiki-root ~/wikis/my-wiki
+
+# Route all new pages to staging (review everything)
+synthadoc staging policy all --wiki-root ~/wikis/my-wiki
+
+# Only stage pages below a confidence threshold (auto-promote high-confidence)
+synthadoc staging policy threshold --min-confidence high --wiki-root ~/wikis/my-wiki
+
+# Turn staging off (pages go directly to wiki/)
+synthadoc staging policy off --wiki-root ~/wikis/my-wiki
+
+# List candidate pages awaiting review
+synthadoc candidates list --wiki-root ~/wikis/my-wiki
+
+# Promote a specific page (moves it from candidates/ to wiki/)
+synthadoc candidates promote my-page-slug --wiki-root ~/wikis/my-wiki
+
+# Promote all candidates at once
+synthadoc candidates promote --all --wiki-root ~/wikis/my-wiki
+
+# Discard a specific candidate
+synthadoc candidates discard my-page-slug --wiki-root ~/wikis/my-wiki
+
+# Discard all candidates
+synthadoc candidates discard --all --wiki-root ~/wikis/my-wiki
+```
+
+### Context packs
+
+A context pack decomposes a goal into sub-questions, runs parallel BM25 searches, and packs the highest-scoring excerpts into a Markdown document within a token budget. Useful as grounded context for an LLM prompt or as a research brief.
+
+```bash
+# Print context pack to terminal
+synthadoc context build "How did transistors change computing?" -w my-wiki
+
+# Custom token budget (default 4000)
+synthadoc context build "Early programming languages" --tokens 8000 -w my-wiki
+
+# Save to a file
+synthadoc context build "Rise of microprocessors" --output context.md -w my-wiki
+
+# Save as a wiki page in wiki/context/
+synthadoc context build "Von Neumann architecture" --save --wiki-root ~/wikis/my-wiki
 ```
 
 ### Removing a wiki

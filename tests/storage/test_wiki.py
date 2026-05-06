@@ -180,3 +180,18 @@ def test_concurrent_writes_to_different_pages(tmp_wiki):
     for t in threads: t.join()
     assert errors == []
     assert len(store.list_pages()) == 10
+
+
+def test_all_slugs_excludes_candidates(tmp_path):
+    """all_slugs() must not include pages under wiki/candidates/."""
+    wiki_dir = tmp_path / "wiki"
+    wiki_dir.mkdir()
+    (wiki_dir / "main-page.md").write_text("---\ntitle: Main\ntags: []\nstatus: active\nconfidence: high\nsources: []\n---\n")
+    cand_dir = wiki_dir / "candidates"
+    cand_dir.mkdir()
+    (cand_dir / "candidate-page.md").write_text("---\ntitle: Candidate\ntags: []\nstatus: active\nconfidence: low\nsources: []\n---\n")
+    store = WikiStorage(wiki_dir)
+    slugs = store.all_slugs()
+    assert "main-page" in slugs
+    assert "candidate-page" not in slugs
+    assert "candidates/candidate-page" not in slugs

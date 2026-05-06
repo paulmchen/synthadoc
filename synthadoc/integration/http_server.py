@@ -167,6 +167,11 @@ class ScaffoldRequest(BaseModel):
         return v
 
 
+class ContextBuildRequest(BaseModel):
+    goal: str
+    token_budget: Optional[int] = None   # falls back to cfg.query.context_token_budget
+
+
 class AnalyseRequest(BaseModel):
     source: str
 
@@ -516,5 +521,21 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
     async def audit_events(limit: int = 100):
         records = await app.state.orch._audit.list_events(limit=limit)
         return {"records": records, "count": len(records)}
+
+    @app.post("/context/build")
+    async def context_build(req: ContextBuildRequest):
+        from synthadoc.agents.context_agent import ContextAgent
+        from synthadoc.providers import make_provider
+        orch = app.state.orch
+        budget = req.token_budget if req.token_budget is not None \
+            else orch._cfg.query.context_token_budget
+        agent = ContextAgent(
+            provider=make_provider("query", orch._cfg),
+            store=orch._store,
+            search=orch._search,
+            token_budget=budget,
+        )
+        pack = await agent.build(req.goal, token_budget=budget)
+        return pack.to_dict()
 
     return app

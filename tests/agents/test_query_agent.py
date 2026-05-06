@@ -1117,3 +1117,55 @@ async def test_cjk_query_no_false_gap(tmp_wiki):
     # CJK input → key-term extraction skipped → signals 3–5 disabled.
     # Signals 1 (5 pages ≥ 3) and 2 (score 5.0 ≥ 0.01) both pass → no gap.
     assert result.knowledge_gap is False
+
+
+# ── alias expansion ───────────────────────────────────────────────────────────
+
+def _page_with_aliases(aliases: list[str]) -> WikiPage:
+    return WikiPage(title="spatula", tags=[], content="content",
+                    status="active", confidence="high", sources=[], aliases=aliases)
+
+
+def test_expand_aliases_replaces_known_term(tmp_wiki):
+    store = WikiStorage(tmp_wiki / "wiki")
+    store.write_page("spatula", _page_with_aliases(["flat flippy thing", "flipper"]))
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    from unittest.mock import AsyncMock as _AsyncMock
+    provider = _AsyncMock()
+    qa = QueryAgent(provider=provider, store=store, search=search)
+    result = qa._expand_aliases("tell me about the flat flippy thing")
+    assert "spatula" in result
+
+
+def test_expand_aliases_no_match_returns_original(tmp_wiki):
+    store = WikiStorage(tmp_wiki / "wiki")
+    store.write_page("spatula", _page_with_aliases(["flipper"]))
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    from unittest.mock import AsyncMock as _AsyncMock
+    provider = _AsyncMock()
+    qa = QueryAgent(provider=provider, store=store, search=search)
+    result = qa._expand_aliases("what is a spoon?")
+    assert result == "what is a spoon?"
+
+
+def test_expand_aliases_empty_wiki_returns_original(tmp_wiki):
+    store = WikiStorage(tmp_wiki / "wiki")
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    from unittest.mock import AsyncMock as _AsyncMock
+    provider = _AsyncMock()
+    qa = QueryAgent(provider=provider, store=store, search=search)
+    result = qa._expand_aliases("what is a spatula?")
+    assert result == "what is a spatula?"
+
+
+def test_expand_aliases_longer_alias_replaced_first(tmp_wiki):
+    """Longer aliases take priority to avoid partial substring replacement."""
+    store = WikiStorage(tmp_wiki / "wiki")
+    store.write_page("spatula", _page_with_aliases(["flat flippy thing", "flat"]))
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    from unittest.mock import AsyncMock as _AsyncMock
+    provider = _AsyncMock()
+    qa = QueryAgent(provider=provider, store=store, search=search)
+    result = qa._expand_aliases("the flat flippy thing is useful")
+    assert "spatula" in result
+    assert "flippy thing" not in result

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from synthadoc.agents._utils import parse_json_string_array
 from synthadoc.agents.search_decompose_agent import SearchDecomposeAgent
@@ -47,12 +50,59 @@ class QueryResult:
 class QueryAgent:
     def __init__(self, provider: LLMProvider, store: WikiStorage,
                  search: HybridSearch, top_n: int = 8,
-                 gap_score_threshold: float = 2.0) -> None:
+                 gap_score_threshold: float = 2.0,
+                 routing_path: Path | None = None) -> None:
         self._provider = provider
         self._store = store
         self._search = search
         self._top_n = top_n
         self._gap_score_threshold = gap_score_threshold
+        self._routing = None
+        if routing_path:
+            from synthadoc.core.routing import RoutingIndex
+            self._routing = RoutingIndex.parse(routing_path)
+
+    async def _routing_branch_pick(self, question: str) -> list[str]:
+        """Ask LLM to select top 1-2 branch names from ROUTING.md relevant to question."""
+        if not self._routing or not self._routing.branches:
+            return []
+        branch_list = "\n".join(f"- {b}" for b in self._routing.branches)
+        prompt = (
+            f"Wiki topic branches:\n{branch_list}\n\n"
+            f"Question: {question}\n\n"
+            "Return a JSON array of the 1-2 most relevant branch names. "
+            "Return [] if no branch is clearly relevant."
+        )
+        try:
+            resp = await self._provider.complete(
+                messages=[Message(role="user", content=prompt)],
+                temperature=0.0,
+            )
+        except Exception:
+            return []
+        m = re.search(r"\[.*?\]", resp.text, re.DOTALL)
+        if not m:
+            return []
+        try:
+            branches = json.loads(m.group())
+            return [b for b in branches if b in self._routing.branches]
+        except Exception:
+            return []
+
+    def _expand_aliases(self, question: str) -> str:
+        """Replace alias matches in question with canonical slug names."""
+        alias_map: dict[str, str] = {}
+        for slug in self._store.list_pages():
+            page = self._store.read_page(slug)
+            if page and page.aliases:
+                for alias in page.aliases:
+                    alias_map[alias.lower()] = slug
+        if not alias_map:
+            return question
+        q = question
+        for alias, slug in sorted(alias_map.items(), key=lambda x: -len(x[0])):
+            q = q.replace(alias, slug)
+        return q
 
     async def decompose(self, question: str) -> list[str]:
         """Break a question into focused sub-questions for independent retrieval.
@@ -94,10 +144,19 @@ class QueryAgent:
         return [question]
 
     async def query(self, question: str) -> QueryResult:
+        question = self._expand_aliases(question)
         sub_questions = await self.decompose(question)
 
+        scoped_slugs: list[str] | None = None
+        if self._routing:
+            branches = await self._routing_branch_pick(question)
+            if branches:
+                scoped_slugs = self._routing.slugs_for_branches(branches)
+
         async def _search_one(sub_q: str):
-            return await self._search.hybrid_search(sub_q.lower().split(), top_n=self._top_n)
+            return await self._search.hybrid_search(
+                sub_q.lower().split(), top_n=self._top_n, scoped_slugs=scoped_slugs
+            )
 
         results_per_sub = await asyncio.gather(*[_search_one(q) for q in sub_questions])
 
