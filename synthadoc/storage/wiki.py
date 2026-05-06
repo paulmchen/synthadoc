@@ -149,6 +149,10 @@ class WikiStorage:
     def list_pages(self) -> list[str]:
         return [p.stem for p in self._root.glob("*.md")]
 
+    def all_slugs(self) -> list[str]:
+        """Return all page slugs, excluding wiki/candidates/ subdirectory."""
+        return self.list_pages()
+
     def append_to_index(self, slug: str, title: str) -> None:
         """Append a newly created page entry to wiki/index.md under 'Recently Added'.
 
