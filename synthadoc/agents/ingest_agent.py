@@ -419,7 +419,12 @@ class IngestAgent:
             if self._purpose:
                 purpose_block = (
                     f"Wiki scope (from purpose.md):\n{self._purpose}\n\n"
-                    "If the source is clearly outside this scope, respond with action=\"skip\".\n\n"
+                    "Use action=\"skip\" ONLY when the source is completely unrelated to this scope "
+                    "(e.g. medical receipts, unrelated e-commerce, spam). "
+                    "Educational overviews, introductory content, and tangential sources that touch "
+                    "on the wiki's domain should be ingested — the wiki's own directive is "
+                    "'when in doubt, ingest and review', so prefer action=\"create\" over action=\"skip\" "
+                    "whenever there is any plausible connection to the scope.\n\n"
                 )
                 decision_prompt = purpose_block + _DECISION_PROMPT
             resp2 = await self._provider.complete(
@@ -438,8 +443,19 @@ class IngestAgent:
 
         # Pass 4: writes based on action
         action = decisions.get("action", "create")
+        logger.info(
+            "ingest decision: source=%s action=%s target=%s new_slug=%s | %s",
+            source[:80], action,
+            decisions.get("target", "") or "-",
+            decisions.get("new_slug", "") or "-",
+            (decisions.get("reasoning", "") or "")[:200],
+        )
 
         if action == "skip":
+            logger.warning(
+                "ingest skip: source=%s — LLM deemed out of scope. reasoning=%s",
+                source[:80], (decisions.get("reasoning", "") or "")[:300],
+            )
             result.skipped = True
             result.skip_reason = "out of scope (purpose.md)"
             return result
@@ -497,6 +513,7 @@ class IngestAgent:
                             page.content = page.content.rstrip() + f"\n\n{section}"
                             self._store.write_page(slug, page)
                             self._search.invalidate_index()
+                    logger.info("ingest: updated existing page slug=%s source=%s", slug, source[:80])
                     result.pages_updated.append(slug)
                 else:
                     if extracted.metadata.get("has_summary"):
@@ -536,11 +553,13 @@ class IngestAgent:
                         cand_dir.mkdir(exist_ok=True)
                         cand_store = _WS(cand_dir)
                         cand_store.write_page(slug, new_page)
+                        logger.info("ingest: staged to candidates slug=%s source=%s", slug, source[:80])
                         result.pages_created.append(slug)
                     else:
                         with self._store.page_lock(slug):
                             self._store.write_page(slug, new_page)
                             self._search.invalidate_index()
+                        logger.info("ingest: created page slug=%s source=%s", slug, source[:80])
                         result.pages_created.append(slug)
                         self._store.append_to_index(slug, new_page.title)
                         if self._routing_path:
