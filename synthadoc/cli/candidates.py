@@ -48,17 +48,54 @@ def _toml_value(v: object) -> str:
     return json.dumps(v)
 
 
-def _write_toml(raw: dict, path: Path) -> None:
-    lines = []
-    for section, value in raw.items():
-        if isinstance(value, dict):
-            lines.append(f"[{section}]")
-            for k, v in value.items():
-                lines.append(f"{k} = {_toml_value(v)}")
-            lines.append("")
-        else:
-            lines.insert(0, f"{section} = {_toml_value(value)}")
-    path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+def _patch_toml(path: Path, section: str, updates: dict) -> None:
+    """Patch specific keys in a TOML section without touching other lines or comments."""
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    lines = text.splitlines()
+
+    section_header = f"[{section}]"
+    in_target = False
+    patched_keys: set[str] = set()
+    result: list[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            if in_target:
+                # End of target section — append any keys not yet seen
+                for k, v in updates.items():
+                    if k not in patched_keys:
+                        result.append(f"{k} = {_toml_value(v)}")
+                        patched_keys.add(k)
+            in_target = stripped == section_header
+            result.append(line)
+            continue
+
+        if in_target and "=" in stripped and not stripped.startswith("#"):
+            key = stripped.split("=", 1)[0].strip()
+            if key in updates:
+                result.append(f"{key} = {_toml_value(updates[key])}")
+                patched_keys.add(key)
+                continue
+
+        result.append(line)
+
+    # Handle keys not found if target section was last (or never closed)
+    if in_target:
+        for k, v in updates.items():
+            if k not in patched_keys:
+                result.append(f"{k} = {_toml_value(v)}")
+                patched_keys.add(k)
+
+    # If section didn't exist at all, append it
+    if not patched_keys:
+        if result and result[-1].strip():
+            result.append("")
+        result.append(f"[{section}]")
+        for k, v in updates.items():
+            result.append(f"{k} = {_toml_value(v)}")
+
+    path.write_text("\n".join(result) + "\n", encoding="utf-8")
 
 
 @staging_app.command("policy")
@@ -83,12 +120,12 @@ def staging_policy_cmd(
         typer.echo("Policy must be one of: off, all, threshold")
         raise typer.Exit(1)
 
-    raw.setdefault("ingest", {})["staging_policy"] = policy
+    updates = {"staging_policy": policy}
     if min_confidence:
-        raw["ingest"]["staging_confidence_min"] = min_confidence
+        updates["staging_confidence_min"] = min_confidence
 
     cfg_file.parent.mkdir(parents=True, exist_ok=True)
-    _write_toml(raw, cfg_file)
+    _patch_toml(cfg_file, "ingest", updates)
     msg = f"Staging policy updated: {policy}"
     if policy == "threshold" and min_confidence:
         msg += f" (min-confidence: {min_confidence})"
