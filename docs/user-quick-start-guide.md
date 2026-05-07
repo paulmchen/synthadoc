@@ -549,7 +549,7 @@ Limit how many URLs are enqueued (default: 20):
 synthadoc ingest "search for: quantum computing IBM Google" --max-results 5
 ```
 
-**Batch via manifest file:** create `raw_sources/web-searches.txt`:
+**Batch via manifest file:** the demo wiki ships a `sources.txt` at the wiki root (outside `raw_sources/` — a `.txt` inside that folder would be treated as a text document rather than a manifest). It already contains these web search entries alongside YouTube and PDF sources:
 
 ```
 search for: Dennis Ritchie C programming language Bell Labs history
@@ -558,10 +558,10 @@ search for: Ada Lovelace first programmer Analytical Engine Babbage
 look up: history of ARPANET and internet origins
 ```
 
-Then ingest all at once:
+Ingest all sources at once:
 
 ```bash
-synthadoc ingest --file raw_sources/web-searches.txt
+synthadoc ingest --file sources.txt
 ```
 
 ### Web search from Obsidian — live view
@@ -601,15 +601,8 @@ synthadoc ingest "https://youtu.be/O5nskjZ_GoI"              # short-link form
 
 This ingests *Early Computing: Crash Course Computer Science #1*, which covers Hollerith,
 Babbage, Lovelace, and the first programmable machines — a natural fit for the demo wiki.
-
-The demo wiki also ships a `sources.txt` manifest at the project root (outside
-`raw_sources/` — files in that folder are batch-ingested as documents, so a `.txt`
-there would be treated as a text file rather than a URL list). The manifest mixes
-source types to show what batch ingestion can handle in one pass:
-
-```bash
-synthadoc ingest --file sources.txt
-```
+The YouTube entries in `sources.txt` (see Step 9) include this video, so running
+`synthadoc ingest --file sources.txt` handles it alongside the web searches.
 
 The wiki page opens with an **executive summary** — a brief description of what the video
 covers, the main topics as bullet points, and the key takeaway — so you can assess

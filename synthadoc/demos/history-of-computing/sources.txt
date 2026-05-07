@@ -1,6 +1,12 @@
 # Demo sources — ingest these to see batch ingestion with mixed source types.
-# Each line is a URL or file path; blank lines and # comments are ignored.
+# Each line is a URL, file path, or web search intent; blank lines and # comments are ignored.
 # Run: synthadoc ingest --file sources.txt
+
+# Web searches (demonstrates search-intent ingestion)
+search for: Dennis Ritchie C programming language Bell Labs history
+find on the web: Linus Torvalds Linux kernel creation 1991
+search for: Ada Lovelace first programmer Analytical Engine Babbage
+look up: history of ARPANET and internet origins
 
 # YouTube: "Early Computing: Crash Course Computer Science #1" (PBS Digital Studios)
 # Covers Hollerith, Babbage, Lovelace, and early programmable machines.
