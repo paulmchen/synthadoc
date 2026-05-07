@@ -1119,6 +1119,9 @@ class WebSearchModal extends Modal {
         const errors: string[] = [];
         let childJobIds: string[] = [];
         let childDone = 0;
+        let childSettled = 0;
+
+        const _TERMINAL = ["completed", "failed", "dead", "skipped", "cancelled"];
 
         const poll = async () => {
             try {
@@ -1143,22 +1146,24 @@ class WebSearchModal extends Modal {
                 if (childJobIds.length > 0) {
                     const allJobs = await api.jobs() as any[];
                     childDone = 0;
+                    childSettled = 0;
                     for (const cj of allJobs) {
                         if (!childJobIds.includes(cj.id)) continue;
+                        if (!_TERMINAL.includes(cj.status)) continue;
+                        childSettled++;
                         if (cj.status === "completed") {
                             childDone++;
                             for (const s of (cj.result?.pages_created ?? [])) pages.add(s);
                             for (const s of (cj.result?.pages_updated ?? [])) pages.add(s);
-                        } else if (["failed", "dead", "skipped"].includes(cj.status) && cj.error) {
+                        } else if (cj.error) {
                             const src = cj.payload?.source ?? cj.id;
                             const msg = `${src}: ${cj.error}`;
                             if (!errors.includes(msg)) errors.push(msg);
                         }
                     }
                     // Always show ingesting progress once child jobs are known
-                    const settled = childDone + errors.length;
-                    if (settled < childJobIds.length) {
-                        statusEl.setText(`Ingesting ${childJobIds.length} URL${childJobIds.length !== 1 ? "s" : ""}… (${settled} done)`);
+                    if (childSettled < childJobIds.length) {
+                        statusEl.setText(`Ingesting ${childJobIds.length} URL${childJobIds.length !== 1 ? "s" : ""}… (${childSettled} done)`);
                     }
                 }
 
@@ -1178,7 +1183,7 @@ class WebSearchModal extends Modal {
                     for (const err of errors) ul.createEl("li", { text: err });
                 }
 
-                const allChildrenSettled = childJobIds.length > 0 && (childDone + errors.length) >= childJobIds.length;
+                const allChildrenSettled = childJobIds.length > 0 && childSettled >= childJobIds.length;
                 if (isDone && (childJobIds.length === 0 || allChildrenSettled)) {
                     this._stopPolling();
                     btn.disabled = false;
