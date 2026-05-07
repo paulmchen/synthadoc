@@ -289,35 +289,39 @@ class QueryAgent:
                     _pages_with_overlap += 1
 
             # Signal 5: a genuinely sparse topic term never appears with meaningful
-            # frequency (≥ MIN_TERM_FREQ) in any single candidate page.
+            # frequency (≥ MIN_TERM_FREQ) in any single candidate page — AND the
+            # overall dedicated coverage is thin (fewer than half the candidates
+            # are on-topic).
             #
-            # A term is "genuinely sparse" when it appears in fewer than 1/3 of
-            # the candidates.  High doc_freq + qualifying_pages=0 means "widely
-            # referenced but no dedicated page" — not a content gap.  Low doc_freq
-            # + qualifying_pages=0 means the concept is barely present.
+            # Two guards prevent false positives:
             #
-            # "quantum error correction" (gap): "quantum" appears in only 1–2
-            # pages, never ≥ 2 times → genuinely absent.
+            # Guard A — on_topic_pages: if ≥ half the candidates already qualify
+            # (signal 3 is passing comfortably), the wiki covers the domain and
+            # signal 5 should not override that.  E.g. "Moore's Law shapes hardware
+            # design": on_topic_pages=5/8 → coverage is fine regardless of whether
+            # "moore" appears ≥ 2 times in any single page.
             #
-            # "Moore's Law" in a history-of-computing wiki (no gap): "moore" appears
-            # in 4+ of 8 pages (passing reference) but never ≥ 2 times in any one
-            # page.  Doc_freq ≥ ⅓ of candidates → shallow coverage, not absence.
+            # Guard B — doc_freq cap: a term appearing in ≥ ⌈n_cands/3⌉ candidates
+            # is a reference term (present in the domain), not an absent concept.
+            # Low doc_freq + qualifying_pages=0 is the fingerprint of a genuine gap.
             #
-            # "unix open-source movement": every specific term has at least 1 page
-            # where it appears ≥ 2 times → min qualifying ≥ 1 → no gap.
+            # "quantum error correction" (gap): on_topic_pages=2/8 (guard A passes),
+            # "quantum" doc_freq=1–2 < threshold (guard B passes) → gap=True ✓
+            #
+            # "Moore's Law" in history-of-computing (no gap): on_topic_pages=5/8
+            # ≥ n_cands//2=4 → guard A blocks signal 5 regardless of "moore" ✓
             _min_specific_qualifying = (
                 min(_term_qualifying_pages.values())
                 if _term_qualifying_pages else 0
             )
-            # Threshold: terms appearing in ≥ ⌈n_cands/3⌉ candidates are
-            # "reference terms", not absent concepts.
             _signal5_doc_freq_cap = max(2, (_n_cands + 2) // 3)
             _defining_term_absent = (
                 bool(_specific)
                 and len(_term_doc_freq) >= 2
+                and _pages_with_overlap < _n_cands // 2          # guard A
                 and any(
                     _term_qualifying_pages[t] == 0
-                    and _specific[t] < _signal5_doc_freq_cap
+                    and _specific[t] < _signal5_doc_freq_cap      # guard B
                     for t in _term_qualifying_pages
                 )
             )

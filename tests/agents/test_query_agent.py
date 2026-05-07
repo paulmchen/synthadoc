@@ -961,8 +961,9 @@ async def test_gap_signal5_defining_term_barely_present(tmp_wiki):
     - Signal 2: gap_score_threshold=0.01 → no fire
     - Signal 3: 2 pages have error/correction ≥ 2 → on_topic_pages=2 ≥ 2 → no fire
     - Signal 4: all 3 terms have doc_freq > 0 → no zero-freq → no fire
-    - Signal 5: "quantum" qualifying_pages=0 AND doc_freq=2 < threshold(3) → gap=True ✓
-                (low doc_freq confirms genuine absence, not shallow reference coverage)
+    - Signal 5: guard A: on_topic_pages=2 < n_cands//2=4 → coverage is thin;
+                guard B: "quantum" doc_freq=2 < threshold(3) → genuinely absent;
+                → gap=True ✓
 
     bm25_search is mocked so BM25 IDF behaviour does not affect this test.
     """
@@ -1144,10 +1145,11 @@ async def test_gap_signal5_high_docfreq_reference_term_does_not_fire(tmp_wiki):
     Old signal 5 would fire (min_qualifying=0).  New signal 5 only fires when the
     zero-qualifying term also has low doc_freq: 4 ≥ threshold(3) → no fire.
 
-    The 4 hardware pages cover hardware/design/software deeply (≥ 2 occurrences each),
-    so signal 3 passes.  The 4 filler pages contain none of the query's key terms,
-    keeping hardware/design/software at 50% doc_freq (below the 80% generic-filter
-    threshold) so they stay as specific discriminating terms in the overlap check.
+    Guard A (on_topic): 4 of 8 pages qualify → _pages_with_overlap=4 == n_cands//2=4,
+    so 4 < 4 is False → signal 5 blocked.  Guard B (doc_freq): "moore" doc_freq=4 ≥
+    threshold(3) → also blocked.  The 4 filler pages contain none of the query's key
+    terms, keeping hardware/design/software at 50% doc_freq (below 80% threshold) so
+    they remain as specific discriminating terms rather than being filtered as generic.
     """
     store = WikiStorage(tmp_wiki / "wiki")
     # 4 pages: "moore" appears exactly once (passing reference), but hardware/design/
