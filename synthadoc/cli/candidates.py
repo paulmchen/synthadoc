@@ -31,16 +31,33 @@ def _paths(wiki: Optional[str]) -> tuple[Path, Path, Path]:
     return root, _cfg_path(root), root / "wiki" / "candidates"
 
 
+def _toml_value(v: object) -> str:
+    """Serialise a Python value as a TOML literal (not JSON)."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, str):
+        return json.dumps(v)  # double-quoted string — same as JSON
+    if isinstance(v, dict):
+        pairs = ", ".join(f"{k} = {_toml_value(val)}" for k, val in v.items())
+        return "{" + pairs + "}"
+    if isinstance(v, list):
+        items = ", ".join(_toml_value(i) for i in v)
+        return "[" + items + "]"
+    return json.dumps(v)
+
+
 def _write_toml(raw: dict, path: Path) -> None:
     lines = []
     for section, value in raw.items():
         if isinstance(value, dict):
             lines.append(f"[{section}]")
             for k, v in value.items():
-                lines.append(f"{k} = {json.dumps(v)}")
+                lines.append(f"{k} = {_toml_value(v)}")
             lines.append("")
         else:
-            lines.insert(0, f"{section} = {json.dumps(value)}")
+            lines.insert(0, f"{section} = {_toml_value(value)}")
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
