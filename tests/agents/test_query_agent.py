@@ -1078,7 +1078,60 @@ async def test_gap_relational_verb_in_query_does_not_trigger_false_gap(tmp_wiki)
         )
 
     # 'shape' is in _STOPWORDS → excluded from key_terms → signal 5 does not fire.
-    # Remaining terms (moore', hardware, design, software) all have qualifying_pages > 0.
+    # Remaining terms (moore, hardware, design, software) all have qualifying_pages > 0.
+    assert result.knowledge_gap is False
+
+
+@pytest.mark.asyncio
+async def test_gap_possessive_query_term_matches_bare_and_possessive_forms(tmp_wiki):
+    """'Moore's' in a query must produce key term 'moore' (not 'moore\\'') so that
+    pages referencing Moore in any form — 'Gordon Moore', 'Moore's Law', 'Moores' —
+    all count toward coverage.
+
+    Old rstrip("s?!.,") left the apostrophe: "Moore's" → "moore'", a substring
+    present only in possessive forms.  A page saying "Gordon Moore observed that
+    transistors..." has count("moore'")=0 even though it is clearly on-topic.  When
+    every page mentions "Moore's Law" exactly once (as a header) and also says "Gordon
+    Moore" once, count("moore'")=1 per page, qualifying_pages=0 → signal 5 fires.
+
+    New rstrip("s'?!.,") strips both s and apostrophe: "Moore's" → "moore".
+    count("moore") counts both "Moore's" and "Moore" occurrences, so the same page
+    reaches count≥2 → qualifying_pages>0 → no gap.
+    """
+    store = WikiStorage(tmp_wiki / "wiki")
+    # Each page mentions "Moore's Law" once and "Gordon Moore" once.
+    # Old key term "moore'": count=1 in each page (only the possessive form matches).
+    # New key term "moore":  count=2 in each page ("Moore's" + "Gordon Moore" both match).
+    possessive_content = (
+        "Moore's Law is a prediction originally made by Gordon Moore in 1965. "
+        "Transistor density in integrated circuits doubles approximately every two years. "
+        "Hardware designers relied on this computing trend for decades of chip development. "
+        "Hardware roadmaps across the computing industry used this trajectory as a baseline."
+    )
+    for i in range(5):
+        store.write_page(f"moore-hist-{i}", WikiPage(
+            title=f"Moore History {i}", tags=["hardware"],
+            content=possessive_content,
+            status="active", confidence="high", sources=[],
+        ))
+
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    provider = AsyncMock()
+    provider.complete.return_value = CompletionResponse(
+        text='["What is Moore\'s Law?", "How did Moore\'s Law influence hardware?"]',
+        input_tokens=10, output_tokens=5,
+    )
+
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.01)
+    with patch.object(agent._search, "bm25_search",
+                      return_value=_fake_results([f"moore-hist-{i}" for i in range(5)],
+                                                 score=9.0)):
+        result = await agent.query(
+            "How did Moore's Law affect computing hardware over time?"
+        )
+
+    # New: "moore" matches both possessive and bare form → count≥2 per page → no gap.
     assert result.knowledge_gap is False
 
 

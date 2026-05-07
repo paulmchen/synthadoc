@@ -177,10 +177,13 @@ class QueryAgent:
         _max_score = max((r.score for r in candidates), default=0.0)
 
         # Extract meaningful content words from the question for the overlap check.
-        # Strip 1 char for basic plural/suffix matching ("vegetables" → "vegetable",
-        # "indoors" → "indoor"). Stripping 2 chars was too aggressive — it turned
-        # "Canadian" into "canadi", which still matched every page in a Canada-focused
-        # wiki and made the check useless as a discriminator.
+        # Strip trailing plural-s, possessive-apostrophe, and punctuation so that
+        # "Moore's" → "moore", "vegetables" → "vegetable", "indoors" → "indoor".
+        # Stripping 2 chars was too aggressive — it turned "Canadian" into "canadi",
+        # which still matched every page in a Canada-focused wiki and made the check
+        # useless as a discriminator.  Including "'" in the strip set is safe: it
+        # handles possessives ("Moore's" → "moore") and plural-possessives
+        # ("computers'" → "computer") without over-stripping ordinary words.
         #
         # CJK scripts (Chinese, Japanese, Korean) do not use whitespace word
         # boundaries, so split() either yields the whole sentence as one token
@@ -195,9 +198,9 @@ class QueryAgent:
             for c in question
         )
         _key_terms = set() if _contains_cjk else {
-            w.lower().rstrip("s?!.,")        # strip plural/punctuation only
+            w.lower().rstrip("s'?!.,")       # strip plural-s, possessive ', punctuation
             for w in question.split()
-            if len(w) > 4 and w.lower().rstrip("s?!.,") not in _STOPWORDS
+            if len(w) > 4 and w.lower().rstrip("s'?!.,") not in _STOPWORDS
         }
 
         # Signal 3: check whether retrieved pages contain dedicated coverage of the
