@@ -92,12 +92,19 @@ class LintAgent:
                     if auto_resolve:
                         note = page.contradiction_note or ""
                         prompt = (
-                            "A wiki page has been flagged as contradicted. Decide if you can resolve it.\n"
+                            "A wiki page has been flagged as contradicted by a new source.\n"
+                            "Your job is to produce an updated page that is accurate given both sources.\n"
+                            "Resolution strategy: rewrite the disputed claim to represent BOTH perspectives "
+                            "accurately — do NOT pick a winner. If one source says X and another says Y, "
+                            "present both with appropriate hedging (e.g. 'widely regarded as…, though some "
+                            "historians argue…').\n"
+                            "Only mark resolvable=false if the page itself should not exist, or the conflict "
+                            "cannot be addressed through editorial nuance (e.g. the entire page is a fabrication).\n"
                             "Return ONLY valid JSON, no markdown fences:\n"
                             '{"resolvable": true|false, "reason": "one sentence explaining why or why not", '
-                            '"resolution": "rewritten page content if resolvable, else empty string"}\n\n'
+                            '"resolution": "complete rewritten page content if resolvable, else empty string"}\n\n'
                             f"Contradiction note: {note}\n\n"
-                            f"Current page content:\n{page.content[:1000]}"
+                            f"Current page content:\n{page.content[:2000]}"
                         )
                         resp = await self._provider.complete(
                             messages=[Message(role="user", content=prompt)],
