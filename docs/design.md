@@ -1445,7 +1445,7 @@ echo "Event $event fired on wiki $wiki" | mail -s "Synthadoc notification" you@e
 
 ### RoutingIndex
 
-`synthadoc.core.routing.RoutingIndex` parses the file, exposes a `branches: dict[str, list[str]]` mapping, and provides:
+`RoutingIndex` parses the file, exposes a `branches: dict[str, list[str]]` mapping, and provides:
 
 - `parse(path)` — class method; returns an empty index if the file is absent
 - `validate(existing_slugs)` — returns `(branch, slug)` pairs present in ROUTING.md but not in the wiki
@@ -1520,7 +1520,7 @@ Policy changes take effect on the next ingest job — no server restart needed.
 
 ### ContextAgent
 
-`synthadoc.agents.context_agent.ContextAgent` builds a token-bounded evidence pack from the wiki:
+`ContextAgent` builds a token-bounded evidence pack from the wiki:
 
 1. Decomposes the goal into sub-questions (reuses `QueryAgent.decompose`)
 2. Runs BM25 hybrid search per sub-question in parallel
