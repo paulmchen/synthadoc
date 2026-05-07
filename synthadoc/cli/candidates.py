@@ -11,7 +11,8 @@ from typing import Optional
 import typer
 import yaml
 
-from synthadoc.cli._utils import _resolve_root
+from synthadoc.cli._wiki import resolve_wiki
+from synthadoc.cli.install import resolve_wiki_path
 from synthadoc.cli.main import app
 
 staging_app = typer.Typer(name="staging", help="Manage staging policy for new wiki pages.")
@@ -24,9 +25,9 @@ def _cfg_path(root: Path) -> Path:
     return root / ".synthadoc" / "config.toml"
 
 
-def _paths(wiki_root: Optional[str]) -> tuple[Path, Path, Path]:
-    """Return (root, cfg_file, cand_dir) from the --wiki-root option."""
-    root = _resolve_root(wiki_root)
+def _paths(wiki: Optional[str]) -> tuple[Path, Path, Path]:
+    """Return (root, cfg_file, cand_dir) from the --wiki option."""
+    root = resolve_wiki_path(resolve_wiki(wiki))
     return root, _cfg_path(root), root / "wiki" / "candidates"
 
 
@@ -47,10 +48,10 @@ def _write_toml(raw: dict, path: Path) -> None:
 def staging_policy_cmd(
     policy: Optional[str] = typer.Argument(None, help="off | all | threshold"),
     min_confidence: Optional[str] = typer.Option(None, "--min-confidence"),
-    wiki_root: Optional[str] = typer.Option(None, "--wiki-root"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w", help="Wiki name or path"),
 ) -> None:
     """Show or set the staging policy."""
-    root, cfg_file, _ = _paths(wiki_root)
+    root, cfg_file, _ = _paths(wiki)
     raw = tomllib.loads(cfg_file.read_text()) if cfg_file.exists() else {}
 
     if policy is None:
@@ -80,10 +81,10 @@ def staging_policy_cmd(
 
 @candidates_app.command("list")
 def candidates_list(
-    wiki_root: Optional[str] = typer.Option(None, "--wiki-root"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w", help="Wiki name or path"),
 ) -> None:
     """List all candidate pages awaiting review."""
-    _, _, cand_dir = _paths(wiki_root)
+    _, _, cand_dir = _paths(wiki)
     pages = sorted(cand_dir.glob("*.md")) if cand_dir.exists() else []
     if not pages:
         typer.echo("No candidates.")
@@ -100,10 +101,10 @@ def candidates_list(
 def candidates_promote(
     slug: Optional[str] = typer.Argument(None),
     all_: bool = typer.Option(False, "--all"),
-    wiki_root: Optional[str] = typer.Option(None, "--wiki-root"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w", help="Wiki name or path"),
 ) -> None:
     """Promote candidate(s) to the main wiki."""
-    root, _, cand_dir = _paths(wiki_root)
+    root, _, cand_dir = _paths(wiki)
     wiki_dir = root / "wiki"
 
     targets = list(cand_dir.glob("*.md")) if all_ else []
@@ -126,10 +127,10 @@ def candidates_promote(
 def candidates_discard(
     slug: Optional[str] = typer.Argument(None),
     all_: bool = typer.Option(False, "--all"),
-    wiki_root: Optional[str] = typer.Option(None, "--wiki-root"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w", help="Wiki name or path"),
 ) -> None:
     """Discard candidate page(s)."""
-    _, _, cand_dir = _paths(wiki_root)
+    _, _, cand_dir = _paths(wiki)
 
     targets = list(cand_dir.glob("*.md")) if all_ else []
     if not all_ and slug:

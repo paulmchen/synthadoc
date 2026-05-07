@@ -6,7 +6,8 @@ from typing import Optional
 
 import typer
 
-from synthadoc.cli._utils import _resolve_root
+from synthadoc.cli._wiki import resolve_wiki
+from synthadoc.cli.install import resolve_wiki_path
 from synthadoc.core.routing import RoutingIndex
 
 routing_app = typer.Typer(name="routing", help="Manage ROUTING.md — scoped query routing.")
@@ -15,18 +16,18 @@ _BRANCH_RE = re.compile(r"^##\s+(.+)$")
 _SLUG_RE = re.compile(r"-\s*\[\[([^\]]+)\]\]")
 
 
-def _paths(wiki_root: Optional[str]) -> tuple[Path, Path, Path]:
-    """Return (root, routing_path, wiki_dir) from the --wiki-root option."""
-    root = _resolve_root(wiki_root)
+def _paths(wiki: Optional[str]) -> tuple[Path, Path, Path]:
+    """Return (root, routing_path, wiki_dir) from the --wiki option."""
+    root = resolve_wiki_path(resolve_wiki(wiki))
     return root, root / "ROUTING.md", root / "wiki"
 
 
 @routing_app.command("init")
 def routing_init(
-    wiki_root: Optional[str] = typer.Option(None, "--wiki-root", help="Path to wiki root"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w", help="Wiki name or path"),
 ) -> None:
     """Generate ROUTING.md from current index.md branch structure (run once)."""
-    root, routing_path, wiki_dir = _paths(wiki_root)
+    root, routing_path, wiki_dir = _paths(wiki)
     index = wiki_dir / "index.md"
 
     if routing_path.exists():
@@ -57,10 +58,10 @@ def routing_init(
 
 @routing_app.command("validate")
 def routing_validate(
-    wiki_root: Optional[str] = typer.Option(None, "--wiki-root"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w", help="Wiki name or path"),
 ) -> None:
     """Report dangling slugs in ROUTING.md (dry run — no changes)."""
-    _, routing_path, wiki_dir = _paths(wiki_root)
+    _, routing_path, wiki_dir = _paths(wiki)
 
     ri = RoutingIndex.parse(routing_path)
     existing = {p.stem for p in wiki_dir.glob("*.md")} if wiki_dir.exists() else set()
@@ -77,10 +78,10 @@ def routing_validate(
 
 @routing_app.command("clean")
 def routing_clean(
-    wiki_root: Optional[str] = typer.Option(None, "--wiki-root"),
+    wiki: Optional[str] = typer.Option(None, "--wiki", "-w", help="Wiki name or path"),
 ) -> None:
     """Auto-remove dangling slugs from ROUTING.md."""
-    _, routing_path, wiki_dir = _paths(wiki_root)
+    _, routing_path, wiki_dir = _paths(wiki)
 
     ri = RoutingIndex.parse(routing_path)
     existing = {p.stem for p in wiki_dir.glob("*.md")} if wiki_dir.exists() else set()
