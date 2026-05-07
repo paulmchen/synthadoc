@@ -1096,7 +1096,7 @@ class WebSearchModal extends Modal {
                 const r = await api.ingest(`search for: ${topic}`, maxResults) as any;
                 const jobId: string = r.job_id;
                 new Notice(`Synthadoc: web search queued (job ${jobId})`);
-                this._startPolling(jobId, statusEl, pagesEl, errorsEl);
+                this._startPolling(jobId, statusEl, pagesEl, errorsEl, btn, input);
             } catch {
                 statusEl.setText("Error: is synthadoc serve running?");
                 btn.disabled = false;
@@ -1114,12 +1114,14 @@ class WebSearchModal extends Modal {
         statusEl: HTMLElement,
         pagesEl: HTMLElement,
         errorsEl: HTMLElement,
+        btn: HTMLButtonElement,
+        input: HTMLTextAreaElement,
     ) {
         const pages = new Set<string>();
         const errors: string[] = [];
         let childJobIds: string[] = [];
-        let childDone = 0;
-        let childSettled = 0;
+        // Persistent settled set — survives jobs dropping off api.jobs() between polls
+        const settledChildren = new Set<string>();
 
         const _TERMINAL = ["completed", "failed", "dead", "skipped", "cancelled"];
 
@@ -1145,14 +1147,12 @@ class WebSearchModal extends Modal {
 
                 if (childJobIds.length > 0) {
                     const allJobs = await api.jobs() as any[];
-                    childDone = 0;
-                    childSettled = 0;
                     for (const cj of allJobs) {
                         if (!childJobIds.includes(cj.id)) continue;
                         if (!_TERMINAL.includes(cj.status)) continue;
-                        childSettled++;
+                        if (settledChildren.has(cj.id)) continue;
+                        settledChildren.add(cj.id);
                         if (cj.status === "completed") {
-                            childDone++;
                             for (const s of (cj.result?.pages_created ?? [])) pages.add(s);
                             for (const s of (cj.result?.pages_updated ?? [])) pages.add(s);
                         } else if (cj.error) {
@@ -1161,6 +1161,7 @@ class WebSearchModal extends Modal {
                             if (!errors.includes(msg)) errors.push(msg);
                         }
                     }
+                    const childSettled = settledChildren.size;
                     // Show progress; when parent is done clarify that work is still ongoing
                     if (childSettled < childJobIds.length) {
                         const remaining = childJobIds.length - childSettled;
@@ -1188,12 +1189,13 @@ class WebSearchModal extends Modal {
                     for (const err of errors) ul.createEl("li", { text: err });
                 }
 
-                const allChildrenSettled = childJobIds.length > 0 && childSettled >= childJobIds.length;
+                const allChildrenSettled = childJobIds.length > 0 && settledChildren.size >= childJobIds.length;
                 if (isDone && (childJobIds.length === 0 || allChildrenSettled)) {
                     this._stopPolling();
                     btn.disabled = false;
                     input.disabled = false;
                     if (job.status === "completed" || allChildrenSettled) {
+                        statusEl.style.cssText += ";font-weight:bold;color:var(--text-success)";
                         statusEl.setText(`Done — ${pages.size} page(s) written.`);
                         new Notice(`Synthadoc: web search complete — ${pages.size} page(s)`);
                     } else {
