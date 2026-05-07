@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 SCAFFOLD_MARKER = "<!-- synthadoc:scaffold -->"
 
 _FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
+_FM_STRIP_RE = re.compile(r"^---\s*\n.*?\n---\s*\n+", re.DOTALL)
+_H1_STRIP_RE = re.compile(r"^#[^#][^\n]*\n+")
 
 _SYSTEM_PROMPT = (
     "You are a knowledge management assistant helping to set up a domain-specific wiki. "
@@ -87,11 +89,15 @@ def preserve_user_zone(existing_content: str, new_scaffold_content: str) -> str:
     """Return index.md content preserving the user zone above SCAFFOLD_MARKER.
 
     If the marker is absent, returns new_scaffold_content unchanged (full rewrite).
+    When the marker is present the existing file already has its own frontmatter
+    and h1 title, so strip both from new_scaffold_content before injecting.
     """
     if SCAFFOLD_MARKER not in existing_content:
         return new_scaffold_content
     user_zone = existing_content.split(SCAFFOLD_MARKER)[0].rstrip()
-    return f"{user_zone}\n\n{SCAFFOLD_MARKER}\n\n{new_scaffold_content}"
+    body = _FM_STRIP_RE.sub("", new_scaffold_content, count=1)
+    body = _H1_STRIP_RE.sub("", body, count=1)
+    return f"{user_zone}\n\n{SCAFFOLD_MARKER}\n\n{body.lstrip()}"
 
 
 @dataclass
