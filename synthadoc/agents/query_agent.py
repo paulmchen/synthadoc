@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -66,28 +64,11 @@ class QueryAgent:
         """Ask LLM to select top 1-2 branch names from ROUTING.md relevant to question."""
         if not self._routing or not self._routing.branches:
             return []
-        branch_list = "\n".join(f"- {b}" for b in self._routing.branches)
-        prompt = (
-            f"Wiki topic branches:\n{branch_list}\n\n"
-            f"Question: {question}\n\n"
-            "Return a JSON array of the 1-2 most relevant branch names. "
-            "Return [] if no branch is clearly relevant."
+        from synthadoc.agents._routing import pick_routing_branches
+        return await pick_routing_branches(
+            self._provider, self._routing.branches,
+            f"Question: {question}", multi=True,
         )
-        try:
-            resp = await self._provider.complete(
-                messages=[Message(role="user", content=prompt)],
-                temperature=0.0,
-            )
-        except Exception:
-            return []
-        m = re.search(r"\[.*?\]", resp.text, re.DOTALL)
-        if not m:
-            return []
-        try:
-            branches = json.loads(m.group())
-            return [b for b in branches if b in self._routing.branches]
-        except Exception:
-            return []
 
     def _expand_aliases(self, question: str) -> str:
         """Replace alias matches in question with canonical slug names."""

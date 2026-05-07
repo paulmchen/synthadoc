@@ -192,19 +192,12 @@ class IngestAgent:
 
     async def _pick_routing_branch(self, slug: str, page: WikiPage, ri) -> str:
         """Ask LLM to select the best ROUTING.md branch for a newly created page."""
-        branch_list = "\n".join(f"- {b}" for b in ri.branches)
-        prompt = (
-            f"Wiki topic branches:\n{branch_list}\n\n"
-            f"New page slug: {slug}\nTitle: {page.title}\nTags: {', '.join(page.tags)}\n\n"
-            "Return the single most appropriate branch name for this page. "
-            "Return exactly one branch name from the list above."
+        from synthadoc.agents._routing import pick_routing_branches
+        context = f"New page slug: {slug}\nTitle: {page.title}\nTags: {', '.join(page.tags)}"
+        result = await pick_routing_branches(
+            self._provider, ri.branches, context, multi=False
         )
-        resp = await self._provider.complete(
-            messages=[Message(role="user", content=prompt)],
-            temperature=0.0,
-        )
-        candidate = resp.text.strip().strip('"').strip()
-        return candidate if candidate in ri.branches else next(iter(ri.branches))
+        return result[0] if result else next(iter(ri.branches))
 
     async def _analyse(self, text: str, bust_cache: bool = False) -> dict:
         """Step 1 — analysis pass: entity extraction + summary. Cached by content hash."""
