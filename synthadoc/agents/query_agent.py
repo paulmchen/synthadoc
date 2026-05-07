@@ -232,24 +232,6 @@ class QueryAgent:
             }
             _covered = {t: f for t, f in _term_doc_freq.items() if f > 0}
 
-            # Signal 4: a defining concept word is entirely absent from the wiki.
-            # When a query has ≥ 2 key terms and at least one appears in zero
-            # retrieved pages, the topic's core vocabulary is missing — not a
-            # synonym/vocabulary mismatch.  E.g. "quantum error correction" in a
-            # history-of-computing wiki: "error" and "correction" hit Bombe pages
-            # (high BM25 score, signal 3 passes), but "quantum" has zero coverage,
-            # definitively flagging the topic as absent.
-            #
-            # Coverage guard: if non-zero terms appear in >80% of candidates they
-            # are generic corpus words ("plant", "garden"), not topic discriminators.
-            # In that case the zero-freq term is a synonym mismatch, not a true gap.
-            _any_term_missing = (
-                bool(_covered)
-                and len(_term_doc_freq) >= 2
-                and any(f == 0 for f in _term_doc_freq.values())
-                and max(_covered.values()) / len(candidates) <= 0.8
-            )
-
             # Drop hyper-generic terms that appear in >80% of candidates.
             # Using 80% (not 60%) so moderately-common topic words like "partial"
             # (present in ~60-70% of pages in a shade-focused wiki) are kept as
@@ -272,7 +254,7 @@ class QueryAgent:
                 _discriminating_term = min(_term_doc_freq, key=lambda t: _term_doc_freq[t])
 
             # Single pass: compute both signal 3 (any specific term ≥ freq) and
-            # per-term qualifying page counts (needed for signal 5).
+            # per-term qualifying page counts (needed for signals 4 and 5).
             _term_qualifying_pages: dict[str, int] = {t: 0 for t in _specific}
             _pages_with_overlap = 0
             for _r in candidates:
@@ -288,18 +270,42 @@ class QueryAgent:
                 if _page_on_topic:
                     _pages_with_overlap += 1
 
+            # Signals 4 and 5 share a common guard: if ≥ half the candidates have
+            # dedicated on-topic coverage, the wiki covers the domain well enough
+            # that vocabulary mismatches ("expectation" absent when the wiki says
+            # "assumptions") or shallow references ("moore" mentioned once per page)
+            # should not override the positive signal from signal 3.
+            _signals_45_active = _pages_with_overlap < _n_cands // 2
+
+            # Signal 4: a defining concept word is entirely absent from the wiki.
+            # When a query has ≥ 2 key terms and at least one appears in zero
+            # retrieved pages, the topic's core vocabulary is missing — not a
+            # synonym/vocabulary mismatch.  E.g. "quantum error correction" in a
+            # history-of-computing wiki: "error" and "correction" hit Bombe pages
+            # (high BM25 score, signal 3 passes), but "quantum" has zero coverage,
+            # definitively flagging the topic as absent.
+            #
+            # Coverage guard: if non-zero terms appear in >80% of candidates they
+            # are generic corpus words, not topic discriminators — the zero-freq term
+            # is a synonym mismatch, not a true gap.
+            #
+            # On-topic guard: shared with signal 5 — if coverage is already good
+            # (≥ n_cands//2 pages), vocabulary mismatches in the query do not
+            # indicate a knowledge gap.
+            _any_term_missing = (
+                _signals_45_active
+                and bool(_covered)
+                and len(_term_doc_freq) >= 2
+                and any(f == 0 for f in _term_doc_freq.values())
+                and max(_covered.values()) / len(candidates) <= 0.8
+            )
+
             # Signal 5: a genuinely sparse topic term never appears with meaningful
             # frequency (≥ MIN_TERM_FREQ) in any single candidate page — AND the
             # overall dedicated coverage is thin (fewer than half the candidates
             # are on-topic).
             #
-            # Two guards prevent false positives:
-            #
-            # Guard A — on_topic_pages: if ≥ half the candidates already qualify
-            # (signal 3 is passing comfortably), the wiki covers the domain and
-            # signal 5 should not override that.  E.g. "Moore's Law shapes hardware
-            # design": on_topic_pages=5/8 → coverage is fine regardless of whether
-            # "moore" appears ≥ 2 times in any single page.
+            # Guard A — on_topic_pages (shared _signals_45_active): see above.
             #
             # Guard B — doc_freq cap: a term appearing in ≥ ⌈n_cands/3⌉ candidates
             # is a reference term (present in the domain), not an absent concept.
@@ -308,17 +314,17 @@ class QueryAgent:
             # "quantum error correction" (gap): on_topic_pages=2/8 (guard A passes),
             # "quantum" doc_freq=1–2 < threshold (guard B passes) → gap=True ✓
             #
-            # "Moore's Law" in history-of-computing (no gap): on_topic_pages=5/8
-            # ≥ n_cands//2=4 → guard A blocks signal 5 regardless of "moore" ✓
+            # "Moore's Law" in history-of-computing (no gap): on_topic_pages=4/8
+            # ≥ n_cands//2=4 → guard A blocks both signal 4 and signal 5 ✓
             _min_specific_qualifying = (
                 min(_term_qualifying_pages.values())
                 if _term_qualifying_pages else 0
             )
             _signal5_doc_freq_cap = max(2, (_n_cands + 2) // 3)
             _defining_term_absent = (
-                bool(_specific)
+                _signals_45_active
+                and bool(_specific)
                 and len(_term_doc_freq) >= 2
-                and _pages_with_overlap < _n_cands // 2          # guard A
                 and any(
                     _term_qualifying_pages[t] == 0
                     and _specific[t] < _signal5_doc_freq_cap      # guard B
