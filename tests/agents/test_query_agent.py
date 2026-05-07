@@ -961,8 +961,8 @@ async def test_gap_signal5_defining_term_barely_present(tmp_wiki):
     - Signal 2: gap_score_threshold=0.01 → no fire
     - Signal 3: 2 pages have error/correction ≥ 2 → on_topic_pages=2 ≥ 2 → no fire
     - Signal 4: all 3 terms have doc_freq > 0 → no zero-freq → no fire
-    - Signal 5: quantum_qualifying_pages=0 (never ≥ 2 in any page) →
-                min(quantum=0, error=2, correction=2)=0 → gap=True ✓
+    - Signal 5: "quantum" qualifying_pages=0 AND doc_freq=2 < threshold(3) → gap=True ✓
+                (low doc_freq confirms genuine absence, not shallow reference coverage)
 
     bm25_search is mocked so BM25 IDF behaviour does not affect this test.
     """
@@ -1021,7 +1021,7 @@ async def test_gap_signal5_defining_term_barely_present(tmp_wiki):
                        gap_score_threshold=0.01)  # signal 2 disabled
     with patch.object(agent._search, "bm25_search", return_value=_fake_results(all_slugs)):
         result = await agent.query("What is quantum error correction?")
-    # "quantum" never appears ≥ 2 times in any candidate → min_qualifying=0 → signal 5.
+    # "quantum": doc_freq=2 < threshold(3), qualifying=0 → signal 5 fires.
     assert result.knowledge_gap is True
     assert len(result.suggested_searches) >= 1
 
@@ -1132,6 +1132,72 @@ async def test_gap_possessive_query_term_matches_bare_and_possessive_forms(tmp_w
         )
 
     # New: "moore" matches both possessive and bare form → count≥2 per page → no gap.
+    assert result.knowledge_gap is False
+
+
+@pytest.mark.asyncio
+async def test_gap_signal5_high_docfreq_reference_term_does_not_fire(tmp_wiki):
+    """Signal 5 must NOT fire when the zero-qualifying term has high doc_freq.
+
+    'moore' appears in 4 of 8 pages (≥ threshold=3), each time as a single passing
+    reference — count("moore")=1 < 2 per page → qualifying_pages("moore")=0.
+    Old signal 5 would fire (min_qualifying=0).  New signal 5 only fires when the
+    zero-qualifying term also has low doc_freq: 4 ≥ threshold(3) → no fire.
+
+    The 4 hardware pages cover hardware/design/software deeply (≥ 2 occurrences each),
+    so signal 3 passes.  The 4 filler pages contain none of the query's key terms,
+    keeping hardware/design/software at 50% doc_freq (below the 80% generic-filter
+    threshold) so they stay as specific discriminating terms in the overlap check.
+    """
+    store = WikiStorage(tmp_wiki / "wiki")
+    # 4 pages: "moore" appears exactly once (passing reference), but hardware/design/
+    # software each appear >= 2 times (dedicated coverage).
+    reference_content = (
+        "Moore's Law predicted that hardware transistor density would double each year. "
+        "Hardware engineers planned hardware design based on this transistor observation. "
+        "Hardware design decisions drove hardware development across computing generations. "
+        "Software teams adapted their software complexity alongside hardware advances."
+    )
+    for i in range(4):
+        store.write_page(f"hardware-pg-{i}", WikiPage(
+            title=f"Hardware History {i}", tags=["hardware"],
+            content=reference_content,
+            status="active", confidence="high", sources=[],
+        ))
+    # 4 filler pages about theoretical computing -- none of the query key terms
+    # (moore, hardware, design, software, development) appear here, so those
+    # terms stay at 50% doc_freq and are not filtered as corpus-generic.
+    filler_content = (
+        "Alan Turing formulated the theoretical basis for computation and logic. "
+        "John von Neumann contributed to early computing through his stored-program concept. "
+        "Claude Shannon established information theory as a mathematical framework. "
+        "Alonzo Church developed lambda calculus as a formal system for computability."
+    )
+    for i in range(4):
+        store.write_page(f"theory-pg-{i}", WikiPage(
+            title=f"Theory History {i}", tags=["theory"],
+            content=filler_content,
+            status="active", confidence="high", sources=[],
+        ))
+
+    all_slugs = [f"hardware-pg-{i}" for i in range(4)] + [f"theory-pg-{i}" for i in range(4)]
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    provider = AsyncMock()
+    provider.complete.return_value = CompletionResponse(
+        text='["What is Moore\'s Law?", "How did it affect hardware design?"]',
+        input_tokens=10, output_tokens=5,
+    )
+
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.01)
+    with patch.object(agent._search, "bm25_search",
+                      return_value=_fake_results(all_slugs, score=8.0)):
+        result = await agent.query(
+            "How did Moore's Law shape hardware design and software development?"
+        )
+
+    # "moore": doc_freq=4 >= threshold(3), qualifying=0 -> signal 5 does NOT fire.
+    # hardware/design/software all have qualifying_pages=4 -> signal 3 passes -> no gap.
     assert result.knowledge_gap is False
 
 

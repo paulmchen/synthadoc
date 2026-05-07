@@ -288,29 +288,38 @@ class QueryAgent:
                 if _page_on_topic:
                     _pages_with_overlap += 1
 
-            # Signal 5: at least one specific topic term never appears with meaningful
+            # Signal 5: a genuinely sparse topic term never appears with meaningful
             # frequency (≥ MIN_TERM_FREQ) in any single candidate page.
             #
-            # A term that appears scattered (once per page across many pages) is
-            # incidentally present — the wiki touches the vocabulary but lacks a page
-            # that actually discusses the concept.
+            # A term is "genuinely sparse" when it appears in fewer than 1/3 of
+            # the candidates.  High doc_freq + qualifying_pages=0 means "widely
+            # referenced but no dedicated page" — not a content gap.  Low doc_freq
+            # + qualifying_pages=0 means the concept is barely present.
             #
-            # "quantum error correction": "quantum" and "correction" each appear in
-            # 1 page with ≥ 2 occurrences (transistor and bombe respectively), but
-            # "error" appears only once each in 2 separate pages (never ≥ 2 in any
-            # one page) — min qualifying = 0 → gap.
+            # "quantum error correction" (gap): "quantum" appears in only 1–2
+            # pages, never ≥ 2 times → genuinely absent.
             #
-            # "unix open-source movement": every specific term ("open-source",
-            # "movement", "influence") has at least 1 page where it appears ≥ 2 times
-            # — min qualifying ≥ 1 → no gap.
+            # "Moore's Law" in a history-of-computing wiki (no gap): "moore" appears
+            # in 4+ of 8 pages (passing reference) but never ≥ 2 times in any one
+            # page.  Doc_freq ≥ ⅓ of candidates → shallow coverage, not absence.
+            #
+            # "unix open-source movement": every specific term has at least 1 page
+            # where it appears ≥ 2 times → min qualifying ≥ 1 → no gap.
             _min_specific_qualifying = (
                 min(_term_qualifying_pages.values())
                 if _term_qualifying_pages else 0
             )
+            # Threshold: terms appearing in ≥ ⌈n_cands/3⌉ candidates are
+            # "reference terms", not absent concepts.
+            _signal5_doc_freq_cap = max(2, (_n_cands + 2) // 3)
             _defining_term_absent = (
                 bool(_specific)
                 and len(_term_doc_freq) >= 2
-                and _min_specific_qualifying == 0
+                and any(
+                    _term_qualifying_pages[t] == 0
+                    and _specific[t] < _signal5_doc_freq_cap
+                    for t in _term_qualifying_pages
+                )
             )
         else:
             _discriminating_term = ""
