@@ -773,6 +773,75 @@ async def test_openai_provider_deepseek_r1_think_tags_stripped():
     assert "<think>" not in result.text
 
 
+@pytest.mark.asyncio
+async def test_openai_provider_retries_on_503_then_succeeds():
+    """A transient 503 InternalServerError is retried; second attempt succeeds."""
+    import openai
+    from synthadoc.providers.openai import OpenAIProvider
+    cfg = AgentConfig(provider="gemini", model="gemini-2.5-flash-lite",
+                      base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
+    provider = OpenAIProvider(api_key="test-key", config=cfg)
+
+    ok_resp = MagicMock()
+    ok_resp.choices = [MagicMock()]
+    ok_resp.choices[0].message.content = "answer"
+    ok_resp.choices[0].message.model_extra = {}
+    ok_resp.usage.prompt_tokens = 10
+    ok_resp.usage.completion_tokens = 5
+
+    server_err = openai.InternalServerError(
+        message="503", response=MagicMock(status_code=503), body={})
+    call_count = 0
+
+    async def flaky(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise server_err
+        return ok_resp
+
+    with patch.object(provider._client.chat.completions, "create", side_effect=flaky):
+        with patch("synthadoc.providers.openai._sleep", new=AsyncMock()):
+            result = await provider.complete(messages=[Message(role="user", content="hi")])
+
+    assert result.text == "answer"
+    assert call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_raises_after_all_503_retries_exhausted():
+    """When 503s persist across all retries, InternalServerError is re-raised."""
+    import openai
+    from synthadoc.providers.openai import OpenAIProvider
+    cfg = AgentConfig(provider="gemini", model="gemini-2.5-flash-lite",
+                      base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
+    provider = OpenAIProvider(api_key="test-key", config=cfg)
+
+    server_err = openai.InternalServerError(
+        message="503", response=MagicMock(status_code=503), body={})
+
+    with patch.object(provider._client.chat.completions, "create",
+                      side_effect=server_err):
+        with patch("synthadoc.providers.openai._sleep", new=AsyncMock()):
+            with pytest.raises(openai.InternalServerError):
+                await provider.complete(messages=[Message(role="user", content="hi")])
+
+
+def test_classify_llm_error_returns_503_for_internal_server_error():
+    """A 503 InternalServerError (all retries exhausted) must return 503 HTTPException, not fall through to 502."""
+    import openai
+    from synthadoc.integration.http_server import _classify_llm_error
+    exc = openai.InternalServerError(
+        message="This model is currently experiencing high demand.",
+        response=MagicMock(status_code=503),
+        body={},
+    )
+    result = _classify_llm_error(exc)
+    assert result is not None
+    assert result.status_code == 503
+    assert "503" in result.detail
+
+
 def test_classify_llm_error_returns_401_for_auth_error():
     """AuthenticationError (401) must return a 401 HTTPException, not fall through to 502."""
     import openai

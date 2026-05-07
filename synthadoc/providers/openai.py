@@ -31,6 +31,12 @@ _NO_VISION_HOSTS = ("groq.com", "api.deepseek.com")
 # Default demo model is Gemini 2.5 Flash-Lite: 30 RPM / 1,000 RPD.  Groq has similar caps.
 _RATE_LIMIT_RETRY_DELAYS_S: tuple[int, ...] = (65,)
 
+# Retry delays (seconds) after an HTTP 5xx server error (e.g. Gemini 503
+# "model experiencing high demand").  These are transient — a short backoff
+# is enough.  Three attempts with escalating waits cover the typical
+# load-spike window without waiting as long as a rate-limit retry.
+_SERVER_ERROR_RETRY_DELAYS_S: tuple[int, ...] = (5, 15, 30)
+
 # Module-level alias so tests can patch precisely:
 #   patch("synthadoc.providers.openai._sleep", new=AsyncMock())
 _sleep = asyncio.sleep
@@ -83,23 +89,18 @@ class OpenAIProvider(LLMProvider):
 
     async def _call_with_retry(self, msgs: list, temperature: float,
                                max_tokens: int):
-        """Call the completions API, retrying once on per-minute 429 rate-limit.
+        """Call the completions API with retry logic for transient errors.
 
-        Daily quota exhaustion raises immediately (no sleep, no retry) — sleeping
-        65 s and retrying would waste time and consume another scarce daily request.
-        See _RATE_LIMIT_RETRY_DELAYS_S for per-minute retry rationale.
+        - 429 RateLimitError: retried once after 65 s (per-minute quota window).
+          Daily quota exhaustion raises immediately — no retry possible.
+        - 5xx InternalServerError: retried up to 3 times with short backoff
+          (5 s / 15 s / 30 s) for transient load spikes (e.g. Gemini 503).
         """
-        last_exc: Exception | None = None
-        for attempt, wait in enumerate([0] + list(_RATE_LIMIT_RETRY_DELAYS_S)):
-            if wait:
-                logger.warning(
-                    "Rate limit (429) from %s — waiting %d s then retrying once "
-                    "(per-minute window reset). If this retry also fails, the "
-                    "hourly/daily quota is likely exhausted — check your provider "
-                    "dashboard or switch providers.",
-                    self._config.provider, wait,
-                )
-                await _sleep(wait)
+        rl_delays = list(_RATE_LIMIT_RETRY_DELAYS_S)
+        se_delays = list(_SERVER_ERROR_RETRY_DELAYS_S)
+        rl_idx = se_idx = 0
+
+        while True:
             try:
                 return await self._client.chat.completions.create(
                     model=self._config.model, messages=msgs,
@@ -125,8 +126,30 @@ class OpenAIProvider(LLMProvider):
                     )
                     from synthadoc.errors import DailyQuotaExhaustedException
                     raise DailyQuotaExhaustedException(self._config.provider) from exc
-                last_exc = exc
-        raise last_exc  # type: ignore[misc]
+                if rl_idx >= len(rl_delays):
+                    raise
+                wait = rl_delays[rl_idx]
+                rl_idx += 1
+                logger.warning(
+                    "Rate limit (429) from %s — waiting %d s then retrying "
+                    "(per-minute window reset). If this retry also fails, the "
+                    "hourly/daily quota is likely exhausted — check your provider "
+                    "dashboard or switch providers.",
+                    self._config.provider, wait,
+                )
+                await _sleep(wait)
+            except _openai.InternalServerError as exc:
+                if se_idx >= len(se_delays):
+                    raise
+                wait = se_delays[se_idx]
+                se_idx += 1
+                logger.warning(
+                    "Server error (%d) from %s — waiting %d s then retrying "
+                    "(%d attempt(s) left). Cause: %s",
+                    exc.status_code, self._config.provider, wait,
+                    len(se_delays) - se_idx, exc,
+                )
+                await _sleep(wait)
 
     async def complete(self, messages: list[Message], system: Optional[str] = None,
                        temperature: float = 0.0, max_tokens: int = 4096) -> CompletionResponse:

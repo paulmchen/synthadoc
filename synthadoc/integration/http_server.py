@@ -107,6 +107,11 @@ def _classify_llm_error(exc: Exception) -> "HTTPException | None":
             status_code=429,
             detail=f"LLM quota exceeded (429). {hint}",
         )
+    if code == 503:
+        return HTTPException(
+            status_code=503,
+            detail="LLM provider temporarily overloaded (503). Retry in a moment.",
+        )
     if code == 529:
         return HTTPException(
             status_code=503,
