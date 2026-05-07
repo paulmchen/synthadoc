@@ -65,3 +65,24 @@ def test_slugs_for_branches(tmp_path):
     slugs = ri.slugs_for_branches(["People"])
     assert "alan-turing" in slugs
     assert "von-neumann-architecture" not in slugs
+
+def test_validate_reports_cross_branch_duplicate(tmp_path):
+    duplicate = """
+## People
+- [[alan-turing]]
+- [[grace-hopper]]
+
+## Hardware
+- [[alan-turing]]
+- [[von-neumann-architecture]]
+"""
+    f = tmp_path / "ROUTING.md"
+    f.write_text(duplicate)
+    ri = RoutingIndex.parse(f)
+    existing = {"alan-turing", "grace-hopper", "von-neumann-architecture"}
+    issues = ri.validate(existing)
+    assert len(issues) == 1
+    branch, msg = issues[0]
+    assert branch == "Hardware"
+    assert "alan-turing" in msg
+    assert "duplicate" in msg

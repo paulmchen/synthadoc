@@ -1254,16 +1254,27 @@ Open `ROUTING.md` — it looks like this:
 ### Edit and extend
 
 Add new branches or move slugs by hand. ROUTING.md is just a Markdown file — the format is
-`## BranchName` headings with `- [[slug]]` entries. Slugs can appear in only one branch.
+`## BranchName` headings with `- [[slug]]` entries. Each slug should appear in exactly one branch.
+
+If you accidentally list the same slug under two branches, the search result is still correct — `bm25_search` converts the scoped slug list to a set before scoring, so the page is never double-counted. However, the branch assignment becomes ambiguous: a query that picks either branch will find the page regardless of which one was intended. Use `routing validate` to catch these duplicates before they cause confusion.
 
 ### Validate and clean
 
-After deleting wiki pages, some slugs in ROUTING.md may dangle:
+After deleting wiki pages, some slugs in ROUTING.md may dangle. `routing validate` also reports slugs that appear in more than one branch:
 
 ```bash
-synthadoc routing validate   # report dangling slugs (dry run)
-synthadoc routing clean      # remove them
+synthadoc routing validate   # report dangling slugs and cross-branch duplicates (dry run)
+synthadoc routing clean      # remove dangling slugs
 ```
+
+Example output when a duplicate is found:
+
+```
+Issues in ROUTING.md (1):
+  [Hardware]  [[alan-turing]] (duplicate — also in 'People')
+```
+
+Fix by removing the entry from the branch where it does not belong, then re-run `validate` to confirm.
 
 ### How it works at query time
 

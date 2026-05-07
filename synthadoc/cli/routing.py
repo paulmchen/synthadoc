@@ -66,10 +66,10 @@ def routing_validate(
     dangling = ri.validate(existing)
 
     if not dangling:
-        typer.echo("ROUTING.md is clean — no dangling slugs.")
+        typer.echo("ROUTING.md is clean — no dangling slugs or duplicates.")
         return
 
-    typer.echo(f"Dangling slugs in ROUTING.md ({len(dangling)}):")
+    typer.echo(f"Issues in ROUTING.md ({len(dangling)}):")
     for branch, slug in dangling:
         typer.echo(f"  [{branch}]  [[{slug}]]")
 

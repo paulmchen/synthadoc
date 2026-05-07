@@ -26,11 +26,17 @@ class RoutingIndex:
         return cls(branches)
 
     def validate(self, existing_slugs: set[str]) -> list[tuple[str, str]]:
+        """Return (branch, slug) pairs that are dangling or duplicated across branches."""
         dangling = []
+        seen: dict[str, str] = {}  # slug -> first branch that claimed it
         for branch, slugs in self.branches.items():
             for slug in slugs:
                 if slug not in existing_slugs:
                     dangling.append((branch, slug))
+                elif slug in seen:
+                    dangling.append((branch, f"{slug} (duplicate — also in '{seen[slug]}')"))
+                else:
+                    seen[slug] = branch
         return dangling
 
     def clean(self, existing_slugs: set[str]) -> list[tuple[str, str]]:
