@@ -156,16 +156,17 @@ describe("SynthadocPlugin ingest-current command", () => {
 });
 
 describe("SynthadocPlugin.ingestFile", () => {
-    it("calls api.ingest with file path and shows Notice with job_id", async () => {
+    it("calls api.ingest with absolute path and shows Notice with job_id", async () => {
         const { api } = await import("./api");
         const { Notice } = await import("obsidian");
         (api.ingest as any).mockResolvedValueOnce({ job_id: "job-xyz" });
 
         const { default: SynthadocPlugin } = await import("./main");
         const plugin = new SynthadocPlugin();
+        plugin.app = { vault: { adapter: { getFullPath: (p: string) => `/vault/${p}` } } } as any;
         await plugin.ingestFile({ path: "notes/paper.md" } as any);
 
-        expect(api.ingest).toHaveBeenCalledWith("notes/paper.md");
+        expect(api.ingest).toHaveBeenCalledWith("/vault/notes/paper.md");
         expect(Notice).toHaveBeenCalledWith(expect.stringContaining("job-xyz"));
     });
 
@@ -176,6 +177,7 @@ describe("SynthadocPlugin.ingestFile", () => {
 
         const { default: SynthadocPlugin } = await import("./main");
         const plugin = new SynthadocPlugin();
+        plugin.app = { vault: { adapter: { getFullPath: (p: string) => `/vault/${p}` } } } as any;
         await plugin.ingestFile({ path: "notes/paper.md" } as any);
 
         expect(Notice).toHaveBeenCalledWith(expect.stringContaining("failed"));
@@ -212,7 +214,10 @@ describe("SynthadocPlugin web search command", () => {
 describe("IngestAllModal", () => {
     const makeVault = (files: { path: string; extension: string }[]) => ({
         workspace: { getActiveFile: () => null },
-        vault: { getFiles: () => files },
+        vault: {
+            getFiles: () => files,
+            adapter: { getFullPath: (p: string) => `/abs/${p}` },
+        },
     });
 
     it("pre-fills the folder input with the plugin's rawSourcesFolder setting", async () => {
@@ -249,8 +254,8 @@ describe("IngestAllModal", () => {
         await flushPromises();
 
         expect(apiMock.ingest).toHaveBeenCalledTimes(2);
-        expect(apiMock.ingest).toHaveBeenCalledWith("raw_sources/file-a.pdf");
-        expect(apiMock.ingest).toHaveBeenCalledWith("raw_sources/file-b.png");
+        expect(apiMock.ingest).toHaveBeenCalledWith("/abs/raw_sources/file-a.pdf");
+        expect(apiMock.ingest).toHaveBeenCalledWith("/abs/raw_sources/file-b.png");
     });
 
     it("disables the Ingest button while jobs are in flight", async () => {
@@ -721,7 +726,7 @@ describe("IngestConfirmModal", () => {
     it("shows file name and path in confirmation panel", async () => {
         const { ModalClass } = await getModal("synthadoc-ingest-current", {
             workspace: { getActiveFile: () => ({ path: "raw_sources/paper.pdf", name: "paper.pdf" }) },
-            vault: { getFiles: () => [] },
+            vault: { getFiles: () => [], adapter: { getFullPath: (p: string) => `/vault/${p}` } },
         });
         const modal = new ModalClass();
         modal.onOpen();
@@ -729,10 +734,10 @@ describe("IngestConfirmModal", () => {
         expect(modal.contentEl.innerHTML).toContain("raw_sources/paper.pdf");
     });
 
-    it("calls api.ingest with the confirmed file path on button click", async () => {
+    it("calls api.ingest with the absolute file path on button click", async () => {
         const { ModalClass, apiMock } = await getModal("synthadoc-ingest-current", {
             workspace: { getActiveFile: () => ({ path: "raw_sources/paper.pdf", name: "paper.pdf" }) },
-            vault: { getFiles: () => [] },
+            vault: { getFiles: () => [], adapter: { getFullPath: (p: string) => `/vault/${p}` } },
         });
         apiMock.ingest.mockResolvedValueOnce({ job_id: "job-confirm-01" });
         apiMock.job = vi.fn().mockResolvedValue({ status: "completed", result: {} });
@@ -743,13 +748,13 @@ describe("IngestConfirmModal", () => {
         await btn.onclick();
         await flushPromises();
 
-        expect(apiMock.ingest).toHaveBeenCalledWith("raw_sources/paper.pdf");
+        expect(apiMock.ingest).toHaveBeenCalledWith("/vault/raw_sources/paper.pdf");
     });
 
     it("re-enables button and shows error on failed job", async () => {
         const { ModalClass, apiMock } = await getModal("synthadoc-ingest-current", {
             workspace: { getActiveFile: () => ({ path: "raw_sources/paper.pdf", name: "paper.pdf" }) },
-            vault: { getFiles: () => [] },
+            vault: { getFiles: () => [], adapter: { getFullPath: (p: string) => `/vault/${p}` } },
         });
         apiMock.ingest.mockRejectedValueOnce(new Error("server down"));
 

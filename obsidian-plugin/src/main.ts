@@ -147,7 +147,8 @@ export default class SynthadocPlugin extends Plugin {
 
     async ingestFile(file: TFile) {
         try {
-            const r = await api.ingest(file.path) as any;
+            const absPath = (this.app.vault.adapter as any).getFullPath(file.path);
+            const r = await api.ingest(absPath) as any;
             new Notice(`Synthadoc: ingest queued (job ${r.job_id})`);
         } catch { new Notice("Synthadoc: ingest failed — is the server running?"); }
     }
@@ -224,7 +225,8 @@ class IngestAllModal extends Modal {
             let queueFailed = 0;
             for (const file of files) {
                 try {
-                    const r = await api.ingest(file.path) as any;
+                    const absPath = (this.app.vault.adapter as any).getFullPath(file.path);
+                    const r = await api.ingest(absPath) as any;
                     if (r?.job_id) jobIds.push(r.job_id);
                 } catch {
                     queueFailed++;
@@ -321,7 +323,8 @@ class IngestConfirmModal extends Modal {
             btn.disabled = true;
             setStatus("⏳ Queuing…");
             try {
-                const r = await api.ingest(this._file.path) as any;
+                const absPath = (this.app.vault.adapter as any).getFullPath(this._file.path);
+                const r = await api.ingest(absPath) as any;
                 const jobId: string = r.job_id;
                 setStatus(`⏳ Queued — job ${jobId.slice(0, 8)}`);
 
