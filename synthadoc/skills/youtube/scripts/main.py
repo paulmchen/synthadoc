@@ -15,11 +15,12 @@ _CJK_RE = re.compile(
 
 _YOUTUBE_SUMMARY_PROMPT = (
     "Summarise this YouTube video transcript for a knowledge wiki.\n"
-    "Write no more than {limit} words.\n"
-    "- One or two sentences: what the video is about\n"
-    "- Bullet list: main topics covered\n"
-    "- One sentence: key takeaway\n\n"
-    "Markdown bullets only. No headings. No filler phrases.\n\n"
+    "Write no more than {limit} words total across all sections.\n\n"
+    "Structure (use these exact headings):\n"
+    "**Overview** — 2–3 sentences: what the video is, who made it, what it covers at a high level.\n"
+    "**Topics covered** — bullet list of the main subjects discussed (aim for 8–15 bullets, each 1–2 sentences).\n"
+    "**Key takeaways** — 3–5 bullet points: the most important facts, conclusions, or insights a reader should remember.\n\n"
+    "Markdown only. No filler phrases. No meta-commentary about the video being introductory or educational.\n\n"
     "Transcript:\n{transcript}"
 )
 
@@ -74,7 +75,7 @@ class YoutubeSkill(BaseSkill):
         self._provider = provider
 
     async def _summarise(self, transcript_text: str) -> str:
-        limit = 400 if _is_cjk_dominant(transcript_text) else 200
+        limit = 2000 if _is_cjk_dominant(transcript_text) else 1000
         prompt = _YOUTUBE_SUMMARY_PROMPT.format(
             limit=limit,
             transcript=transcript_text[:6000],
@@ -83,7 +84,7 @@ class YoutubeSkill(BaseSkill):
         resp = await self._provider.complete(
             messages=[Message(role="user", content=prompt)],
             temperature=0.3,
-            max_tokens=512,
+            max_tokens=2048,
         )
         return resp.text.strip()
 
