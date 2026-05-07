@@ -314,6 +314,10 @@ class IngestAgent:
                     result.skip_reason = "already ingested"
                     return result
 
+            # Normalise to absolute path so the skill always receives an OS path,
+            # not whatever vault-relative or CWD-relative string the caller passed in.
+            source = str(p)
+
         # For URL / non-file sources p, src_hash, src_size are not set above.
         # Provide safe defaults so the audit call at the end always succeeds.
         if not self._needs_file_check(source):
