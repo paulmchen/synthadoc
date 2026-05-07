@@ -136,7 +136,10 @@ class YoutubeSkill(BaseSkill):
                 return ExtractedContent(
                     text=structured,
                     source_path=source,
-                    metadata={"url": source, "video_id": video_id, "has_summary": True},
+                    metadata={
+                        "url": source, "video_id": video_id, "has_summary": True,
+                        "suggested_slug": f"youtube-{video_id}",
+                    },
                 )
             except Exception:
                 logger.warning(
@@ -146,5 +149,5 @@ class YoutubeSkill(BaseSkill):
         return ExtractedContent(
             text=transcript_text,
             source_path=source,
-            metadata={"url": source, "video_id": video_id},
+            metadata={"url": source, "video_id": video_id, "suggested_slug": f"youtube-{video_id}"},
         )

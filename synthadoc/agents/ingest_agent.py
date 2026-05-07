@@ -104,6 +104,23 @@ _SLUG_BLACKLIST = frozenset({
     "watch", "embed", "video", "index", "page", "post", "article", "content",
 })
 
+# Matches any YouTube URL form and captures the 11-char video ID.
+_YOUTUBE_ID_RE = re.compile(
+    r"(?:youtube\.com/(?:watch\?v=|shorts/|live/|embed/|v/)|youtu\.be/)([A-Za-z0-9_-]{11})"
+)
+
+
+def _canonical_source(source: str) -> str:
+    """Normalise YouTube URL variants to a single canonical form.
+
+    youtu.be/<id>, /shorts/, /live/, /embed/ all become
+    https://www.youtube.com/watch?v=<id> so dedup hashes are consistent.
+    """
+    m = _YOUTUBE_ID_RE.search(source)
+    if m:
+        return f"https://www.youtube.com/watch?v={m.group(1)}"
+    return source
+
 
 def _coerce_str_list(lst: object) -> list[str]:
     """Ensure every item in an LLM-returned list is a plain string.
@@ -277,6 +294,7 @@ class IngestAgent:
         return not wiki_page or self._store.page_exists(wiki_page)
 
     async def ingest(self, source: str, force: bool = False, bust_cache: bool = False) -> IngestResult:
+        source = _canonical_source(source)
         result = IngestResult(source=source)
 
         if self._needs_file_check(source):
@@ -500,6 +518,13 @@ class IngestAgent:
                 # Reject slugs that look like wiki syntax artifacts rather than real topics
                 raw_slug = _slugify(new_slug or title)
                 slug = raw_slug if raw_slug not in _SLUG_BLACKLIST else _slugify(title)
+                # If title-based fallback is also blacklisted (e.g. URL path "watch"),
+                # use the skill's suggested_slug or a hash-based ID rather than writing
+                # a page with a generic, meaningless slug.
+                if slug in _SLUG_BLACKLIST:
+                    suggested = _slugify(extracted.metadata.get("suggested_slug", ""))
+                    slug = suggested if suggested and suggested not in _SLUG_BLACKLIST \
+                        else f"source-{src_hash[:12]}"
 
                 if self._store.page_exists(slug):
                     # Slug already exists — never overwrite; append as update instead
