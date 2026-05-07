@@ -1221,8 +1221,9 @@ Install and authenticate the coding tool first:
 ## Step 14 — Set up ROUTING.md — scoped search
 
 As your wiki grows, BM25 searches the full corpus for every query. **ROUTING.md** groups pages
-into named topic branches so queries only search the most relevant slice, reducing noise and
-improving retrieval precision on large wikis.
+into named topic branches so queries only search the most relevant slice — reducing noise,
+improving retrieval precision, and significantly cutting search latency on large wikis (see
+[Appendix H](#appendix-h--bm25-routing-performance-benchmarks) for measured results).
 
 ### Generate ROUTING.md from your current index
 
