@@ -1084,6 +1084,52 @@ async def test_gap_relational_verb_in_query_does_not_trigger_false_gap(tmp_wiki)
 
 
 @pytest.mark.asyncio
+async def test_gap_influence_verb_in_query_does_not_trigger_false_gap(tmp_wiki):
+    """'influence' in a query like 'How did Unix influence the open-source movement?'
+    is a relational verb, not a content noun.  Wiki pages discuss Unix and open-source
+    without repeating the word 'influence' ≥ 2 times in a single page.
+
+    After adding 'influence' to _STOPWORDS it is excluded from key_terms, and only
+    genuine topic words ('open-source', 'movement') are evaluated — both of which
+    appear ≥ 2 times in the dedicated wiki page → no gap.
+    """
+    store = WikiStorage(tmp_wiki / "wiki")
+    unix_content = (
+        "The Unix operating system, developed at Bell Labs in the late 1960s, "
+        "became a cornerstone of the open-source movement through its open design. "
+        "The open-source movement drew heavily from Unix philosophy and principles. "
+        "Unix tools and the open-source movement share core values of collaboration "
+        "and open access to source code. The Unix movement predated but directly "
+        "enabled the modern open-source movement and free software communities."
+    )
+    for i in range(5):
+        store.write_page(f"unix-os-{i}", WikiPage(
+            title=f"Unix History {i}", tags=["unix", "open-source"],
+            content=unix_content,
+            status="active", confidence="high", sources=[],
+        ))
+
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    provider = AsyncMock()
+    provider.complete.return_value = CompletionResponse(
+        text='["How did Unix relate to open-source?", "What is the open-source movement?"]',
+        input_tokens=10, output_tokens=5,
+    )
+
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.01)
+    with patch.object(agent._search, "bm25_search",
+                      return_value=_fake_results([f"unix-os-{i}" for i in range(5)], score=8.0)):
+        result = await agent.query(
+            "How did Unix influence the open-source movement?"
+        )
+
+    # 'influence' is in _STOPWORDS → excluded from key_terms.
+    # 'open-source' and 'movement' appear ≥ 2 times per page → no gap.
+    assert result.knowledge_gap is False
+
+
+@pytest.mark.asyncio
 async def test_gap_possessive_query_term_matches_bare_and_possessive_forms(tmp_wiki):
     """'Moore's' in a query must produce key term 'moore' (not 'moore\\'') so that
     pages referencing Moore in any form — 'Gordon Moore', 'Moore's Law', 'Moores' —

@@ -29,11 +29,13 @@ _STOPWORDS = frozenset({
     "about", "after", "before", "between", "during", "through",
     "these", "those", "each", "both", "your", "mine", "ours",
     "start", "grow", "good", "best", "make", "need", "want",
-    # Relational verbs commonly used in queries to describe how topics connect
-    # ("how did X shape Y?", "what drove Z?") but never a recurring content word
-    # in any single wiki page — leaving them in causes spurious signal-5 gaps.
+    # Relational verbs/nouns used in queries to describe how topics connect
+    # ("how did X shape Y?", "what drove Z?", "Unix's influence on...") but
+    # never recurring content words in wiki pages — spurious signal gaps result.
     # CJK queries bypass key-term extraction entirely, so these are English-only.
     "shape", "drive", "change", "enable", "allow", "improve", "evolve",
+    "influence", "affect", "impact", "cause", "result", "matter", "relate",
+    "connect", "involve", "emerge", "remain",
 })
 
 
