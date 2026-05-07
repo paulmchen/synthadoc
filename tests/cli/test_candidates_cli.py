@@ -22,14 +22,14 @@ def _make_wiki_with_candidate(tmp_path: Path) -> Path:
 
 def test_staging_policy_show(tmp_path):
     w = _make_wiki_with_candidate(tmp_path)
-    result = runner.invoke(app, ["staging", "policy", "--wiki-root", str(w)])
+    result = runner.invoke(app, ["staging", "policy", "--wiki", str(w)])
     assert result.exit_code == 0, result.output
     assert "threshold" in result.output
 
 
 def test_staging_policy_set_off(tmp_path):
     w = _make_wiki_with_candidate(tmp_path)
-    result = runner.invoke(app, ["staging", "policy", "off", "--wiki-root", str(w)])
+    result = runner.invoke(app, ["staging", "policy", "off", "--wiki", str(w)])
     assert result.exit_code == 0, result.output
     cfg = tomllib.loads((w / ".synthadoc" / "config.toml").read_text())
     assert cfg["ingest"]["staging_policy"] == "off"
@@ -37,7 +37,7 @@ def test_staging_policy_set_off(tmp_path):
 
 def test_candidates_list(tmp_path):
     w = _make_wiki_with_candidate(tmp_path)
-    result = runner.invoke(app, ["candidates", "list", "--wiki-root", str(w)])
+    result = runner.invoke(app, ["candidates", "list", "--wiki", str(w)])
     assert result.exit_code == 0, result.output
     assert "new-page" in result.output
 
@@ -45,7 +45,7 @@ def test_candidates_list(tmp_path):
 def test_candidates_promote(tmp_path):
     w = _make_wiki_with_candidate(tmp_path)
     (w / "wiki").mkdir(exist_ok=True)
-    result = runner.invoke(app, ["candidates", "promote", "new-page", "--wiki-root", str(w)])
+    result = runner.invoke(app, ["candidates", "promote", "new-page", "--wiki", str(w)])
     assert result.exit_code == 0, result.output
     assert (w / "wiki" / "new-page.md").exists()
     assert not (w / "wiki" / "candidates" / "new-page.md").exists()
@@ -53,13 +53,13 @@ def test_candidates_promote(tmp_path):
 
 def test_candidates_discard(tmp_path):
     w = _make_wiki_with_candidate(tmp_path)
-    result = runner.invoke(app, ["candidates", "discard", "new-page", "--wiki-root", str(w)])
+    result = runner.invoke(app, ["candidates", "discard", "new-page", "--wiki", str(w)])
     assert result.exit_code == 0, result.output
     assert not (w / "wiki" / "candidates" / "new-page.md").exists()
 
 
 def test_candidates_list_empty(tmp_path):
     (tmp_path / "wiki" / "candidates").mkdir(parents=True)
-    result = runner.invoke(app, ["candidates", "list", "--wiki-root", str(tmp_path)])
+    result = runner.invoke(app, ["candidates", "list", "--wiki", str(tmp_path)])
     assert result.exit_code == 0
     assert "No candidates" in result.output

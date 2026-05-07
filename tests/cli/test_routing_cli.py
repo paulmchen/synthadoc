@@ -34,7 +34,7 @@ def _make_wiki(tmp_path: Path) -> Path:
 
 def test_routing_init_creates_routing_md(tmp_path):
     w = _make_wiki(tmp_path)
-    result = runner.invoke(app, ["routing", "init", "--wiki-root", str(w)])
+    result = runner.invoke(app, ["routing", "init", "--wiki", str(w)])
     assert result.exit_code == 0, result.output
     routing = w / "ROUTING.md"
     assert routing.exists()
@@ -46,7 +46,7 @@ def test_routing_init_creates_routing_md(tmp_path):
 def test_routing_init_skips_if_exists(tmp_path):
     w = _make_wiki(tmp_path)
     (w / "ROUTING.md").write_text("## People\n")
-    result = runner.invoke(app, ["routing", "init", "--wiki-root", str(w)])
+    result = runner.invoke(app, ["routing", "init", "--wiki", str(w)])
     assert result.exit_code != 0
     assert "already exists" in result.output
 
@@ -54,7 +54,7 @@ def test_routing_init_skips_if_exists(tmp_path):
 def test_routing_validate_reports_dangling(tmp_path):
     w = _make_wiki(tmp_path)
     (w / "ROUTING.md").write_text(ROUTING_WITH_DANGLING)
-    result = runner.invoke(app, ["routing", "validate", "--wiki-root", str(w)])
+    result = runner.invoke(app, ["routing", "validate", "--wiki", str(w)])
     assert result.exit_code == 0, result.output
     assert "deleted-page" in result.output
 
@@ -62,7 +62,7 @@ def test_routing_validate_reports_dangling(tmp_path):
 def test_routing_validate_clean_reports_ok(tmp_path):
     w = _make_wiki(tmp_path)
     (w / "ROUTING.md").write_text("## People\n- [[alan-turing]]\n")
-    result = runner.invoke(app, ["routing", "validate", "--wiki-root", str(w)])
+    result = runner.invoke(app, ["routing", "validate", "--wiki", str(w)])
     assert result.exit_code == 0
     assert "clean" in result.output
 
@@ -70,7 +70,7 @@ def test_routing_validate_clean_reports_ok(tmp_path):
 def test_routing_clean_removes_dangling(tmp_path):
     w = _make_wiki(tmp_path)
     (w / "ROUTING.md").write_text(ROUTING_WITH_DANGLING)
-    result = runner.invoke(app, ["routing", "clean", "--wiki-root", str(w)])
+    result = runner.invoke(app, ["routing", "clean", "--wiki", str(w)])
     assert result.exit_code == 0, result.output
     content = (w / "ROUTING.md").read_text()
     assert "deleted-page" not in content
@@ -80,6 +80,6 @@ def test_routing_clean_removes_dangling(tmp_path):
 def test_routing_clean_nothing_to_remove(tmp_path):
     w = _make_wiki(tmp_path)
     (w / "ROUTING.md").write_text("## People\n- [[alan-turing]]\n")
-    result = runner.invoke(app, ["routing", "clean", "--wiki-root", str(w)])
+    result = runner.invoke(app, ["routing", "clean", "--wiki", str(w)])
     assert result.exit_code == 0
     assert "nothing to remove" in result.output
