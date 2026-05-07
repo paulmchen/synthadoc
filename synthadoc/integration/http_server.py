@@ -419,7 +419,11 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
                     "unresolved_note": fm.get("unresolved_note") or None,
                 })
 
-        orphan_slugs = find_orphan_slugs(page_texts)
+        page_bodies: dict[str, str] = {
+            slug: (text[m.end():] if (m := _FM_RE.match(text)) else text)
+            for slug, text in page_texts.items()
+        }
+        orphan_slugs = find_orphan_slugs(page_bodies)
 
         orphan_details = []
         for slug in orphan_slugs:
