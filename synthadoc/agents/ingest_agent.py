@@ -458,7 +458,9 @@ class IngestAgent:
                     "Educational overviews, introductory content, and tangential sources that touch "
                     "on the wiki's domain should be ingested — the wiki's own directive is "
                     "'when in doubt, ingest and review', so prefer action=\"create\" over action=\"skip\" "
-                    "whenever there is any plausible connection to the scope.\n\n"
+                    "whenever there is any plausible connection to the scope. "
+                    "IMPORTANT: never skip based on source format — a YouTube video, podcast transcript, "
+                    "or introductory lecture about an in-scope topic must be ingested, not skipped.\n\n"
                 )
                 decision_prompt = purpose_block + _DECISION_PROMPT
             resp2 = await self._provider.complete(
