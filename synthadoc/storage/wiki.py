@@ -100,8 +100,7 @@ class WikiStorage:
             }
             if page.categories:
                 fm["categories"] = page.categories
-            if page.aliases:
-                fm["aliases"] = page.aliases
+            fm["aliases"] = page.aliases  # always present so Obsidian Properties shows the field
             if page.contradiction_note:
                 fm["contradiction_note"] = page.contradiction_note
             if page.unresolved_note:

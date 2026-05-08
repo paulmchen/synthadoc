@@ -310,6 +310,32 @@ clickable `[[wikilinks]]`.
 
 ![Obsidian query modal with answer](png/ui-gap-detection.png)
 
+### Aliases — alternative names for a page
+
+Every wiki page (pre-built or ingest-created) has an `aliases` field in its frontmatter.
+It is empty by default and visible in Obsidian's **Properties** panel. Add alternative
+names or abbreviations so the query engine can match them:
+
+```yaml
+---
+title: Ada Lovelace and Computing Pioneers
+aliases:
+  - Ada
+  - Lady Lovelace
+  - Ada Byron
+---
+```
+
+Once set, queries resolve aliases to the correct page automatically:
+
+```bash
+synthadoc query "What did Ada contribute to computing?"
+# "Ada" expands to the ada-lovelace-and-computing-pioneers slug before searching
+```
+
+Aliases are matched case-insensitively, and longest match wins, so `Grace Hopper` takes
+precedence over a shorter alias `Grace` if both are defined on the same page.
+
 ---
 
 ## Step 6 — Batch ingest all demo sources
