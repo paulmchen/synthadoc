@@ -528,10 +528,10 @@ class IngestAgent:
                 with self._store.page_lock(target):
                     page = self._store.read_page(target)
                     if page:
-                        if update_content:
-                            section = update_content
-                        elif extracted.metadata.get("has_summary"):
+                        if extracted.metadata.get("has_summary"):
                             section = extracted.text
+                        elif update_content:
+                            section = update_content
                         else:
                             section = f"## From {p.name}\n\n{text[:1000]}"
                         page.content = page.content.rstrip() + f"\n\n{section}"
