@@ -63,3 +63,33 @@ def test_candidates_list_empty(tmp_path):
     result = runner.invoke(app, ["candidates", "list", "--wiki", str(tmp_path)])
     assert result.exit_code == 0
     assert "No candidates" in result.output
+
+
+def test_candidates_promote_appends_to_recently_added(tmp_path):
+    """Promoting a candidate appends its entry to an existing ## Recently Added section."""
+    w = _make_wiki_with_candidate(tmp_path)
+    (w / "wiki").mkdir(exist_ok=True)
+    (w / "wiki" / "index.md").write_text(
+        "---\ntitle: Index\ntags: []\nstatus: active\n---\n\n"
+        "# Index\n\n## People\n- [[existing-page]]\n\n"
+        "## Recently Added\n- [[old-page]] -- Old Page\n",
+        encoding="utf-8",
+    )
+    runner.invoke(app, ["candidates", "promote", "new-page", "--wiki", str(w)])
+    index = (w / "wiki" / "index.md").read_text(encoding="utf-8")
+    assert "[[new-page]]" in index
+    assert "[[old-page]]" in index          # existing entry preserved
+
+
+def test_candidates_promote_creates_recently_added_section(tmp_path):
+    """Promoting a candidate creates ## Recently Added when index.md has no such section."""
+    w = _make_wiki_with_candidate(tmp_path)
+    (w / "wiki").mkdir(exist_ok=True)
+    (w / "wiki" / "index.md").write_text(
+        "---\ntitle: Index\ntags: []\nstatus: active\n---\n\n# Index\n\n## People\n- [[existing]]\n",
+        encoding="utf-8",
+    )
+    runner.invoke(app, ["candidates", "promote", "new-page", "--wiki", str(w)])
+    index = (w / "wiki" / "index.md").read_text(encoding="utf-8")
+    assert "## Recently Added" in index
+    assert "[[new-page]]" in index

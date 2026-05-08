@@ -151,6 +151,42 @@ def candidates_list(
         typer.echo(f"  {p.stem:<30} confidence: {conf:<8} ingested: {created}")
 
 
+def _page_title(path: Path) -> str:
+    """Extract the title field from a page's YAML frontmatter, or derive it from the slug."""
+    fm = _read_frontmatter(path)
+    if fm.get("title"):
+        return str(fm["title"])
+    return path.stem.replace("-", " ").title()
+
+
+def _add_to_index(wiki_dir: Path, entries: list[tuple[str, str]]) -> None:
+    """Append [[slug]] — Title entries to index.md under ## Recently Added."""
+    index_path = wiki_dir / "index.md"
+    if not index_path.exists() or not entries:
+        return
+    text = index_path.read_text(encoding="utf-8")
+    new_lines = [f"- [[{slug}]] — {title}" for slug, title in entries]
+    if "## Recently Added" in text:
+        lines = text.splitlines()
+        insert_at = len(lines)
+        in_section = False
+        for i, line in enumerate(lines):
+            if line.strip() == "## Recently Added":
+                in_section = True
+                insert_at = i + 1
+            elif in_section:
+                if line.startswith("## "):
+                    insert_at = i
+                    break
+                insert_at = i + 1
+        for j, entry in enumerate(new_lines):
+            lines.insert(insert_at + j, entry)
+        index_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    else:
+        section = "\n\n## Recently Added\n" + "\n".join(new_lines) + "\n"
+        index_path.write_text(text.rstrip() + section, encoding="utf-8")
+
+
 @candidates_app.command("promote")
 def candidates_promote(
     slug: Optional[str] = typer.Argument(None),
@@ -165,6 +201,7 @@ def candidates_promote(
     if not all_ and slug:
         targets = [cand_dir / f"{slug}.md"]
 
+    promoted: list[tuple[str, str]] = []
     for src in targets:
         if not src.exists():
             typer.echo(f"  Not found: {src.stem}")
@@ -173,8 +210,14 @@ def candidates_promote(
         if dest.exists():
             typer.echo(f"  Skipped {src.stem} — already exists in wiki/")
             continue
+        title = _page_title(src)
         shutil.move(str(src), str(dest))
+        promoted.append((src.stem, title))
         typer.echo(f"  Promoted {src.stem} → wiki/{src.name}")
+
+    if promoted:
+        _add_to_index(wiki_dir, promoted)
+        typer.echo(f"  Updated index.md — added {len(promoted)} entr{'y' if len(promoted) == 1 else 'ies'} to ## Recently Added")
 
 
 @candidates_app.command("discard")
