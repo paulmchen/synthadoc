@@ -16,6 +16,7 @@ class LintReport:
     contradictions_resolved: int = 0
     contradictions_unresolved: list[dict] = field(default_factory=list)  # [{slug, reason}]
     orphan_slugs: list[str] = field(default_factory=list)
+    dangling_links_removed: int = 0
     tokens_used: int = 0
 
 
@@ -32,6 +33,39 @@ LINT_SKIP_SOURCE_SLUGS: frozenset[str] = frozenset(
 LINT_SKIP_SLUGS: frozenset[str] = frozenset(
     {"index", "log", "dashboard", "purpose", "overview"}
 )
+
+
+# Matches a list item whose first significant content is a single wikilink,
+# e.g. "- [[some-slug]] — description" or "* [[slug]]"
+_LIST_LINK_RE = re.compile(r"^\s*[-*+]\s+\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
+
+
+def _fix_dangling_wikilinks(content: str, existing_slugs: set[str]) -> str:
+    """Remove or unlink [[slug]] references whose target page no longer exists.
+
+    List items whose entire content is a dangling link are dropped.
+    Inline dangling links are replaced with just their display text.
+    """
+    lines = content.splitlines(keepends=True)
+    result: list[str] = []
+    for line in lines:
+        stripped = line.rstrip("\n\r")
+        m = _LIST_LINK_RE.match(stripped)
+        if m:
+            slug_part = m.group(1).strip().lower().replace(" ", "-")
+            if slug_part not in existing_slugs:
+                continue  # drop the whole list-item line
+
+        def _unlink(match: re.Match) -> str:
+            inner = match.group(1)
+            parts = inner.split("|", 1)
+            slug_key = parts[0].strip().lower().replace(" ", "-")
+            display = parts[1].strip() if len(parts) > 1 else parts[0].strip()
+            return display if slug_key not in existing_slugs else match.group(0)
+
+        line = _WIKILINK_RE.sub(_unlink, line)
+        result.append(line)
+    return "".join(result)
 
 
 def find_orphan_slugs(
@@ -73,6 +107,20 @@ class LintAgent:
             page = self._store.read_page(slug)
             page_texts[slug] = page.content if page else ""
         return find_orphan_slugs(page_texts)
+
+    def _clean_dangling_links(self, slugs: list[str]) -> int:
+        slug_set = set(slugs)
+        fixed = 0
+        for slug in slugs:
+            page = self._store.read_page(slug)
+            if not page:
+                continue
+            new_content = _fix_dangling_wikilinks(page.content, slug_set)
+            if new_content != page.content:
+                page.content = new_content
+                self._store.write_page(slug, page)
+                fixed += 1
+        return fixed
 
     async def lint(self, scope: str = "all", auto_resolve: bool = False,
                    job_id: str = "system") -> LintReport:
@@ -141,6 +189,8 @@ class LintAgent:
                                     job_id, "auto_resolve_failed", {"slug": slug, "reason": reason})
 
         if scope in ("all", "orphans"):
+            report.dangling_links_removed = self._clean_dangling_links(slugs)
+            slugs = self._store.list_pages()  # re-read after deletions
             report.orphan_slugs = self._find_orphans(slugs)
             orphan_set = set(report.orphan_slugs)
             for slug in slugs:
@@ -151,5 +201,6 @@ class LintAgent:
 
         self._log.log_lint(resolved=report.contradictions_resolved,
                            flagged=report.contradictions_found - report.contradictions_resolved,
-                           orphans=len(report.orphan_slugs))
+                           orphans=len(report.orphan_slugs),
+                           dangling_removed=report.dangling_links_removed)
         return report

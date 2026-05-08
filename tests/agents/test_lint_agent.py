@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Paul Chen / axoviq.com
 import pytest
 from unittest.mock import AsyncMock
-from synthadoc.agents.lint_agent import LintAgent, LintReport, find_orphan_slugs, LINT_SKIP_SLUGS, LINT_SKIP_SOURCE_SLUGS
+from synthadoc.agents.lint_agent import LintAgent, LintReport, find_orphan_slugs, _fix_dangling_wikilinks, LINT_SKIP_SLUGS, LINT_SKIP_SOURCE_SLUGS
 from synthadoc.providers.base import CompletionResponse
 from synthadoc.storage.wiki import WikiStorage, WikiPage
 from synthadoc.storage.log import LogWriter, AuditDB
@@ -244,3 +244,58 @@ async def test_lint_records_auto_resolved_audit_event(tmp_wiki):
     calls = [c.args for c in audit.record_audit_event.await_args_list]
     assert ("job-456", "contradiction_found", {"slug": "p1"}) in calls
     assert ("job-456", "auto_resolved", {"slug": "p1"}) in calls
+
+
+# ── Dangling link cleanup ─────────────────────────────────────────────────────
+
+def test_fix_dangling_wikilinks_drops_list_item():
+    """List item whose primary content is a dangling link is removed."""
+    existing = {"alan-turing", "index"}
+    content = (
+        "# Index\n\n"
+        "- [[alan-turing]] — pioneer\n"
+        "- [[deleted-page]] — Watch\n"
+        "- [[also-gone]] — old reference\n"
+    )
+    result = _fix_dangling_wikilinks(content, existing)
+    assert "[[deleted-page]]" not in result
+    assert "[[also-gone]]" not in result
+    assert "[[alan-turing]]" in result
+
+
+def test_fix_dangling_wikilinks_unlinks_inline():
+    """Inline dangling [[link]] is replaced with plain display text."""
+    existing = {"real-page"}
+    content = "As described in [[gone-page]], and also in [[real-page]]."
+    result = _fix_dangling_wikilinks(content, existing)
+    assert "[[gone-page]]" not in result
+    assert "gone-page" in result          # display text kept
+    assert "[[real-page]]" in result      # existing link untouched
+
+
+def test_fix_dangling_wikilinks_aliased_inline():
+    """[[slug|Display Text]] strips the link notation, keeps display text."""
+    existing = {"real-page"}
+    content = "See [[deleted|Old Name]] for details."
+    result = _fix_dangling_wikilinks(content, existing)
+    assert "[[deleted|Old Name]]" not in result
+    assert "Old Name" in result
+
+
+@pytest.mark.asyncio
+async def test_lint_removes_dangling_links(tmp_wiki):
+    """Running lint cleans up [[links]] pointing to pages that no longer exist."""
+    store = WikiStorage(tmp_wiki / "wiki")
+    store.write_page("index", WikiPage(title="Index", tags=[],
+        content="# Index\n\n- [[alan-turing]] — pioneer\n- [[crashcourse-computer-science]] — Watch\n",
+        status="active", confidence="high", sources=[]))
+    store.write_page("alan-turing", WikiPage(title="Alan Turing", tags=[],
+        content="Mathematician.", status="active", confidence="high", sources=[]))
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    agent = LintAgent(provider=AsyncMock(), store=store, log_writer=log)
+    report = await agent.lint(scope="orphans")
+
+    assert report.dangling_links_removed == 1
+    updated = store.read_page("index")
+    assert "[[crashcourse-computer-science]]" not in updated.content
+    assert "[[alan-turing]]" in updated.content

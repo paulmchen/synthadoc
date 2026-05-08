@@ -32,11 +32,13 @@ class LogWriter:
             f"- Tokens: {tokens:,} | Cost: ${cost_usd:.4f} | Cache hits: {cache_hits}\n"
         )
 
-    def log_lint(self, resolved: int, flagged: int, orphans: int) -> None:
+    def log_lint(self, resolved: int, flagged: int, orphans: int,
+                 dangling_removed: int = 0) -> None:
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+        dangling_part = f" | Dangling links removed: {dangling_removed}" if dangling_removed else ""
         self._append(
             f"\n## {ts} | LINT\n"
-            f"- Resolved: {resolved} | Flagged: {flagged} | Orphans: {orphans}\n"
+            f"- Resolved: {resolved} | Flagged: {flagged} | Orphans: {orphans}{dangling_part}\n"
         )
 
     def log_query(self, question: str, sub_questions: int,
