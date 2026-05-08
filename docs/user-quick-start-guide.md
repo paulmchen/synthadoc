@@ -3,7 +3,7 @@
 **Version: v0.3.0 (Community Edition)**
 
 This guide walks you through the **History of Computing** demo wiki — a fully wired
-Synthadoc environment with 10 pre-built pages and six raw source files that cover every
+Synthadoc environment with 13 pre-built pages and six raw source files that cover every
 major engine feature. No setup beyond following the steps below is required.
 
 > **Before you start:** complete [README Installation Steps 1–6](../README.md#installation)
@@ -57,7 +57,7 @@ Expected output:
 
 ```
 Wiki:         /home/user/wikis/history-of-computing
-Pages:        12
+Pages:        13
 Jobs pending: 0
 Jobs total:   0
 ```
@@ -204,7 +204,7 @@ history-of-computing/
     purpose.md            ← scope definition — what belongs in this wiki and what to skip
     overview.md           ← LLM-generated 2-paragraph summary of the entire wiki
     alan-turing.md        ← example pre-built topic page
-    grace-hopper.md       ← ...and so on for each of the 10 pre-built pages
+    grace-hopper.md       ← ...and so on for each of the 13 pre-built pages
   raw_sources/            ← source documents to ingest (PDF, PPTX, XLSX, PNG, MD)
   AGENTS.md               ← LLM instructions — domain guidelines for ingest and query
   log.md                  ← human-readable activity log of every ingest and lint event
@@ -486,17 +486,9 @@ synthadoc ingest "search for: Ada Lovelace contributions to computing history"
 > **Requires `TAVILY_API_KEY`** — see [Appendix D](#appendix-d--tavily-web-search-key).
 > Without it, web search jobs fail with `[ERR-SKILL-004]`. All other features work normally.
 
-### What's new in v0.3.0
+### How web search decomposition works
 
-- **Coding tool CLI providers** — set `provider = "claude-code"` or `provider = "opencode"` in `config.toml` to run all agents using your existing Claude Code or Opencode subscription, with no separate API key required. See [Appendix G](#appendix-g--using-claude-code-or-opencode-as-llm-provider) for setup.
-- **YouTube transcript ingest** — ingest any YouTube video (standard or Shorts) by URL. Captions are extracted automatically with no API key, and each page opens with an LLM-generated executive summary followed by a timestamped transcript.
-- **Knowledge gap detection** — improved reliability across multi-aspect queries; CJK (Chinese, Japanese, Korean) queries no longer produce false gap reports.
-- **Session wiki resolution** — `synthadoc use <name>` saves your active wiki so `-w` is optional on every subsequent command.
-- **DeepSeek provider** — eighth LLM provider added; very low text-only rates.
-
-### What's new in v0.2.0
-
-Synthadoc now **decomposes web search topics** into multiple focused keyword sub-queries
+Synthadoc **decomposes web search topics** into multiple focused keyword sub-queries
 before hitting Tavily. Each sub-query fires a separate parallel search, URLs are
 deduplicated across all results, and each is enqueued as an individual ingest job.
 This produces richer, more targeted pages than a single broad search.
@@ -1427,8 +1419,9 @@ Each result is the median of 5 rounds.
 
 ### Scoped search (2 of 10 branches)
 
-| Pages | Median | Min   | Max   |
-|------:|-------:|------:|------:|
+
+| Pages | Median |   Min |   Max |
+| ----: | -----: | ----: | ----: |
 |   100 |  14 ms |  5 ms | 36 ms |
 |   500 |  16 ms |  7 ms | 19 ms |
 |  1000 |   9 ms |  8 ms | 12 ms |
@@ -1438,12 +1431,13 @@ Routing keeps latency nearly flat across corpus sizes — the search is bounded 
 
 ### Full-corpus search (no routing)
 
-| Pages | Median | Min   | Max    |
-|------:|-------:|------:|-------:|
-|   100 |   7 ms |  6 ms |  32 ms |
-|   500 |  14 ms | 14 ms |  16 ms |
-|  1000 |  22 ms | 21 ms |  31 ms |
-| 10000 | 191 ms |184 ms | 210 ms |
+
+| Pages | Median |    Min |    Max |
+| ----: | -----: | -----: | -----: |
+|   100 |   7 ms |   6 ms |  32 ms |
+|   500 |  14 ms |  14 ms |  16 ms |
+|  1000 |  22 ms |  21 ms |  31 ms |
+| 10000 | 191 ms | 184 ms | 210 ms |
 
 Full-corpus BM25 scales roughly linearly with page count. At 10000 pages the median is 191 ms — comfortably within a 500 ms interactive budget.
 
