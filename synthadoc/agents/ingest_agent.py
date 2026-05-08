@@ -515,18 +515,32 @@ class IngestAgent:
             result.pages_flagged.append(target)
 
         elif action == "update" and target and self._store.page_exists(target):
-            policy = self._staging_policy()
-            with self._store.page_lock(target):
-                page = self._store.read_page(target)
-                if page:
-                    section = update_content or f"## From {p.name}\n\n{text[:1000]}"
-                    page.content = page.content.rstrip() + f"\n\n{section}"
-                    staged = self._write_or_stage(target, page, policy)
-            if staged:
-                logger.info("ingest: staged update to candidates slug=%s source=%s", target, source[:80])
+            if not text and not update_content:
+                logger.warning(
+                    "ingest: update skipped for slug=%s — no extractable content from %s",
+                    target, source[:80]
+                )
+                result.skipped = True
+                result.skip_reason = "no extractable text"
             else:
-                logger.info("ingest: updated page slug=%s source=%s", target, source[:80])
-            result.pages_updated.append(target)
+                policy = self._staging_policy()
+                staged = False
+                with self._store.page_lock(target):
+                    page = self._store.read_page(target)
+                    if page:
+                        if update_content:
+                            section = update_content
+                        elif extracted.metadata.get("has_summary"):
+                            section = extracted.text
+                        else:
+                            section = f"## From {p.name}\n\n{text[:1000]}"
+                        page.content = page.content.rstrip() + f"\n\n{section}"
+                        staged = self._write_or_stage(target, page, policy)
+                if staged:
+                    logger.info("ingest: staged update to candidates slug=%s source=%s", target, source[:80])
+                else:
+                    logger.info("ingest: updated page slug=%s source=%s", target, source[:80])
+                result.pages_updated.append(target)
 
         else:  # "create" or fallback
             # Don't create a page if there's no content to put in it
