@@ -479,6 +479,24 @@ pull in a fresh source via web search:
 synthadoc ingest "search for: Ada Lovelace contributions to computing history"
 ```
 
+### Deleting a page and cleaning up its references
+
+When you delete a wiki page from Obsidian, any `[[wikilinks]]` pointing to it in other
+pages become dangling references. Run lint to remove them automatically:
+
+```bash
+synthadoc lint run
+```
+
+Lint scans every page for links whose target no longer exists:
+
+- **List items** whose only content is the dangling link are removed entirely, e.g.
+  `- [[deleted-page]] — some description` disappears from the page.
+- **Inline references** such as `as described in [[deleted-page]]` are unlinked — the
+  brackets are stripped and the display text is kept.
+
+The number of pages cleaned up is shown in the lint output and recorded in `log.md`.
+
 ---
 
 ## Step 9 — Web search ingestion
