@@ -14,7 +14,7 @@
       '-+###############+-'
 
        S Y N T H A D O C
-    Community Edition  v0.3.0
+    Community Edition  v0.4.0
   ────────────────────────────────
   Domain-agnostic LLM wiki engine
 ```
@@ -27,9 +27,29 @@
 [![Hooks](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Faxoviq-ai%2Fsynthadoc%2Fmain%2Fdocs%2Fbadges.json&query=%24.hooks&label=Hook%20events&color=teal)](https://github.com/axoviq-ai/synthadoc/tree/main/hooks)
 [![CLI](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Faxoviq-ai%2Fsynthadoc%2Fmain%2Fdocs%2Fbadges.json&query=%24.cli_commands&label=CLI%20commands&color=darkblue)](https://github.com/axoviq-ai/synthadoc)
 [![Obsidian](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Faxoviq-ai%2Fsynthadoc%2Fmain%2Fdocs%2Fbadges.json&query=%24.obsidian_commands&label=Obsidian%20commands&color=blueviolet)](https://github.com/axoviq-ai/synthadoc/tree/main/obsidian-plugin)
-[![Version](https://img.shields.io/badge/Community%20Edition-v0.4.0%20in%20progress-orange.svg)](https://github.com/axoviq-ai/synthadoc)
+[![Version](https://img.shields.io/badge/Community%20Edition-v0.4.0-brightgreen.svg)](https://github.com/axoviq-ai/synthadoc)
 
-**Document version: v0.4.0 (in progress)**
+**Document version: v0.4.0**
+
+## Table of Contents
+
+- [Who Is It For?](#who-is-it-for)
+- [Inspiration and Vision](#inspiration-and-vision)
+- [Problems Addressed](#problems-addressed)
+- [Why Synthadoc?](#why-synthadoc)
+- [Architecture](#architecture)
+- [What's Included](#whats-included)
+- [Installation](#installation)
+- [Quick-Start Guide](#quick-start-guide)
+- [Creating Your Own Wiki](#creating-your-own-wiki)
+- [Configuration](#configuration)
+- [Command Reference by Use Case](#command-reference-by-use-case)
+- [Administrative Reference](#administrative-reference)
+- [Understanding Logs and the Audit Trail](#understanding-logs-and-the-audit-trail)
+- [Customization](#customization)
+- [Links](#links)
+
+---
 
 **Engineered for solo users and enterprises alike, providing a domain-specific knowledge base that scales seamlessly while maintaining accuracy through autonomous self-optimization.**
 

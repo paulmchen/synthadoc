@@ -1,6 +1,6 @@
 # Synthadoc — Design Document
 
-**Version:** 0.3.0 (released 2026-05-02)  
+**Version:** 0.4.0 (released 2026-05-09)  
 **Audience:** Product users who want to understand how the system works; developers adding features, skills, and plugins.
 
 **Document owners:** Paul Chen, William Johnason
@@ -677,6 +677,8 @@ synthadoc
 ├── uninstall <name>
 ├── scaffold [-w wiki]
 ├── demo list
+├── plugin
+│   └── install <wiki>                            — copy plugin files into <wiki>/.obsidian/plugins/synthadoc/
 ├── serve [-w wiki] [--port N] [--background] [--mcp-only] [--http-only] [--verbose]
 ├── ingest <source> [-w wiki] [--batch] [--file manifest] [--force] [--analyse-only] [--max-results N]
 ├── query "<question>" [-w wiki] [--save] [--timeout N]
@@ -692,8 +694,21 @@ synthadoc
 │   └── purge --older-than <days> [-w wiki]
 ├── audit
 │   ├── history [-w wiki] [--limit N] [--json]   — ingest records: timestamp, source, page, tokens, cost
-│   ├── cost [-w wiki] [--days N] [--json]        — token totals + daily breakdown (cost always $0.00 in v0.1)
+│   ├── cost [-w wiki] [--days N] [--json]        — token totals + daily breakdown
+│   ├── queries [-w wiki] [--limit N] [--json]   — query history: question, sub-Qs, tokens, cost
 │   └── events [-w wiki] [--limit N] [--json]    — audit events: timestamp, job_id, event type, metadata
+├── routing
+│   ├── init [--wiki-root <path>]                 — generate ROUTING.md from index.md branch structure
+│   ├── validate [--wiki-root <path>]             — report dangling slugs and cross-branch duplicates
+│   └── clean [--wiki-root <path>]               — remove dangling slugs from ROUTING.md
+├── staging
+│   └── policy [off|all|threshold] [--min-confidence high|medium|low] [--wiki-root <path>]
+├── candidates
+│   ├── list [--wiki-root <path>]
+│   ├── promote <slug>|--all [--wiki-root <path>]
+│   └── discard <slug>|--all [--wiki-root <path>]
+├── context
+│   └── build "<goal>" [-w wiki] [--tokens N] [--output <file>]
 ├── status [-w wiki]
 ├── cache clear [-w wiki]
 └── schedule
@@ -1642,3 +1657,7 @@ synthadoc context build "early computing pioneers" --output briefing.md
 - **Candidates CLI** — `synthadoc staging policy` shows/sets the staging policy; `synthadoc candidates list / promote / discard` manage the candidate queue; policy changes take effect on next ingest without a server restart
 - **ContextAgent** — `ContextAgent.build(goal)` decomposes the goal, runs parallel BM25 searches, merges by best score per slug, and greedily packs pages within a configurable token budget; omissions are recorded; output is a `ContextPack` with `to_markdown()` and `to_dict()` renderers
 - **Context CLI + REST endpoint** — `synthadoc context build "..."` with `--tokens` and `--output` flags; prints to terminal by default, saves to any file with `--output`; typical uses: paste into an external LLM prompt, save next to a document you are writing, or pipe into another CLI tool; `POST /context/build` JSON endpoint; default token budget configurable via `[query] context_token_budget` (default 4000)
+- **Plugin install CLI** — `synthadoc plugin install <wiki>` copies the pre-built Obsidian plugin (`main.js`, `manifest.json`, `styles.css`) from the repo's `obsidian-plugin/` directory into `<wiki-root>/.obsidian/plugins/synthadoc/`; replaces the previous manual file-copy step; wiki must be registered via `synthadoc install` first so the path can be resolved from the registry
+- **ai-research demo template** — `synthadoc install ai-research --target <dir> --demo` installs a second demo wiki (alongside history-of-computing) with 12 pre-built AI/ML pages, five raw source files covering multiple ingest scenarios, a contradiction scenario (Gemini Ultra MMLU benchmark methodology dispute), and a pre-configured ROUTING.md
+- **Decision cache prompt-awareness** — the decision-pass cache key (`ck2`) now includes a hash of the full decision prompt (purpose block + instruction template); any change to `purpose.md` content or the purpose-block instructions automatically invalidates cached decisions, preventing stale skip results from being served after prompt edits
+- **YouTube always creates own page** — sources with a structured executive summary (YouTube transcripts) are forced to `action=create` even when the LLM suggests `action=update`, ensuring the executive summary and transcript are never appended to an existing page

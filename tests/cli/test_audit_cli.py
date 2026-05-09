@@ -108,3 +108,112 @@ def test_audit_events_command(tmp_path):
 
     result = runner.invoke(app, ["audit", "events", "--wiki", str(wiki)])
     assert result.exit_code == 0
+
+
+# ── additional coverage tests ────────────────────────────────────────────────
+
+def _make_wiki(tmp_path):
+    """Create a minimal wiki directory structure with an initialised audit.db."""
+    import asyncio
+    from synthadoc.storage.log import AuditDB
+
+    wiki = tmp_path
+    (wiki / "wiki").mkdir()
+    (wiki / ".synthadoc").mkdir()
+    db = AuditDB(wiki / ".synthadoc" / "audit.db")
+
+    async def _seed():
+        await db.init()
+        await db.record_ingest(
+            source_hash="abc", source_size=1000,
+            source_path="/wiki/raw/paper.pdf", wiki_page="paper",
+            tokens=500, cost_usd=0.01,
+        )
+        await db.record_audit_event("job-x", "ingest_complete", {"pages": 1})
+        await db.record_query("What is AI?", sub_questions_count=2, tokens=300, cost_usd=0.005)
+
+    asyncio.run(_seed())
+    return wiki
+
+
+def test_audit_history_with_records_renders_table(tmp_path):
+    from typer.testing import CliRunner
+    from synthadoc.cli.main import app
+
+    runner = CliRunner()
+    wiki = _make_wiki(tmp_path)
+    result = runner.invoke(app, ["audit", "history", "--wiki", str(wiki)])
+    assert result.exit_code == 0
+    assert "paper.pdf" in result.output
+
+
+def test_audit_cost_json_flag(tmp_path):
+    from typer.testing import CliRunner
+    from synthadoc.cli.main import app
+
+    runner = CliRunner()
+    wiki = _make_wiki(tmp_path)
+    result = runner.invoke(app, ["audit", "cost", "--wiki", str(wiki), "--json"])
+    assert result.exit_code == 0
+    lines = [l for l in result.output.splitlines() if not l.startswith("[wiki:")]
+    data = json.loads("\n".join(lines))
+    assert "total_tokens" in data
+
+
+def test_audit_cost_with_data_renders_table(tmp_path):
+    from typer.testing import CliRunner
+    from synthadoc.cli.main import app
+
+    runner = CliRunner()
+    wiki = _make_wiki(tmp_path)
+    result = runner.invoke(app, ["audit", "cost", "--wiki", str(wiki)])
+    assert result.exit_code == 0
+    assert "Total tokens" in result.output
+
+
+def test_audit_queries_command(tmp_path):
+    from typer.testing import CliRunner
+    from synthadoc.cli.main import app
+
+    runner = CliRunner()
+    wiki = _make_wiki(tmp_path)
+    result = runner.invoke(app, ["audit", "queries", "--wiki", str(wiki)])
+    assert result.exit_code == 0
+    assert "Query History" in result.output
+
+
+def test_audit_queries_json_flag(tmp_path):
+    from typer.testing import CliRunner
+    from synthadoc.cli.main import app
+
+    runner = CliRunner()
+    wiki = _make_wiki(tmp_path)
+    result = runner.invoke(app, ["audit", "queries", "--wiki", str(wiki), "--json"])
+    assert result.exit_code == 0
+    lines = [l for l in result.output.splitlines() if not l.startswith("[wiki:")]
+    data = json.loads("\n".join(lines))
+    assert isinstance(data, list)
+
+
+def test_audit_events_json_flag(tmp_path):
+    from typer.testing import CliRunner
+    from synthadoc.cli.main import app
+
+    runner = CliRunner()
+    wiki = _make_wiki(tmp_path)
+    result = runner.invoke(app, ["audit", "events", "--wiki", str(wiki), "--json"])
+    assert result.exit_code == 0
+    lines = [l for l in result.output.splitlines() if not l.startswith("[wiki:")]
+    data = json.loads("\n".join(lines))
+    assert isinstance(data, list)
+
+
+def test_audit_events_with_data_renders_table(tmp_path):
+    from typer.testing import CliRunner
+    from synthadoc.cli.main import app
+
+    runner = CliRunner()
+    wiki = _make_wiki(tmp_path)
+    result = runner.invoke(app, ["audit", "events", "--wiki", str(wiki)])
+    assert result.exit_code == 0
+    assert "Audit Events" in result.output
