@@ -291,7 +291,7 @@ class IngestAgent:
         p = self._wiki_root / "wiki" / "purpose.md"
         if not p.exists():
             return ""
-        return p.read_text(encoding="utf-8")[:500]
+        return p.read_text(encoding="utf-8")[:3000]
 
     def _hash(self, path: str) -> tuple[str, int]:
         data = Path(path).read_bytes()
@@ -441,29 +441,37 @@ class IngestAgent:
                 pages_ctx.append(f"[{r.slug}]: {snippet}")
         pages_str = "\n".join(pages_ctx) or "none"
 
-        # Pass 3: decision (cached by summary hash + candidate slugs)
+        # Pass 3: decision (cached by summary hash + candidate slugs + prompt hash)
+        # prompt_hash is included so any change to purpose.md or the purpose_block
+        # instructions automatically busts the cache.
         slugs = [r.slug for r in candidates]
         summary_hash = hashlib.sha256(summary.encode()).hexdigest()
-        ck2 = make_cache_key("make-decision", {"text_hash": summary_hash, "slugs": slugs}, version=self._cache_version)
+        decision_prompt = _DECISION_PROMPT
+        if self._purpose:
+            purpose_block = (
+                f"Wiki scope (from purpose.md):\n{self._purpose}\n\n"
+                "action=\"skip\" means the source is completely OUTSIDE the wiki's domain "
+                "(e.g. spam, medical receipts, unrelated e-commerce). "
+                "action=\"skip\" must NEVER be used because a topic is already covered by an "
+                "existing page — that is what action=\"update\" is for. "
+                "A source that covers the same topic as an existing page should ALWAYS be "
+                "action=\"update\" (to add its unique perspective, examples, or depth) or "
+                "action=\"create\" (if it introduces a distinct sub-topic). "
+                "IMPORTANT: never skip based on source format — a YouTube video, podcast "
+                "transcript, or lecture by a researcher in this domain must be ingested.\n\n"
+            )
+            decision_prompt = purpose_block + _DECISION_PROMPT
+        prompt_hash = hashlib.sha256(decision_prompt.encode()).hexdigest()[:16]
+        ck2 = make_cache_key(
+            "make-decision",
+            {"text_hash": summary_hash, "slugs": slugs, "prompt_hash": prompt_hash},
+            version=self._cache_version,
+        )
         cached2 = None if bust_cache else await self._cache.get(ck2)
         if cached2:
             result.cache_hits += 1
             decisions = cached2
         else:
-            decision_prompt = _DECISION_PROMPT
-            if self._purpose:
-                purpose_block = (
-                    f"Wiki scope (from purpose.md):\n{self._purpose}\n\n"
-                    "Use action=\"skip\" ONLY when the source is completely unrelated to this scope "
-                    "(e.g. medical receipts, unrelated e-commerce, spam). "
-                    "Educational overviews, introductory content, and tangential sources that touch "
-                    "on the wiki's domain should be ingested — the wiki's own directive is "
-                    "'when in doubt, ingest and review', so prefer action=\"create\" over action=\"skip\" "
-                    "whenever there is any plausible connection to the scope. "
-                    "IMPORTANT: never skip based on source format — a YouTube video, podcast transcript, "
-                    "or introductory lecture about an in-scope topic must be ingested, not skipped.\n\n"
-                )
-                decision_prompt = purpose_block + _DECISION_PROMPT
             resp2 = await self._provider.complete(
                 messages=[Message(role="user", content=decision_prompt.format(
                     pages=pages_str,
@@ -480,6 +488,20 @@ class IngestAgent:
 
         # Pass 4: writes based on action
         action = decisions.get("action", "create")
+
+        # Sources with a structured summary (e.g. YouTube) always get their own
+        # page so the executive summary and transcript are not appended to an
+        # existing page.  Override update → create and let the LLM-supplied
+        # new_slug stand; fall back to a slug derived from the source path.
+        if extracted.metadata.get("has_summary") and action == "update":
+            action = "create"
+            if not decisions.get("new_slug"):
+                decisions["new_slug"] = p.stem.lower().replace(" ", "-")
+            logger.info(
+                "ingest: has_summary source forced to create (was update) — slug=%s",
+                decisions["new_slug"],
+            )
+
         logger.info(
             "ingest decision: source=%s action=%s target=%s new_slug=%s | %s",
             source[:80], action,
