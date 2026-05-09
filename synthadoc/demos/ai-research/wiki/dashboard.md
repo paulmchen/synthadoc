@@ -3,7 +3,7 @@ title: Dashboard
 tags: [dashboard]
 status: active
 confidence: high
-created: '2026-05-09'
+created: 2026-05-09
 sources: []
 orphan: false
 aliases: []

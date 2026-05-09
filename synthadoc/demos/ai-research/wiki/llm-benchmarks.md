@@ -3,7 +3,7 @@ title: LLM Benchmarks
 tags: [benchmarks, evaluation, llm]
 status: active
 confidence: medium
-created: '2026-05-09'
+created: 2026-05-09
 sources:
   - file: raw_sources/model-capabilities-comparison.xlsx
     hash: b7e1a042c5d3f896740123cde45fab89b7e1a042c5d3f896740123cde45fab89
