@@ -22,6 +22,8 @@ benchmark results, and the researchers driving the field.
 - Key researchers and their contributions
 - Landmark papers and their core claims
 - Inference optimization: quantization, speculative decoding, KV cache
+- Educational lectures, tutorials, and talks on in-scope topics — including YouTube
+  videos and conference presentations from established AI/ML researchers
 
 ## Out of scope
 
