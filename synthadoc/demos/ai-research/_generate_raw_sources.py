@@ -219,12 +219,17 @@ def make_pdf():
         y -= 14
     y -= 12
 
-    line(y, "Recommendation", size=13, bold=True); y -= 20
+    line(y, "Conclusion: Factual Error in Existing Benchmark Comparison", size=13, bold=True); y -= 20
     for text in [
-        "The llm-benchmarks wiki page should be updated to reflect that the Gemini Ultra",
-        "90.0% MMLU figure is not directly comparable to 5-shot results from other models.",
-        "The claim that Gemini Ultra is the first model to surpass human expert performance",
-        "on MMLU should be qualified accordingly.",
+        "The claim that Gemini Ultra's 90.0% MMLU score is the first result to surpass human",
+        "expert performance is factually wrong as a direct comparison to other models.",
+        "GPT-4 (86.4%) and Claude 3 Opus (86.8%) were measured under standard 5-shot evaluation.",
+        "Gemini Ultra's 90.0% was measured under CoT@32 — a fundamentally different protocol",
+        "that is not comparable. Under the equivalent 5-shot protocol, Gemini Ultra scores",
+        "83.7%, below GPT-4. The existing wiki entry presents these numbers as if they are",
+        "directly comparable, which is incorrect and misleads readers about model capabilities.",
+        "",
+        "This is a factual error in the wiki page, not a matter of interpretation.",
     ]:
         line(y, text); y -= 16
 

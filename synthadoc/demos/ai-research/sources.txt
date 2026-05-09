@@ -4,8 +4,11 @@
 # These are the sources used in the Synthadoc demo walkthrough.
 # Lines starting with # are comments and are ignored.
 
-https://www.anthropic.com/research/constitutional-ai
+https://arxiv.org/abs/2212.08073
 https://www.youtube.com/watch?v=kCc8FmEb1nY
 search for: chain-of-thought prompting research 2024
 search for: speculative decoding inference optimization
 search for: mixture of experts LLM architecture 2024
+
+# Local file: benchmark methodology correction (contradicts llm-benchmarks.md)
+raw_sources/llm-benchmarks-q1-2026.pdf
