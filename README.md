@@ -31,6 +31,14 @@
 
 **Document version: v0.4.0**
 
+**Engineered for solo users and enterprises alike, providing a domain-specific knowledge base that scales seamlessly while maintaining accuracy through autonomous self-optimization.**
+
+> Built for individuals, small teams, and large organizations who need a knowledge base that stays accurate as documents accumulate.
+
+Synthadoc reads your raw source documents — PDFs, spreadsheets, PPTs, web pages, images, videos, Word files, TXTs — and uses an LLM to synthesize them into a persistent, structured wiki. Cross-references are built automatically, contradictions are detected and surfaced, orphan pages are flagged, and every answer cites its sources. Outputs are stored as local Markdown files, ensuring seamless integration and autonomous management within [Obsidian](https://obsidian.md) or any wiki-compliant ecosystem.
+
+---
+
 ## Table of Contents
 
 - [Who Is It For?](#who-is-it-for)
@@ -48,14 +56,6 @@
 - [Understanding Logs and the Audit Trail](#understanding-logs-and-the-audit-trail)
 - [Customization](#customization)
 - [Links](#links)
-
----
-
-**Engineered for solo users and enterprises alike, providing a domain-specific knowledge base that scales seamlessly while maintaining accuracy through autonomous self-optimization.**
-
-> Built for individuals, small teams, and large organizations who need a knowledge base that stays accurate as documents accumulate.
-
-Synthadoc reads your raw source documents — PDFs, spreadsheets, PPTs, web pages, images, videos, Word files, TXTs — and uses an LLM to synthesize them into a persistent, structured wiki. Cross-references are built automatically, contradictions are detected and surfaced, orphan pages are flagged, and every answer cites its sources. Outputs are stored as local Markdown files, ensuring seamless integration and autonomous management within [Obsidian](https://obsidian.md) or any wiki-compliant ecosystem.
 
 ---
 
