@@ -723,13 +723,13 @@ ROUTING.md maps wiki branches to page slugs so queries and ingest jobs are scope
 
 ```bash
 # Bootstrap ROUTING.md from current index.md branch structure (run once)
-synthadoc routing init --wiki-root ~/wikis/my-wiki
+synthadoc routing init -w my-wiki
 
 # Report dangling slugs (pages listed in ROUTING.md that no longer exist)
-synthadoc routing validate --wiki-root ~/wikis/my-wiki
+synthadoc routing validate -w my-wiki
 
 # Auto-remove dangling slugs from ROUTING.md
-synthadoc routing clean --wiki-root ~/wikis/my-wiki
+synthadoc routing clean -w my-wiki
 ```
 
 ### Candidates staging
@@ -738,31 +738,31 @@ When staging is enabled, ingest writes new pages to `wiki/candidates/` for human
 
 ```bash
 # Show current staging policy
-synthadoc staging policy --wiki-root ~/wikis/my-wiki
+synthadoc staging policy -w my-wiki
 
 # Route all new pages to staging (review everything)
-synthadoc staging policy all --wiki-root ~/wikis/my-wiki
+synthadoc staging policy all -w my-wiki
 
 # Only stage pages below a confidence threshold (auto-promote high-confidence)
-synthadoc staging policy threshold --min-confidence high --wiki-root ~/wikis/my-wiki
+synthadoc staging policy threshold --min-confidence high -w my-wiki
 
 # Turn staging off (pages go directly to wiki/)
-synthadoc staging policy off --wiki-root ~/wikis/my-wiki
+synthadoc staging policy off -w my-wiki
 
 # List candidate pages awaiting review
-synthadoc candidates list --wiki-root ~/wikis/my-wiki
+synthadoc candidates list -w my-wiki
 
 # Promote a specific page (moves it from candidates/ to wiki/)
-synthadoc candidates promote my-page-slug --wiki-root ~/wikis/my-wiki
+synthadoc candidates promote my-page-slug -w my-wiki
 
 # Promote all candidates at once
-synthadoc candidates promote --all --wiki-root ~/wikis/my-wiki
+synthadoc candidates promote --all -w my-wiki
 
 # Discard a specific candidate
-synthadoc candidates discard my-page-slug --wiki-root ~/wikis/my-wiki
+synthadoc candidates discard my-page-slug -w my-wiki
 
 # Discard all candidates
-synthadoc candidates discard --all --wiki-root ~/wikis/my-wiki
+synthadoc candidates discard --all -w my-wiki
 ```
 
 ### Context packs
