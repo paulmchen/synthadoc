@@ -1188,8 +1188,12 @@ Switch by editing `<wiki-root>/.synthadoc/config.toml` and restarting the server
 | `groq`      | `GROQ_API_KEY`      | Yes — fast Llama, 100K tokens/day           | No              |
 | `ollama`    | _(none)_            | Yes — fully local, no rate limits           | Model-dependent |
 | `minimax`   | `MINIMAX_API_KEY`   | No — cheapest paid text rates               | No              |
-| `anthropic` | `ANTHROPIC_API_KEY` | No — highest quality, pay-per-token         | Yes             |
-| `openai`    | `OPENAI_API_KEY`    | No — pay-per-token                          | Yes             |
+| `anthropic`   | `ANTHROPIC_API_KEY` | No — highest quality, pay-per-token                   | Yes             |
+| `openai`      | `OPENAI_API_KEY`    | No — pay-per-token                                    | Yes             |
+| `claude-code` | _(none)_            | Yes — uses your Claude Code subscription, no key      | Yes             |
+| `opencode`    | _(none)_            | Yes — uses your Opencode subscription, no key         | No              |
+
+> CLI providers (`claude-code`, `opencode`) require no API key but need the tool installed and authenticated in your terminal. Web search still requires `TAVILY_API_KEY`. See [Appendix G](#appendix-g--using-a-coding-tool-as-your-llm-provider) for setup details.
 
 **Change the provider** — edit `.synthadoc/config.toml`:
 
@@ -1395,6 +1399,10 @@ Open `.synthadoc/config.toml` in your wiki root, comment out the active `default
 The `model` field is optional — if omitted, the tool uses its own configured default. Restart the server after saving.
 
 Ensure the tool is installed and authenticated in your terminal before starting the server. No environment variables are required.
+
+![Switching LLM providers in config.toml — Claude Code enabled](png/synthadoc-switch-provider.png)
+
+> **Web search still needs Tavily.** Even with a CLI provider, `search for:` ingest requires a `TAVILY_API_KEY`. The free tier (1,000 searches/month, no credit card required) is more than enough for typical Synthadoc use — see [Appendix D](#appendix-d--tavily-web-search-key).
 
 > **Note:** CLI providers use BM25 search only — vector/semantic search (`[search] vector = true`) is not supported and will be silently bypassed.
 
