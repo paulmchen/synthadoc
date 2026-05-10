@@ -415,7 +415,19 @@ synthadoc jobs list   # watch progress
 
 Each search fans out into up to 20 parallel URL ingest jobs. Query decomposition and web search decomposition (see below) make broad topics yield much richer results than a single search.
 
-**2. Lint and query** — check for contradictions and verify the wiki answers your questions:
+**2. Review candidates (optional quality gate)** — enable staging before large ingest batches so pages below your confidence threshold wait for review rather than entering BM25 immediately:
+
+```bash
+synthadoc staging policy threshold   # pages below high confidence → wiki/candidates/
+synthadoc candidates list            # see what's waiting
+synthadoc candidates promote early-internet-history   # approve individually
+synthadoc candidates promote --all   # or approve everything at once
+synthadoc candidates discard punch-card-era           # discard pages that don't belong
+```
+
+Skip this step if you trust all your sources — `staging policy off` is the default.
+
+**3. Lint and query** — check for contradictions and verify the wiki answers your questions:
 
 ```bash
 synthadoc lint run
@@ -423,18 +435,38 @@ synthadoc lint report
 synthadoc query "What are the current employment trends in the Toronto GTA?"
 ```
 
-**3. Re-run scaffold** — after pages accumulate, scaffold regenerates a richer index that reflects actual content. Pages already linked in `index.md` are never overwritten:
+**4. Re-run scaffold** — after pages accumulate, scaffold regenerates a richer index that reflects actual content. Pages already linked in `index.md` are never overwritten:
 
 ```bash
 synthadoc scaffold
 ```
 
-**4. Schedule recurring updates** — keep the wiki fresh automatically:
+**5. Set up routing** — once the wiki has ~100+ pages across distinct topic areas, routing narrows each query to the relevant branch, cutting latency and reducing noise in synthesis:
 
 ```bash
-synthadoc schedule add --op "ingest" --source "search for: Toronto GTA economic indicators latest" --cron "0 2 * * *"
-synthadoc schedule add --op "scaffold" --cron "0 4 * * 0"
+synthadoc routing init   # generate ROUTING.md from current index.md (one-time)
 ```
+
+From this point, queries automatically scope to the 1–2 most relevant topic branches. New pages created by ingest are auto-slotted into `ROUTING.md` — no manual maintenance needed. See [Appendix H in the Quick-Start Guide](docs/user-quick-start-guide.md#appendix-h--bm25-routing-performance-benchmarks) for latency benchmarks across corpus sizes.
+
+**6. Build a context pack** — assemble cited wiki excerpts within a token budget for use in an external agent prompt:
+
+```bash
+synthadoc context build "Toronto GTA real estate market" --tokens 4000
+```
+
+Returns ranked page excerpts with relevance scores, confidence levels, and source paths — no synthesis. The `POST /context/build` REST endpoint and MCP tool call make this callable from any agent pipeline. See [docs/design.md — Context packs](docs/design.md#context-packs) for the knowledge backend pattern.
+
+**7. Schedule recurring updates** — keep the wiki fresh and the routing table clean automatically:
+
+```bash
+synthadoc schedule add --op "ingest --batch raw_sources/" --cron "0 2 * * *"
+synthadoc schedule add --op "lint run"      --cron "0 3 * * 0"
+synthadoc schedule add --op "scaffold"      --cron "0 4 * * 0"
+synthadoc schedule add --op "routing clean" --cron "0 5 * * 0"
+```
+
+Run order matters: lint first (removes dead wikilinks), scaffold next (regenerates index), routing clean last (prunes ROUTING.md entries for deleted pages).
 
 ### How decomposition works
 
