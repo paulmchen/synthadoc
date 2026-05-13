@@ -56,8 +56,9 @@ synthadoc = "synthadoc.cli.main:app"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "-m 'not integration'"
 markers = [
-    "integration: marks tests that require real external tools (deselect with '-m not integration')",
+    "integration: marks tests that require real external tools (run explicitly with '-m integration')",
 ]
 
 [tool.hatch.version]

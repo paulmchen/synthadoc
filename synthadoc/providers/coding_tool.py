@@ -274,6 +274,11 @@ class OpencodeProvider(CodingToolCLIProvider):
                         if chunk:
                             text_parts.append(chunk)
 
+            elif etype == "error":
+                err = event.get("error") or {}
+                msg = (err.get("data") or {}).get("message") or err.get("name") or "unknown error"
+                raise RuntimeError(f"opencode: API error — {msg}")
+
             # --- token counts ---
             elif etype == "step_finish":
                 if event.get("reason") == "error":
