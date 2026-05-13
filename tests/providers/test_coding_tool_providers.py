@@ -15,9 +15,14 @@ def _make_mock_proc(stdout: bytes, stderr: bytes, returncode: int):
 
 @pytest.mark.asyncio
 async def test_base_raises_environment_error_when_binary_missing():
-    """Binary not in PATH → EnvironmentError at construction."""
-    with patch("shutil.which", return_value=None):
-        from synthadoc.providers.coding_tool import ClaudeCodeCLIProvider
+    """Binary not in PATH → EnvironmentError at construction.
+
+    Patches _find_binary (not shutil.which) so all three search strategies
+    (shutil.which, augmented PATH, login-shell fallback) are bypassed — the
+    test is valid even when the 'claude' binary is installed on the machine.
+    """
+    from synthadoc.providers.coding_tool import ClaudeCodeCLIProvider
+    with patch("synthadoc.providers.coding_tool._find_binary", return_value=None):
         with pytest.raises(EnvironmentError, match="claude"):
             ClaudeCodeCLIProvider(model=None, timeout=30)
 
