@@ -109,14 +109,18 @@ def test_check_port_raises_when_port_in_use(tmp_path):
     import socket
     from synthadoc.cli.serve import _check_port
 
-    # Find a bindable port and hold it in LISTEN state.
-    # SO_REUSEADDR on Linux allows two sockets to bind() to the same port as
-    # long as neither is listening; calling listen() blocks further binds even
-    # when the checker also sets SO_REUSEADDR.
+    # Hold the port in a way that blocks _check_port on every platform:
+    #
+    # Linux/macOS — SO_REUSEADDR allows double-bind unless one socket is
+    #   listening; listen(1) blocks further binds even with SO_REUSEADDR.
+    #
+    # Windows — SO_REUSEADDR permits any socket to bind to an occupied port
+    #   (even a listening one), so _check_port uses SO_EXCLUSIVEADDRUSE there.
+    #   The holder needs no special flags — EXCLUSIVEADDRUSE on the checker
+    #   fails when anything at all holds the port.
     for base in range(40100, 40200):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind(("127.0.0.1", base))
             s.listen(1)
             break

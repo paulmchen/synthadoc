@@ -86,7 +86,16 @@ def _sync_registry_port(wiki_name: str, port: int) -> None:
 def _check_port(port: int, host: str = "127.0.0.1") -> None:
     """Fail early if the port is already bound by another process on the target host."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if sys.platform == "win32":
+            # SO_REUSEADDR on Windows lets any socket bind to an occupied port —
+            # the opposite of what we want here.  SO_EXCLUSIVEADDRUSE correctly
+            # fails the bind if anything else already holds the port.
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            # On POSIX, SO_REUSEADDR lets the check succeed on a TIME_WAIT port
+            # (so a quick restart doesn't false-alarm) while still failing when
+            # the port is actively held in LISTEN state by another process.
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind((host, port))
         except OSError:
