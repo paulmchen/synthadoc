@@ -25,6 +25,25 @@ class RoutingIndex:
                 branches[current].append(m.group(1).strip())
         return cls(branches)
 
+    @classmethod
+    def from_index_md(cls, index_path: Path) -> "RoutingIndex":
+        """Build a RoutingIndex from an index.md branch/slug structure."""
+        _slug_re = re.compile(r"-\s*\[\[([^\]]+)\]\]")
+        branches: dict[str, list[str]] = {}
+        current: str | None = None
+        for line in index_path.read_text(encoding="utf-8").splitlines():
+            if m := _BRANCH_RE.match(line):
+                name = m.group(1).strip()
+                if name not in ("Index", "Recently Added"):
+                    current = name
+                    branches.setdefault(current, [])
+                else:
+                    current = None
+            elif current:
+                for m2 in _slug_re.finditer(line):
+                    branches[current].append(m2.group(1).strip())
+        return cls(branches)
+
     def validate(self, existing_slugs: set[str]) -> list[tuple[str, str]]:
         """Return (branch, slug) pairs that are dangling or duplicated across branches."""
         dangling = []

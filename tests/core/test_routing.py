@@ -86,3 +86,21 @@ def test_validate_reports_cross_branch_duplicate(tmp_path):
     assert branch == "Hardware"
     assert "alan-turing" in msg
     assert "duplicate" in msg
+
+
+def test_from_index_md_parses_branches(tmp_path):
+    index = tmp_path / "index.md"
+    index.write_text(
+        "## People\n- [[alan-turing]]\n- [[grace-hopper]]\n\n"
+        "## Hardware\n- [[von-neumann-architecture]]\n\n"
+        "## Recently Added\n- [[recent-page]]\n\n"
+        "## Index\n- [[index-entry]]\n",
+        encoding="utf-8",
+    )
+    ri = RoutingIndex.from_index_md(index)
+    assert set(ri.branches.keys()) == {"People", "Hardware"}
+    assert "alan-turing" in ri.branches["People"]
+    assert "grace-hopper" in ri.branches["People"]
+    assert "von-neumann-architecture" in ri.branches["Hardware"]
+    assert "Recently Added" not in ri.branches
+    assert "Index" not in ri.branches
