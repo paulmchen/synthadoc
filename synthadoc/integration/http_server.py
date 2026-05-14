@@ -547,4 +547,69 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
         pack = await agent.build(req.goal, token_budget=budget)
         return pack.to_dict()
 
+    # ── Routing ───────────────────────────────────────────────────────────────
+    from synthadoc.core.routing import RoutingIndex as _RI
+
+    def _routing_paths() -> tuple[Path, Path]:
+        root = app.state.orch._root
+        return root, root / "ROUTING.md"
+
+    @app.get("/routing/status")
+    async def routing_status():
+        root, routing_path = _routing_paths()
+        ri = _RI.parse(routing_path)
+        exists = routing_path.exists()
+        content = routing_path.read_text(encoding="utf-8") if exists else ""
+        return {
+            "exists": exists,
+            "branches": len(ri.branches),
+            "slugs": sum(len(v) for v in ri.branches.values()),
+            "content": content,
+        }
+
+    @app.post("/routing/init")
+    async def routing_init():
+        root, routing_path = _routing_paths()
+        index_path = root / "wiki" / "index.md"
+        if routing_path.exists():
+            raise HTTPException(409, "ROUTING.md already exists. Delete it first to re-init.")
+        if not index_path.exists():
+            raise HTTPException(400, "index.md not found — run scaffold first.")
+        ri = _RI.from_index_md(index_path)
+        ri.save(routing_path)
+        content = routing_path.read_text(encoding="utf-8")
+        return {
+            "branches": len(ri.branches),
+            "slugs": sum(len(v) for v in ri.branches.values()),
+            "content": content,
+        }
+
+    @app.post("/routing/validate")
+    async def routing_validate():
+        root, routing_path = _routing_paths()
+        if not routing_path.exists():
+            raise HTTPException(404, "ROUTING.md not found — run Init first.")
+        ri = _RI.parse(routing_path)
+        existing = {p.stem for p in (root / "wiki").glob("*.md")}
+        dangling = ri.validate(existing)
+        return {
+            "clean": len(dangling) == 0,
+            "dangling": [{"branch": b, "slug": s} for b, s in dangling],
+        }
+
+    @app.post("/routing/clean")
+    async def routing_clean():
+        root, routing_path = _routing_paths()
+        if not routing_path.exists():
+            raise HTTPException(404, "ROUTING.md not found — run Init first.")
+        ri = _RI.parse(routing_path)
+        existing = {p.stem for p in (root / "wiki").glob("*.md")}
+        removed = ri.clean(existing)
+        ri.save(routing_path)
+        content = routing_path.read_text(encoding="utf-8")
+        return {
+            "removed": [{"branch": b, "slug": s} for b, s in removed],
+            "content": content,
+        }
+
     return app
