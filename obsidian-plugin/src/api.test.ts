@@ -154,3 +154,48 @@ describe("error handling", () => {
         await expect(api.query("test")).rejects.toThrow("synthadoc API 404");
     });
 });
+
+describe("api.routingStatus", () => {
+    it("GETs /routing/status", async () => {
+        mockResponse({ exists: false, branches: 0, slugs: 0, content: "" });
+        const r = await (api as any).routingStatus() as any;
+        expect(r.exists).toBe(false);
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/routing/status", method: "GET" })
+        );
+    });
+});
+
+describe("api.routingInit", () => {
+    it("POSTs to /routing/init with no body", async () => {
+        mockResponse({ branches: 2, slugs: 5, content: "## People\n- [[alan-turing]]\n" });
+        const r = await (api as any).routingInit() as any;
+        expect(r.branches).toBe(2);
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/routing/init", method: "POST" })
+        );
+    });
+});
+
+describe("api.routingValidate", () => {
+    it("POSTs to /routing/validate and returns dangling list", async () => {
+        mockResponse({ clean: false, dangling: [{ branch: "People", slug: "john-mccarthy" }] });
+        const r = await (api as any).routingValidate() as any;
+        expect(r.clean).toBe(false);
+        expect(r.dangling).toHaveLength(1);
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/routing/validate", method: "POST" })
+        );
+    });
+});
+
+describe("api.routingClean", () => {
+    it("POSTs to /routing/clean and returns removed list and content", async () => {
+        mockResponse({ removed: [{ branch: "People", slug: "john-mccarthy" }], content: "## People\n" });
+        const r = await (api as any).routingClean() as any;
+        expect(r.removed).toHaveLength(1);
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/routing/clean", method: "POST" })
+        );
+    });
+});

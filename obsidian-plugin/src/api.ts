@@ -39,4 +39,8 @@ export const api = {
     auditCosts:    (days = 30)                => call(`/audit/costs?days=${days}`),
     queryHistory:  (limit = 50)               => call(`/audit/queries?limit=${limit}`),
     auditEvents:   (limit = 100)              => call(`/audit/events?limit=${limit}`),
+    routingStatus:   () => call("/routing/status"),
+    routingInit:     () => call("/routing/init",     "POST"),
+    routingValidate: () => call("/routing/validate", "POST"),
+    routingClean:    () => call("/routing/clean",    "POST"),
 };

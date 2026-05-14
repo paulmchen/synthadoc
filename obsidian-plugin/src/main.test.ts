@@ -58,6 +58,8 @@ vi.mock("./api", () => ({
         query: vi.fn(), health: vi.fn(), jobs: vi.fn(),
         retryJob: vi.fn(), purgeJobs: vi.fn(), scaffold: vi.fn(),
         auditHistory: vi.fn(), auditCosts: vi.fn(), queryHistory: vi.fn(),
+        routingStatus: vi.fn(), routingInit: vi.fn(),
+        routingValidate: vi.fn(), routingClean: vi.fn(),
     },
     setBase: vi.fn(),
 }));
@@ -308,7 +310,7 @@ describe("IngestAllModal", () => {
 });
 
 describe("SynthadocPlugin command registration", () => {
-    it("registers all 15 expected command IDs on onload", async () => {
+    it("registers all 16 expected command IDs on onload", async () => {
         const { default: SynthadocPlugin } = await import("./main");
         const plugin = new SynthadocPlugin();
         await plugin.onload();
@@ -330,6 +332,7 @@ describe("SynthadocPlugin command registration", () => {
             "synthadoc-audit-costs",
             "synthadoc-audit-queries",
             "synthadoc-audit-events",
+            "synthadoc-routing",
         ];
         for (const id of expected) {
             expect(ids).toContain(id);
@@ -348,6 +351,7 @@ describe("SynthadocPlugin command registration", () => {
         expect(names.some(n => n.startsWith("Jobs:"))).toBe(true);
         expect(names.some(n => n.startsWith("Wiki:"))).toBe(true);
         expect(names.some(n => n.startsWith("Audit:"))).toBe(true);
+        expect(names.some(n => n.startsWith("Routing:"))).toBe(true);
     });
 });
 
@@ -631,6 +635,8 @@ async function getModal(commandId: string, appOverride?: any): Promise<{ ModalCl
             query: vi.fn(), health: vi.fn(), jobs: vi.fn(),
             retryJob: vi.fn(), purgeJobs: vi.fn(), scaffold: vi.fn(),
             auditHistory: vi.fn(), auditCosts: vi.fn(), queryHistory: vi.fn(), auditEvents: vi.fn(),
+            routingStatus: vi.fn(), routingInit: vi.fn(),
+            routingValidate: vi.fn(), routingClean: vi.fn(),
         },
         setBase: vi.fn(),
     };
@@ -1012,5 +1018,53 @@ describe("AuditEventsModal", () => {
         await flushPromises();
 
         expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
+    });
+});
+
+describe("SynthadocPlugin routing command", () => {
+    it("registers synthadoc-routing command", async () => {
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+        const ids = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].id);
+        expect(ids).toContain("synthadoc-routing");
+    });
+});
+
+describe("RoutingModal", () => {
+    it("calls routingStatus on open when exists=false", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-routing");
+        apiMock.routingStatus.mockResolvedValueOnce({
+            exists: false, branches: 0, slugs: 0, content: "",
+        });
+        const modal = new ModalClass();
+        modal.onOpen();
+        await new Promise(r => setTimeout(r, 0));
+        expect(apiMock.routingStatus).toHaveBeenCalled();
+    });
+
+    it("calls routingStatus on open when exists=true", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-routing");
+        apiMock.routingStatus.mockResolvedValueOnce({
+            exists: true, branches: 2, slugs: 5, content: "## People\n- [[alan-turing]]\n",
+        });
+        const modal = new ModalClass();
+        modal.onOpen();
+        await new Promise(r => setTimeout(r, 0));
+        expect(apiMock.routingStatus).toHaveBeenCalled();
+    });
+
+    it("calls routingInit when Init button is clicked", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-routing");
+        apiMock.routingStatus.mockResolvedValueOnce({
+            exists: false, branches: 0, slugs: 0, content: "",
+        });
+        apiMock.routingInit.mockResolvedValueOnce({
+            branches: 2, slugs: 3, content: "## People\n",
+        });
+        const modal = new ModalClass();
+        modal.onOpen();
+        await new Promise(r => setTimeout(r, 0));
+        expect(apiMock.routingStatus).toHaveBeenCalled();
     });
 });
