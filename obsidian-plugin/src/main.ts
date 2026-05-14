@@ -123,6 +123,12 @@ export default class SynthadocPlugin extends Plugin {
             callback: () => new AuditHistoryModal(this.app).open(),
         });
 
+        this.addCommand({
+            id: "synthadoc-routing",
+            name: "Routing: manage ROUTING.md...",
+            callback: () => new RoutingModal(this.app).open(),
+        });
+
         this.addRibbonIcon("book-open", "Synthadoc status", async () => {
             const [healthRes, statusRes] = await Promise.allSettled([
                 api.health(),
@@ -1832,4 +1838,134 @@ class QueryModal extends Modal {
         input.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit(); });
     }
     onClose() { this.contentEl.empty(); }
+}
+
+class RoutingModal extends Modal {
+    onOpen(): void {
+        const { contentEl, modalEl } = this;
+        modalEl.style.width = "clamp(460px, 55vw, 720px)";
+
+        const bg = this.containerEl.querySelector(".modal-bg");
+        if (bg) bg.addEventListener("click", e => e.stopImmediatePropagation(), { capture: true });
+
+        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Routing" });
+        makeDraggable(modalEl, titleEl);
+
+        const contentBox = contentEl.createEl("pre");
+        contentBox.style.cssText = "display:none;border:1px solid var(--background-modifier-border);"
+            + "border-radius:4px;padding:8px;margin-bottom:12px;font-size:12px;"
+            + "white-space:pre-wrap;overflow-y:auto;max-height:120px;";
+
+        const statusMsg = contentEl.createEl("p");
+        statusMsg.style.cssText = "margin-bottom:12px;font-size:13px;";
+
+        const btnRow = contentEl.createEl("div");
+        btnRow.style.cssText = "display:flex;gap:8px;margin-bottom:10px;";
+        const initBtn     = btnRow.createEl("button", { text: "Init" });
+        const validateBtn = btnRow.createEl("button", { text: "Validate" });
+        const cleanBtn    = btnRow.createEl("button", { text: "Clean" });
+
+        const descEl = contentEl.createEl("div");
+        descEl.style.cssText = "font-size:12px;color:var(--text-muted);margin-bottom:12px;";
+        descEl.innerHTML =
+            `<div style="display:grid;grid-template-columns:68px 1fr;gap:3px 10px;">` +
+            `<strong>Init</strong><span>Bootstrap ROUTING.md from current index.md branch structure (run once)</span>` +
+            `<strong>Validate</strong><span>Report dangling slugs (pages listed in ROUTING.md that no longer exist)</span>` +
+            `<strong>Clean</strong><span>Auto-remove dangling slugs from ROUTING.md</span>` +
+            `</div>`;
+
+        const resultEl = contentEl.createEl("div");
+        resultEl.style.cssText = "font-size:13px;min-height:24px;";
+        const setResult = (html: string) => { resultEl.innerHTML = html; };
+
+        const applyInitialized = (content: string) => {
+            contentBox.style.display = "block";
+            contentBox.textContent = content;
+            statusMsg.style.display = "none";
+            initBtn.disabled = true;
+            validateBtn.disabled = false;
+            cleanBtn.disabled = false;
+        };
+
+        const applyUninitialized = () => {
+            contentBox.style.display = "none";
+            statusMsg.style.display = "block";
+            statusMsg.textContent = "ROUTING.md not found. Run Init to generate it from your current index.md.";
+            initBtn.disabled = false;
+            validateBtn.disabled = true;
+            cleanBtn.disabled = true;
+        };
+
+        api.routingStatus().then((r: any) => {
+            r.exists ? applyInitialized(r.content) : applyUninitialized();
+        }).catch(() => {
+            initBtn.disabled = true;
+            validateBtn.disabled = true;
+            cleanBtn.disabled = true;
+            setResult("❌ Cannot reach Synthadoc server. Is it running?");
+        });
+
+        initBtn.onclick = async () => {
+            initBtn.disabled = true;
+            setResult("⏳ Initializing…");
+            try {
+                const r = await api.routingInit() as any;
+                applyInitialized(r.content);
+                setResult(`✅ ROUTING.md created — ${r.branches} branches, ${r.slugs} slugs.`);
+            } catch (e: any) {
+                initBtn.disabled = false;
+                const msg = /409/.test(e.message) ? "ROUTING.md already exists. Delete it first to re-init."
+                          : /400/.test(e.message) ? "index.md not found — run scaffold first."
+                          : e.message ?? "Unexpected error.";
+                setResult(`❌ ${msg}`);
+            }
+        };
+
+        validateBtn.onclick = async () => {
+            setResult("⏳ Validating…");
+            try {
+                const r = await api.routingValidate() as any;
+                if (r.clean) {
+                    setResult("✅ ROUTING.md is clean — no dangling slugs.");
+                } else {
+                    const n = r.dangling.length;
+                    const rows = r.dangling
+                        .map((d: any) => `&nbsp;&nbsp;[${d.branch}]&nbsp;&nbsp;[[${d.slug}]]`)
+                        .join("<br>");
+                    setResult(`⚠️ ${n} dangling slug${n === 1 ? "" : "s"} found:<br>`
+                        + `<code style="font-size:12px;">${rows}</code>`);
+                }
+            } catch (e: any) {
+                const msg = /404/.test(e.message) ? "ROUTING.md not found — run Init first."
+                          : e.message ?? "Unexpected error.";
+                setResult(`❌ ${msg}`);
+            }
+        };
+
+        cleanBtn.onclick = async () => {
+            setResult("⏳ Cleaning…");
+            try {
+                const r = await api.routingClean() as any;
+                if (r.removed.length === 0) {
+                    setResult("✅ ROUTING.md is clean — nothing to remove.");
+                } else {
+                    const n = r.removed.length;
+                    const rows = r.removed
+                        .map((d: any) => `&nbsp;&nbsp;[${d.branch}]&nbsp;&nbsp;[[${d.slug}]]`)
+                        .join("<br>");
+                    contentBox.textContent = r.content;
+                    setResult(`✅ Removed ${n} dangling entr${n === 1 ? "y" : "ies"} from ROUTING.md:<br>`
+                        + `<code style="font-size:12px;">${rows}</code><br>ROUTING.md updated.`);
+                }
+            } catch (e: any) {
+                const msg = /404/.test(e.message) ? "ROUTING.md not found — run Init first."
+                          : e.message ?? "Unexpected error.";
+                setResult(`❌ ${msg}`);
+            }
+        };
+    }
+
+    onClose(): void {
+        this.contentEl.empty();
+    }
 }
