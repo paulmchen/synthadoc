@@ -155,16 +155,31 @@ class CodingToolCLIProvider(LLMProvider):
             )
 
         stderr_text = stderr.decode(errors="replace").strip()
-        if self._is_quota_exhausted(stderr_text):
+        raw = stdout.decode(errors="replace")
+
+        # With --output-format json, quota and error details may appear in stdout
+        # rather than stderr — check both.
+        all_output = stderr_text + " " + raw
+        if self._is_quota_exhausted(all_output):
             from synthadoc.errors import CodingToolQuotaExhaustedException
             raise CodingToolQuotaExhaustedException(self._tool_binary)
 
         if proc.returncode != 0:
+            # Prefer stderr; fall back to stdout (JSON tools write errors there).
+            detail = stderr_text
+            if not detail:
+                stdout_stripped = raw.strip()
+                if stdout_stripped:
+                    try:
+                        data = _json.loads(stdout_stripped)
+                        detail = data.get("result") or data.get("error") or stdout_stripped
+                    except _json.JSONDecodeError:
+                        detail = stdout_stripped
             raise RuntimeError(
-                f"{self._tool_binary}: exited with code {proc.returncode}: {stderr_text}"
+                f"{self._tool_binary}: exited with code {proc.returncode}"
+                + (f": {detail}" if detail else "")
             )
 
-        raw = stdout.decode(errors="replace")
         if not raw.strip():
             raise ValueError(f"{self._tool_binary}: empty output")
 
@@ -180,7 +195,7 @@ class ClaudeCodeCLIProvider(CodingToolCLIProvider):
     _tool_binary = "claude"
 
     def _build_command(self, binary: str) -> list[str]:
-        cmd = [binary, "-p", "--output-format", "json"]
+        cmd = [binary, "-p", "--output-format", "json", "--dangerously-skip-permissions"]
         if self._model:
             cmd += ["--model", self._model]
         return cmd

@@ -139,6 +139,7 @@ def test_claude_build_command_no_model():
     assert cmd[0] == provider._resolved_binary
     assert "-p" in cmd
     assert "--output-format" in cmd
+    assert "--dangerously-skip-permissions" in cmd
 
 def test_claude_build_command_with_model():
     with patch("shutil.which", return_value="/usr/bin/claude"):
