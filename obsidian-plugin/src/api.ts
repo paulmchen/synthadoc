@@ -43,4 +43,14 @@ export const api = {
     routingInit:     () => call("/routing/init",     "POST"),
     routingValidate: () => call("/routing/validate", "POST"),
     routingClean:    () => call("/routing/clean",    "POST"),
+
+    stagingPolicy:    () => call("/staging/policy"),
+    stagingSetPolicy: (policy: string, confidenceMin?: string) =>
+        call("/staging/policy", "POST", confidenceMin ? { policy, confidence_min: confidenceMin } : { policy }),
+
+    candidates:          () => call("/candidates"),
+    candidatesPromoteAll: () => call("/candidates/promote-all", "POST"),
+    candidatesDiscardAll: () => call("/candidates/discard-all", "POST"),
+    candidatePromote:    (slug: string) => call(`/candidates/${encodeURIComponent(slug)}/promote`, "POST"),
+    candidateDiscard:    (slug: string) => call(`/candidates/${encodeURIComponent(slug)}/discard`, "POST"),
 };

@@ -612,4 +612,120 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
             "content": content,
         }
 
+    # ── Staging policy ────────────────────────────────────────────────────────
+    import tomllib as _tomllib
+    from synthadoc.cli.candidates import _patch_toml as _cand_patch_toml
+    from synthadoc.cli.candidates import _read_frontmatter as _cand_read_fm
+    from synthadoc.cli.candidates import _add_to_index as _cand_add_to_index
+    from synthadoc.cli.candidates import _page_title as _cand_page_title
+
+    class _StagingPolicyReq(BaseModel):
+        policy: str
+        confidence_min: str | None = None
+
+    def _staging_cfg_path() -> Path:
+        return app.state.orch._root / ".synthadoc" / "config.toml"
+
+    @app.get("/staging/policy")
+    async def staging_policy_get():
+        cfg_path = _staging_cfg_path()
+        raw = _tomllib.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.exists() else {}
+        ig = raw.get("ingest", {})
+        return {
+            "policy": ig.get("staging_policy", "off"),
+            "confidence_min": ig.get("staging_confidence_min", "high"),
+        }
+
+    @app.post("/staging/policy")
+    async def staging_policy_set(req: _StagingPolicyReq):
+        if req.policy not in ("off", "all", "threshold"):
+            raise HTTPException(400, "policy must be off, all, or threshold")
+        if req.confidence_min and req.confidence_min not in ("high", "medium", "low"):
+            raise HTTPException(400, "confidence_min must be high, medium, or low")
+        cfg_path = _staging_cfg_path()
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
+        updates: dict = {"staging_policy": req.policy}
+        if req.confidence_min:
+            updates["staging_confidence_min"] = req.confidence_min
+        _cand_patch_toml(cfg_path, "ingest", updates)
+        raw = _tomllib.loads(cfg_path.read_text(encoding="utf-8"))
+        ig = raw.get("ingest", {})
+        return {
+            "policy": ig.get("staging_policy", "off"),
+            "confidence_min": ig.get("staging_confidence_min", "high"),
+        }
+
+    # ── Candidates ────────────────────────────────────────────────────────────
+    def _cand_dir() -> Path:
+        return app.state.orch._root / "wiki" / "candidates"
+
+    def _wiki_dir() -> Path:
+        return app.state.orch._root / "wiki"
+
+    @app.get("/candidates")
+    async def candidates_list():
+        cd = _cand_dir()
+        pages = sorted(cd.glob("*.md")) if cd.exists() else []
+        result = []
+        for p in pages:
+            fm = _cand_read_fm(p)
+            result.append({
+                "slug": p.stem,
+                "title": fm.get("title") or p.stem.replace("-", " ").title(),
+                "confidence": fm.get("confidence", ""),
+                "created": fm.get("created", ""),
+            })
+        return result
+
+    @app.post("/candidates/promote-all")
+    async def candidates_promote_all():
+        cd = _cand_dir()
+        wd = _wiki_dir()
+        pages = sorted(cd.glob("*.md")) if cd.exists() else []
+        promoted = []
+        for src in pages:
+            dest = wd / src.name
+            if dest.exists():
+                continue
+            title = _cand_page_title(src)
+            src.rename(dest)
+            promoted.append((src.stem, title))
+        if promoted:
+            _cand_add_to_index(wd, promoted)
+        return {"promoted": [s for s, _ in promoted], "count": len(promoted)}
+
+    @app.post("/candidates/discard-all")
+    async def candidates_discard_all():
+        cd = _cand_dir()
+        pages = sorted(cd.glob("*.md")) if cd.exists() else []
+        discarded = []
+        for src in pages:
+            src.unlink(missing_ok=True)
+            discarded.append(src.stem)
+        return {"discarded": discarded, "count": len(discarded)}
+
+    @app.post("/candidates/{slug}/promote")
+    async def candidates_promote_one(slug: str):
+        cd = _cand_dir()
+        wd = _wiki_dir()
+        src = cd / f"{slug}.md"
+        if not src.exists():
+            raise HTTPException(404, f"Candidate '{slug}' not found.")
+        dest = wd / src.name
+        if dest.exists():
+            raise HTTPException(409, f"'{slug}' already exists in wiki/.")
+        title = _cand_page_title(src)
+        src.rename(dest)
+        _cand_add_to_index(wd, [(slug, title)])
+        return {"slug": slug, "promoted": True}
+
+    @app.post("/candidates/{slug}/discard")
+    async def candidates_discard_one(slug: str):
+        cd = _cand_dir()
+        src = cd / f"{slug}.md"
+        if not src.exists():
+            raise HTTPException(404, f"Candidate '{slug}' not found.")
+        src.unlink()
+        return {"slug": slug, "discarded": True}
+
     return app

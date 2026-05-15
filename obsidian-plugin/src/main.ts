@@ -129,6 +129,18 @@ export default class SynthadocPlugin extends Plugin {
             callback: () => new RoutingModal(this.app).open(),
         });
 
+        this.addCommand({
+            id: "synthadoc-staging",
+            name: "Staging: manage staging policy...",
+            callback: () => new StagingModal(this.app).open(),
+        });
+
+        this.addCommand({
+            id: "synthadoc-candidates",
+            name: "Candidates: review candidate pages...",
+            callback: () => new CandidatesModal(this.app).open(),
+        });
+
         this.addRibbonIcon("book-open", "Synthadoc status", async () => {
             const [healthRes, statusRes] = await Promise.allSettled([
                 api.health(),
@@ -1966,6 +1978,411 @@ class RoutingModal extends Modal {
     }
 
     onClose(): void {
+        this.contentEl.empty();
+    }
+}
+
+// ── Shared UI helper ─────────────────────────────────────────────────────────
+
+function makeSegmented(
+    parent: HTMLElement,
+    options: { value: string; label: string }[],
+    initial: string,
+    onChange: (value: string) => void,
+): { getValue: () => string; setValue: (v: string) => void } {
+    const wrap = parent.createEl("div");
+    wrap.style.cssText = "display:inline-flex;border:1px solid var(--background-modifier-border);"
+        + "border-radius:6px;overflow:hidden;";
+
+    let current = initial;
+    const btns: Record<string, HTMLButtonElement> = {};
+
+    const activate = (val: string) => {
+        current = val;
+        for (const [v, btn] of Object.entries(btns)) {
+            const active = v === val;
+            btn.style.background = active ? "var(--interactive-accent)" : "var(--background-primary)";
+            btn.style.color = active ? "var(--text-on-accent)" : "var(--text-normal)";
+            btn.style.fontWeight = active ? "600" : "400";
+        }
+    };
+
+    for (const opt of options) {
+        const btn = wrap.createEl("button", { text: opt.label }) as HTMLButtonElement;
+        btn.style.cssText = "border:none;border-radius:0;padding:5px 14px;font-size:13px;cursor:pointer;transition:background 0.1s;";
+        btns[opt.value] = btn;
+        btn.onclick = () => {
+            activate(opt.value);
+            onChange(opt.value);
+        };
+    }
+
+    activate(initial);
+    return {
+        getValue: () => current,
+        setValue: (v: string) => activate(v),
+    };
+}
+
+// ── StagingModal ─────────────────────────────────────────────────────────────
+
+class StagingModal extends Modal {
+    onOpen(): void {
+        const { contentEl, modalEl } = this;
+        modalEl.style.width = "clamp(480px, 55vw, 760px)";
+
+        const bg = this.containerEl.querySelector(".modal-bg");
+        if (bg) bg.addEventListener("click", e => e.stopImmediatePropagation(), { capture: true });
+
+        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Staging Policy" });
+        makeDraggable(modalEl, titleEl);
+
+        const stateEl = contentEl.createEl("div");
+        stateEl.style.cssText = "margin-bottom:16px;padding:10px 12px;border-radius:6px;"
+            + "background:var(--background-secondary);font-size:13px;min-height:36px;";
+
+        // Policy row
+        const policyRow = contentEl.createEl("div");
+        policyRow.style.cssText = "display:flex;align-items:center;gap:12px;margin-bottom:14px;";
+        policyRow.createEl("span", { text: "Policy" }).style.cssText
+            = "font-size:13px;font-weight:600;min-width:90px;";
+        const policySeg = makeSegmented(
+            policyRow,
+            [
+                { value: "off", label: "Off" },
+                { value: "all", label: "All" },
+                { value: "threshold", label: "Threshold" },
+            ],
+            "off",
+            (val) => {
+                confidenceRow.style.display = val === "threshold" ? "flex" : "none";
+            },
+        );
+
+        // Confidence row (visible only when threshold)
+        const confidenceRow = contentEl.createEl("div");
+        confidenceRow.style.cssText = "display:none;align-items:center;gap:12px;margin-bottom:14px;";
+        confidenceRow.createEl("span", { text: "Min confidence" }).style.cssText
+            = "font-size:13px;font-weight:600;min-width:90px;";
+        const confidenceSeg = makeSegmented(
+            confidenceRow,
+            [
+                { value: "high", label: "High" },
+                { value: "medium", label: "Medium" },
+                { value: "low", label: "Low" },
+            ],
+            "high",
+            () => {},
+        );
+
+        // Description
+        const descEl = contentEl.createEl("div");
+        descEl.style.cssText = "font-size:12px;color:var(--text-muted);margin-bottom:14px;"
+            + "display:grid;grid-template-columns:80px 1fr;gap:3px 10px;";
+        descEl.innerHTML =
+            `<strong>Off</strong><span>All new pages go directly to the wiki (default).</span>` +
+            `<strong>All</strong><span>Every new page goes to staging — you review and promote manually.</span>` +
+            `<strong>Threshold</strong><span>Pages whose confidence is below the minimum are staged for review.</span>`;
+
+        // Action row
+        const actionRow = contentEl.createEl("div");
+        actionRow.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:12px;";
+        const saveBtn = actionRow.createEl("button", { text: "Save" }) as HTMLButtonElement;
+        saveBtn.style.cssText = "font-weight:bold;";
+
+        const resultEl = contentEl.createEl("div");
+        resultEl.style.cssText = "font-size:13px;min-height:22px;margin-bottom:12px;";
+        const setResult = (html: string) => { resultEl.innerHTML = html; };
+
+        // Footer link
+        const footer = contentEl.createEl("div");
+        footer.style.cssText = "border-top:1px solid var(--background-modifier-border);padding-top:10px;font-size:12px;";
+        const candLink = footer.createEl("a", { text: "Candidate pages →" });
+        candLink.style.cssText = "cursor:pointer;color:var(--link-color);";
+        candLink.onclick = () => {
+            this.close();
+            setTimeout(() => (this.app as any).commands?.executeCommandById("synthadoc:synthadoc-candidates"), 150);
+        };
+
+        // Load current state
+        const applyState = (policy: string, confMin: string) => {
+            policySeg.setValue(policy);
+            confidenceSeg.setValue(confMin || "high");
+            confidenceRow.style.display = policy === "threshold" ? "flex" : "none";
+            const labels: Record<string, string> = {
+                off: "Staging is <strong>disabled</strong>. All new pages publish directly.",
+                all: "Staging is <strong>enabled (all)</strong>. Every new page goes to staging.",
+                threshold: `Staging is <strong>enabled (threshold)</strong>. Pages below <em>${confMin || "high"}</em> confidence are staged.`,
+            };
+            stateEl.innerHTML = labels[policy] ?? policy;
+        };
+
+        api.stagingPolicy().then((r: any) => {
+            applyState(r.policy, r.confidence_min);
+        }).catch(() => {
+            setResult("❌ Cannot reach Synthadoc server. Is it running?");
+            saveBtn.disabled = true;
+        });
+
+        saveBtn.onclick = async () => {
+            saveBtn.disabled = true;
+            setResult("⏳ Saving…");
+            const policy = policySeg.getValue();
+            const confMin = policy === "threshold" ? confidenceSeg.getValue() : undefined;
+            try {
+                const r = await api.stagingSetPolicy(policy, confMin) as any;
+                applyState(r.policy, r.confidence_min);
+                setResult(`✅ Policy updated to <strong>${r.policy}</strong>${r.policy === "threshold" ? ` (min confidence: ${r.confidence_min})` : ""}.`);
+            } catch (e: any) {
+                setResult(`❌ ${e.message ?? "Failed to save."}`);
+            } finally {
+                saveBtn.disabled = false;
+            }
+        };
+    }
+
+    onClose(): void {
+        this.contentEl.empty();
+    }
+}
+
+// ── CandidatesModal ───────────────────────────────────────────────────────────
+
+const CAND_PAGE_SIZE = 50;
+
+const CONF_BADGE: Record<string, string> = {
+    high:   "background:#2d6a2d;color:#b6ffb6;",
+    medium: "background:#7a6000;color:#fff3b0;",
+    low:    "background:#7a2020;color:#ffb6b6;",
+};
+
+class CandidatesModal extends Modal {
+    private _candidates: any[] = [];
+    private _page = 0;
+    private _selected: Set<string> = new Set();
+
+    onOpen(): void {
+        const { contentEl, modalEl } = this;
+        modalEl.style.width = "clamp(560px, 70vw, 1000px)";
+
+        const bg = this.containerEl.querySelector(".modal-bg");
+        if (bg) bg.addEventListener("click", e => e.stopImmediatePropagation(), { capture: true });
+
+        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Candidate Pages" });
+        makeDraggable(modalEl, titleEl);
+
+        const resultEl = contentEl.createEl("div");
+        resultEl.style.cssText = "font-size:13px;min-height:22px;margin-bottom:8px;";
+        const setResult = (html: string) => { resultEl.innerHTML = html; };
+
+        // Top action bar
+        const actionBar = contentEl.createEl("div");
+        actionBar.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;";
+
+        const promoteAllBtn  = actionBar.createEl("button", { text: "Promote All" }) as HTMLButtonElement;
+        const discardAllBtn  = actionBar.createEl("button", { text: "Discard All" }) as HTMLButtonElement;
+        discardAllBtn.style.color = "var(--text-error)";
+        const sep = actionBar.createEl("span", { text: "|" });
+        sep.style.cssText = "color:var(--text-muted);margin:0 2px;";
+        const promoteSelBtn  = actionBar.createEl("button", { text: "Promote Selected" }) as HTMLButtonElement;
+        const discardSelBtn  = actionBar.createEl("button", { text: "Discard Selected" }) as HTMLButtonElement;
+        discardSelBtn.style.color = "var(--text-error)";
+
+        // Table container
+        const tableWrap = contentEl.createEl("div");
+        tableWrap.style.cssText = "overflow-y:auto;max-height:50vh;margin-bottom:10px;"
+            + "border:1px solid var(--background-modifier-border);border-radius:4px;";
+
+        // Pagination row
+        const pageRow = contentEl.createEl("div");
+        pageRow.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:12px;font-size:12px;color:var(--text-muted);";
+        const prevBtn = pageRow.createEl("button", { text: "← Prev" }) as HTMLButtonElement;
+        const pageLabel = pageRow.createEl("span");
+        const nextBtn = pageRow.createEl("button", { text: "Next →" }) as HTMLButtonElement;
+
+        // Footer
+        const footer = contentEl.createEl("div");
+        footer.style.cssText = "border-top:1px solid var(--background-modifier-border);padding-top:10px;font-size:12px;";
+        const stagingLink = footer.createEl("a", { text: "← Staging policy" });
+        stagingLink.style.cssText = "cursor:pointer;color:var(--link-color);";
+        stagingLink.onclick = () => {
+            this.close();
+            setTimeout(() => (this.app as any).commands?.executeCommandById("synthadoc:synthadoc-staging"), 150);
+        };
+
+        const render = () => {
+            tableWrap.empty();
+            const total = this._candidates.length;
+            const totalPages = Math.max(1, Math.ceil(total / CAND_PAGE_SIZE));
+            this._page = Math.min(this._page, totalPages - 1);
+            const slice = this._candidates.slice(this._page * CAND_PAGE_SIZE, (this._page + 1) * CAND_PAGE_SIZE);
+
+            prevBtn.disabled = this._page === 0;
+            nextBtn.disabled = this._page >= totalPages - 1;
+            pageRow.style.display = totalPages > 1 ? "flex" : "none";
+            pageLabel.textContent = `Page ${this._page + 1} of ${totalPages} (${total} total)`;
+
+            const allBtnsDisabled = total === 0;
+            promoteAllBtn.disabled = allBtnsDisabled;
+            discardAllBtn.disabled = allBtnsDisabled;
+
+            if (total === 0) {
+                tableWrap.createEl("div", { text: "No candidates. All new pages are publishing directly." })
+                    .style.cssText = "padding:20px;text-align:center;color:var(--text-muted);font-size:13px;";
+                promoteSelBtn.disabled = true;
+                discardSelBtn.disabled = true;
+                return;
+            }
+
+            const table = tableWrap.createEl("table");
+            table.style.cssText = "width:100%;border-collapse:collapse;font-size:13px;";
+
+            const thead = table.createEl("thead");
+            const hrow = thead.createEl("tr");
+            hrow.style.cssText = "background:var(--background-secondary);";
+            const thCheck = hrow.createEl("th");
+            thCheck.style.cssText = "padding:6px 8px;width:32px;";
+            const allCheckbox = thCheck.createEl("input", { type: "checkbox" }) as HTMLInputElement;
+            allCheckbox.title = "Select all on this page";
+            hrow.createEl("th", { text: "Slug" }).style.cssText = "padding:6px 8px;text-align:left;";
+            hrow.createEl("th", { text: "Title" }).style.cssText = "padding:6px 8px;text-align:left;";
+            hrow.createEl("th", { text: "Confidence" }).style.cssText = "padding:6px 8px;text-align:center;";
+            hrow.createEl("th", { text: "Ingested" }).style.cssText = "padding:6px 8px;text-align:left;";
+
+            const tbody = table.createEl("tbody");
+            const rowCheckboxes: HTMLInputElement[] = [];
+
+            for (const c of slice) {
+                const tr = tbody.createEl("tr");
+                tr.style.cssText = "border-top:1px solid var(--background-modifier-border);";
+                tr.onmouseenter = () => { tr.style.background = "var(--background-modifier-hover)"; };
+                tr.onmouseleave = () => { tr.style.background = ""; };
+
+                const tdCheck = tr.createEl("td");
+                tdCheck.style.cssText = "padding:6px 8px;text-align:center;";
+                const cb = tdCheck.createEl("input", { type: "checkbox" }) as HTMLInputElement;
+                cb.checked = this._selected.has(c.slug);
+                cb.onchange = () => {
+                    cb.checked ? this._selected.add(c.slug) : this._selected.delete(c.slug);
+                    updateSelBtns();
+                    allCheckbox.indeterminate = rowCheckboxes.some(x => x.checked) && !rowCheckboxes.every(x => x.checked);
+                    allCheckbox.checked = rowCheckboxes.every(x => x.checked);
+                };
+                rowCheckboxes.push(cb);
+
+                tr.createEl("td", { text: c.slug }).style.cssText
+                    = "padding:6px 8px;font-family:var(--font-monospace);font-size:12px;";
+                tr.createEl("td", { text: c.title }).style.cssText = "padding:6px 8px;";
+
+                const tdConf = tr.createEl("td");
+                tdConf.style.cssText = "padding:6px 8px;text-align:center;";
+                if (c.confidence) {
+                    const badge = tdConf.createEl("span", { text: c.confidence });
+                    badge.style.cssText = `border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;`
+                        + (CONF_BADGE[c.confidence] ?? "background:var(--background-modifier-border);color:var(--text-normal);");
+                }
+
+                tr.createEl("td", { text: c.created ? c.created.slice(0, 10) : "—" })
+                    .style.cssText = "padding:6px 8px;color:var(--text-muted);";
+            }
+
+            allCheckbox.checked = slice.length > 0 && slice.every(c => this._selected.has(c.slug));
+            allCheckbox.onchange = () => {
+                for (const c of slice) {
+                    allCheckbox.checked ? this._selected.add(c.slug) : this._selected.delete(c.slug);
+                }
+                for (const cb of rowCheckboxes) cb.checked = allCheckbox.checked;
+                updateSelBtns();
+            };
+
+            updateSelBtns();
+        };
+
+        const updateSelBtns = () => {
+            const hasSel = this._selected.size > 0;
+            promoteSelBtn.disabled = !hasSel;
+            discardSelBtn.disabled = !hasSel;
+        };
+
+        const reload = async () => {
+            setResult("⏳ Loading…");
+            try {
+                this._candidates = await api.candidates() as any[];
+                this._selected.clear();
+                setResult(`${this._candidates.length} candidate${this._candidates.length === 1 ? "" : "s"} awaiting review.`);
+                render();
+            } catch {
+                setResult("❌ Cannot reach Synthadoc server. Is it running?");
+                promoteAllBtn.disabled = true;
+                discardAllBtn.disabled = true;
+                promoteSelBtn.disabled = true;
+                discardSelBtn.disabled = true;
+            }
+        };
+
+        prevBtn.onclick = () => { this._page--; render(); };
+        nextBtn.onclick = () => { this._page++; render(); };
+
+        promoteAllBtn.onclick = async () => {
+            promoteAllBtn.disabled = true;
+            setResult("⏳ Promoting all…");
+            try {
+                const r = await api.candidatesPromoteAll() as any;
+                setResult(`✅ Promoted ${r.count} page${r.count === 1 ? "" : "s"} to wiki.`);
+                await reload();
+            } catch (e: any) {
+                setResult(`❌ ${e.message ?? "Failed."}`);
+                promoteAllBtn.disabled = false;
+            }
+        };
+
+        discardAllBtn.onclick = async () => {
+            discardAllBtn.disabled = true;
+            setResult("⏳ Discarding all…");
+            try {
+                const r = await api.candidatesDiscardAll() as any;
+                setResult(`✅ Discarded ${r.count} candidate${r.count === 1 ? "" : "s"}.`);
+                await reload();
+            } catch (e: any) {
+                setResult(`❌ ${e.message ?? "Failed."}`);
+                discardAllBtn.disabled = false;
+            }
+        };
+
+        promoteSelBtn.onclick = async () => {
+            const slugs = [...this._selected];
+            promoteSelBtn.disabled = true;
+            setResult(`⏳ Promoting ${slugs.length} page${slugs.length === 1 ? "" : "s"}…`);
+            const failed: string[] = [];
+            for (const slug of slugs) {
+                try { await api.candidatePromote(slug); }
+                catch { failed.push(slug); }
+            }
+            const ok = slugs.length - failed.length;
+            setResult(`✅ Promoted ${ok}${failed.length ? `; ❌ ${failed.length} failed: ${failed.join(", ")}` : ""}.`);
+            await reload();
+        };
+
+        discardSelBtn.onclick = async () => {
+            const slugs = [...this._selected];
+            discardSelBtn.disabled = true;
+            setResult(`⏳ Discarding ${slugs.length} page${slugs.length === 1 ? "" : "s"}…`);
+            const failed: string[] = [];
+            for (const slug of slugs) {
+                try { await api.candidateDiscard(slug); }
+                catch { failed.push(slug); }
+            }
+            const ok = slugs.length - failed.length;
+            setResult(`✅ Discarded ${ok}${failed.length ? `; ❌ ${failed.length} failed: ${failed.join(", ")}` : ""}.`);
+            await reload();
+        };
+
+        reload();
+    }
+
+    onClose(): void {
+        this._candidates = [];
+        this._selected.clear();
         this.contentEl.empty();
     }
 }
