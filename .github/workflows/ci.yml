@@ -44,7 +44,7 @@ jobs:
           git diff --quiet docs/badges.json || (
             git add docs/badges.json &&
             git commit -m "ci: update coverage badge" &&
-            git push origin HEAD:badges
+            git push origin HEAD:badges --force
           )
 
   build-plugin:
