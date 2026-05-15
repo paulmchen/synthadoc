@@ -221,6 +221,8 @@ class ClaudeCodeCLIProvider(CodingToolCLIProvider):
         return any(phrase in lower for phrase in (
             "usage limit", "usage cap", "quota exceeded",
             "claude ai usage limit", "you've reached your",
+            "credit balance is too low", "insufficient credits",
+            "credit balance", "out of credits",
         ))
 
 

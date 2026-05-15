@@ -45,12 +45,17 @@ def _install_win32_conn_reset_filter() -> None:
 
 def _classify_llm_error(exc: Exception) -> "HTTPException | None":
     """Return a meaningful HTTPException for known LLM API error codes, or None."""
-    from synthadoc.errors import DailyQuotaExhaustedException
+    from synthadoc.errors import DailyQuotaExhaustedException, CodingToolQuotaExhaustedException
     _SWITCH = "Switch to another provider by editing [agents] in .synthadoc/config.toml and restarting the server (options: anthropic, openai, gemini, groq, minimax, deepseek, ollama)."
     if isinstance(exc, DailyQuotaExhaustedException):
         return HTTPException(
             status_code=503,
             detail=f"Daily quota exhausted for {exc.provider} — no requests possible until midnight UTC. {_SWITCH}",
+        )
+    if isinstance(exc, CodingToolQuotaExhaustedException):
+        return HTTPException(
+            status_code=503,
+            detail=f"Coding tool quota exhausted — {exc}. {_SWITCH}",
         )
 
     # openai/anthropic SDKs set status_code directly on the exception;
@@ -224,12 +229,12 @@ async def _worker_loop(orch) -> None:
                     await orch._run_scaffold(job.id, domain=domain)
         except Exception as exc:
             known = _classify_llm_error(exc)
-            if known and known.status_code == 503 and "Daily quota" in (known.detail or ""):
-                # Daily quota is exhausted for the rest of the day — no point
-                # sleeping and retrying. The orchestrator already permanently
-                # failed the job; just continue polling without a sleep penalty.
-                logger.error("Daily quota exhausted — jobs will fail until midnight UTC. %s",
-                             known.detail)
+            if known and known.status_code == 503 and (
+                "Daily quota" in (known.detail or "") or "Coding tool quota" in (known.detail or "")
+            ):
+                # Quota exhausted — no point retrying pending jobs until the user
+                # tops up credits or waits for the reset. Log once and keep polling.
+                logger.error("Quota exhausted — pending jobs will fail. %s", known.detail)
                 sleep_secs = _WORKER_POLL_SECONDS
             elif known and known.status_code == 429:
                 sleep_secs = _parse_retry_after(exc)
