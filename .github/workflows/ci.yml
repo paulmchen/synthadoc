@@ -41,11 +41,9 @@ jobs:
       - run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git diff --quiet docs/badges.json || (
-            git add docs/badges.json &&
-            git commit -m "ci: update coverage badge" &&
-            git push origin HEAD:badges --force
-          )
+          git add docs/badges.json
+          git diff --staged --quiet || git commit -m "ci: update coverage badge"
+          git push origin HEAD:badges --force
 
   build-plugin:
     runs-on: ubuntu-latest
