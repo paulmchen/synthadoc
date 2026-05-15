@@ -202,22 +202,24 @@ def candidates_promote(
         targets = [cand_dir / f"{slug}.md"]
 
     promoted: list[tuple[str, str]] = []
+    new_pages: list[tuple[str, str]] = []
     for src in targets:
         if not src.exists():
             typer.echo(f"  Not found: {src.stem}")
             continue
         dest = wiki_dir / src.name
-        if dest.exists():
-            typer.echo(f"  Skipped {src.stem} — already exists in wiki/")
-            continue
+        is_new = not dest.exists()
         title = _page_title(src)
         shutil.move(str(src), str(dest))
         promoted.append((src.stem, title))
-        typer.echo(f"  Promoted {src.stem} → wiki/{src.name}")
+        if is_new:
+            new_pages.append((src.stem, title))
+        action = "Promoted" if is_new else "Updated"
+        typer.echo(f"  {action} {src.stem} → wiki/{src.name}")
 
-    if promoted:
-        _add_to_index(wiki_dir, promoted)
-        typer.echo(f"  Updated index.md — added {len(promoted)} entr{'y' if len(promoted) == 1 else 'ies'} to ## Recently Added")
+    if new_pages:
+        _add_to_index(wiki_dir, new_pages)
+        typer.echo(f"  Updated index.md — added {len(new_pages)} entr{'y' if len(new_pages) == 1 else 'ies'} to ## Recently Added")
 
 
 @candidates_app.command("discard")

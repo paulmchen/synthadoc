@@ -686,19 +686,22 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
         from synthadoc.cli.candidates import _read_frontmatter as _cand_read_fm
         from synthadoc.cli.candidates import _add_to_index as _cand_add_to_index
         from synthadoc.cli.candidates import _page_title as _cand_page_title
+        import shutil as _shutil
         cd = _cand_dir()
         wd = _wiki_dir()
         pages = sorted(cd.glob("*.md")) if cd.exists() else []
         promoted = []
+        new_pages = []  # only pages that didn't already exist in wiki/
         for src in pages:
             dest = wd / src.name
-            if dest.exists():
-                continue
+            is_new = not dest.exists()
             title = _cand_page_title(src)
-            src.rename(dest)
+            _shutil.move(str(src), str(dest))
             promoted.append((src.stem, title))
-        if promoted:
-            _cand_add_to_index(wd, promoted)
+            if is_new:
+                new_pages.append((src.stem, title))
+        if new_pages:
+            _cand_add_to_index(wd, new_pages)
         return {"promoted": [s for s, _ in promoted], "count": len(promoted)}
 
     @app.post("/candidates/discard-all")
@@ -713,6 +716,7 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
 
     @app.post("/candidates/{slug}/promote")
     async def candidates_promote_one(slug: str):
+        import shutil as _shutil
         from synthadoc.cli.candidates import _add_to_index as _cand_add_to_index
         from synthadoc.cli.candidates import _page_title as _cand_page_title
         cd = _cand_dir()
@@ -721,12 +725,12 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
         if not src.exists():
             raise HTTPException(404, f"Candidate '{slug}' not found.")
         dest = wd / src.name
-        if dest.exists():
-            raise HTTPException(409, f"'{slug}' already exists in wiki/.")
+        is_new = not dest.exists()
         title = _cand_page_title(src)
-        src.rename(dest)
-        _cand_add_to_index(wd, [(slug, title)])
-        return {"slug": slug, "promoted": True}
+        _shutil.move(str(src), str(dest))
+        if is_new:
+            _cand_add_to_index(wd, [(slug, title)])
+        return {"slug": slug, "promoted": True, "updated": not is_new}
 
     @app.post("/candidates/{slug}/discard")
     async def candidates_discard_one(slug: str):
