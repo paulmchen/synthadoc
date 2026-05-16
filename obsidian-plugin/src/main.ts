@@ -2494,7 +2494,7 @@ class ContextModal extends Modal {
 
         const resultArea = resultSection.createEl("textarea") as HTMLTextAreaElement;
         resultArea.readOnly = true;
-        resultArea.rows = 14;
+        resultArea.rows = 22;
         resultArea.style.cssText = "width:100%;box-sizing:border-box;resize:vertical;font-size:12px;"
             + "font-family:var(--font-monospace);padding:8px;border-radius:4px;"
             + "border:1px solid var(--background-modifier-border);background:var(--background-secondary);"
@@ -2520,21 +2520,43 @@ class ContextModal extends Modal {
             }
         };
 
-        // Save as handler — triggers browser/Electron download
-        saveBtn.onclick = () => {
+        // Save as handler — uses Electron native dialog so status shows only after user confirms
+        saveBtn.onclick = async () => {
             const slug = goalInput.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "context-pack";
             const filename = `${slug}.md`;
-            const blob = new Blob([this._result], { type: "text/markdown;charset=utf-8" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            copyNote.textContent = `✅ Saved as ${filename}`;
-            setTimeout(() => { copyNote.textContent = ""; }, 3000);
+            saveBtn.disabled = true;
+            copyNote.textContent = "💾 Saving…";
+            try {
+                const electron = (window as any).require("electron");
+                const nodefs = (window as any).require("fs");
+                const nodepath = (window as any).require("path");
+                const result = await electron.remote.dialog.showSaveDialog({
+                    defaultPath: filename,
+                    filters: [{ name: "Markdown", extensions: ["md"] }],
+                });
+                if (!result.canceled && result.filePath) {
+                    await nodefs.promises.writeFile(result.filePath, this._result, "utf-8");
+                    copyNote.textContent = `✅ Saved as ${nodepath.basename(result.filePath)}`;
+                    setTimeout(() => { copyNote.textContent = ""; }, 3000);
+                } else {
+                    copyNote.textContent = "";
+                }
+            } catch {
+                // Fallback for non-Electron environments
+                const blob = new Blob([this._result], { type: "text/markdown;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                copyNote.textContent = `✅ Saved as ${filename}`;
+                setTimeout(() => { copyNote.textContent = ""; }, 3000);
+            } finally {
+                saveBtn.disabled = false;
+            }
         };
 
         // Build handler

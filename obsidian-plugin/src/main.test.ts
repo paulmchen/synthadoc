@@ -1405,7 +1405,7 @@ describe("ContextModal", () => {
 
         // saveBtn = actionRow._children[1]; actionRow = resultSection._children[3]
         const saveBtn = modal.contentEl._children[6]._children[3]._children[1];
-        saveBtn.onclick();
+        await saveBtn.onclick();
 
         // copyNote = actionRow._children[2]
         const copyNote = modal.contentEl._children[6]._children[3]._children[2];
