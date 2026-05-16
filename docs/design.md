@@ -644,6 +644,9 @@ Reload the plugin (toggle off/on) after copying — a full Obsidian restart is n
 | `Synthadoc: List jobs...` | Modal with status-filter dropdown, results table, error details |
 | `Synthadoc: Web search...` | Live-polling modal — type a plain topic; set max results (1–50, default 20) and poll interval (500–10000 ms, default 2000 ms); shows phase text, pages list, and URL errors in real time as fan-out jobs complete |
 | `Synthadoc: Routing: manage ROUTING.md...` | Modal panel with three buttons. **Init** creates ROUTING.md from the current index.md branch structure (enabled only when ROUTING.md does not exist). **Validate** reports dangling slugs — pages listed in ROUTING.md that no longer exist in the wiki (enabled only when ROUTING.md exists). **Clean** removes dangling slugs from ROUTING.md (enabled only when ROUTING.md exists). After each action the result appears inline with per-entry `[Branch] [[slug]]` detail rows. |
+| `Synthadoc: Staging: manage staging policy...` | Modal panel showing the current policy state. A segmented control switches between **Off**, **All**, and **Threshold**. When **Threshold** is selected, a second segmented control sets the minimum confidence (**High** / **Medium** / **Low**). A **Save** button persists the change via the HTTP API and updates the inline status. A footer link opens the Candidates modal directly. |
+| `Synthadoc: Candidates: review candidate pages...` | Paginated table (50 per page) of all staged candidate pages. Each row shows the slug, a colour-coded confidence badge, and a checkbox. **Promote All** and **Discard All** act on every candidate; **Promote Selected** and **Discard Selected** act on checked rows. The table reloads automatically after each action. A footer link opens the Staging policy modal. |
+| `Synthadoc: Context: build context pack...` | Modal with a goal/question text area, a token budget field (default 4000), and a **Build Context Pack** button (`Ctrl/Cmd+Enter` also triggers). The server decomposes the goal, retrieves and ranks wiki pages via BM25, and packs them within the budget. The result is rendered as cited Markdown in a read-only text area. **Copy to Clipboard** copies the content to the OS clipboard. **Save as .md** downloads the Markdown file with a slug-derived filename. |
 
 ### Ribbon icon
 
@@ -1545,6 +1548,38 @@ New pages can be routed to `wiki/candidates/` instead of `wiki/` based on the `[
 | `synthadoc candidates discard --all` | Delete all candidates |
 
 Policy changes take effect on the next ingest job — no server restart needed.
+
+### HTTP API
+
+| Method | Path | Request | Response |
+|--------|------|---------|----------|
+| `GET` | `/staging/policy` | — | `{policy: str, confidence_min: str\|null}` |
+| `POST` | `/staging/policy` | `{policy: str, confidence_min?: str}` | `{policy: str, confidence_min: str\|null}` |
+| `GET` | `/candidates` | — | `[{slug: str, title: str, confidence: str, ingested_at: str}]` |
+| `POST` | `/candidates/promote-all` | — | `{promoted: int, updated: int}` |
+| `POST` | `/candidates/discard-all` | — | `{discarded: int}` |
+| `POST` | `/candidates/{slug}/promote` | — | `{promoted: slug, new: bool, updated: bool}` |
+| `POST` | `/candidates/{slug}/discard` | — | `{discarded: slug}` |
+
+Promote moves the file from `wiki/candidates/<slug>.md` to `wiki/<slug>.md`. If a page with the same slug already exists in `wiki/` (a staged update to an existing page), the existing file is overwritten. Only newly created pages (not overwrites) are indexed into BM25.
+
+### Obsidian plugin
+
+The **Staging: manage staging policy...** command opens `StagingModal`:
+
+- A status block shows the current policy in plain language (e.g. "Staging is **enabled (threshold)**. Pages below *high* confidence are staged.")
+- A segmented control switches between **Off** / **All** / **Threshold**.
+- When **Threshold** is selected, a second segmented control sets **Min confidence**: **High** / **Medium** / **Low**.
+- **Save** calls `POST /staging/policy` and refreshes the status block inline.
+- A footer link **Candidate pages →** closes the modal and opens `CandidatesModal`.
+
+The **Candidates: review candidate pages...** command opens `CandidatesModal`:
+
+- Loads all candidates via `GET /candidates` and displays them in a paginated table (50 rows per page).
+- Each row has a checkbox, the page slug, a colour-coded confidence badge (green = high, amber = medium, red = low), and the ingest timestamp.
+- A select-all checkbox in the header checks or clears every row on the current page.
+- **Promote All** / **Discard All** operate on every candidate regardless of page; **Promote Selected** / **Discard Selected** operate on checked rows only. The table reloads automatically after each action.
+- A footer link **← Staging policy** closes the modal and opens `StagingModal`.
 
 ---
 

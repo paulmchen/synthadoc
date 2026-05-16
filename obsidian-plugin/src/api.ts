@@ -53,4 +53,7 @@ export const api = {
     candidatesDiscardAll: () => call("/candidates/discard-all", "POST"),
     candidatePromote:    (slug: string) => call(`/candidates/${encodeURIComponent(slug)}/promote`, "POST"),
     candidateDiscard:    (slug: string) => call(`/candidates/${encodeURIComponent(slug)}/discard`, "POST"),
+
+    contextBuild: (goal: string, tokenBudget: number) =>
+        call("/context/build", "POST", { goal, token_budget: tokenBudget }),
 };

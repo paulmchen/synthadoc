@@ -55,11 +55,14 @@ vi.mock("obsidian", () => ({
 vi.mock("./api", () => ({
     api: {
         ingest: vi.fn(), lint: vi.fn(), lintReport: vi.fn(), status: vi.fn(),
-        query: vi.fn(), health: vi.fn(), jobs: vi.fn(),
+        query: vi.fn(), health: vi.fn(), jobs: vi.fn(), job: vi.fn(),
         retryJob: vi.fn(), purgeJobs: vi.fn(), scaffold: vi.fn(),
-        auditHistory: vi.fn(), auditCosts: vi.fn(), queryHistory: vi.fn(),
-        routingStatus: vi.fn(), routingInit: vi.fn(),
-        routingValidate: vi.fn(), routingClean: vi.fn(),
+        auditHistory: vi.fn(), auditCosts: vi.fn(), queryHistory: vi.fn(), auditEvents: vi.fn(),
+        routingStatus: vi.fn(), routingInit: vi.fn(), routingValidate: vi.fn(), routingClean: vi.fn(),
+        stagingPolicy: vi.fn(), stagingSetPolicy: vi.fn(),
+        candidates: vi.fn(), candidatesPromoteAll: vi.fn(), candidatesDiscardAll: vi.fn(),
+        candidatePromote: vi.fn(), candidateDiscard: vi.fn(),
+        contextBuild: vi.fn(),
     },
     setBase: vi.fn(),
 }));
@@ -310,7 +313,7 @@ describe("IngestAllModal", () => {
 });
 
 describe("SynthadocPlugin command registration", () => {
-    it("registers all 16 expected command IDs on onload", async () => {
+    it("registers all 19 expected command IDs on onload", async () => {
         const { default: SynthadocPlugin } = await import("./main");
         const plugin = new SynthadocPlugin();
         await plugin.onload();
@@ -333,6 +336,9 @@ describe("SynthadocPlugin command registration", () => {
             "synthadoc-audit-queries",
             "synthadoc-audit-events",
             "synthadoc-routing",
+            "synthadoc-staging",
+            "synthadoc-candidates",
+            "synthadoc-context",
         ];
         for (const id of expected) {
             expect(ids).toContain(id);
@@ -352,6 +358,9 @@ describe("SynthadocPlugin command registration", () => {
         expect(names.some(n => n.startsWith("Wiki:"))).toBe(true);
         expect(names.some(n => n.startsWith("Audit:"))).toBe(true);
         expect(names.some(n => n.startsWith("Routing:"))).toBe(true);
+        expect(names.some(n => n.startsWith("Staging:"))).toBe(true);
+        expect(names.some(n => n.startsWith("Candidates:"))).toBe(true);
+        expect(names.some(n => n.startsWith("Context:"))).toBe(true);
     });
 });
 
@@ -632,11 +641,14 @@ async function getModal(commandId: string, appOverride?: any): Promise<{ ModalCl
     const freshApiMock = {
         api: {
             ingest: vi.fn(), lint: vi.fn(), lintReport: vi.fn(), status: vi.fn(),
-            query: vi.fn(), health: vi.fn(), jobs: vi.fn(),
+            query: vi.fn(), health: vi.fn(), jobs: vi.fn(), job: vi.fn(),
             retryJob: vi.fn(), purgeJobs: vi.fn(), scaffold: vi.fn(),
             auditHistory: vi.fn(), auditCosts: vi.fn(), queryHistory: vi.fn(), auditEvents: vi.fn(),
-            routingStatus: vi.fn(), routingInit: vi.fn(),
-            routingValidate: vi.fn(), routingClean: vi.fn(),
+            routingStatus: vi.fn(), routingInit: vi.fn(), routingValidate: vi.fn(), routingClean: vi.fn(),
+            stagingPolicy: vi.fn(), stagingSetPolicy: vi.fn(),
+            candidates: vi.fn(), candidatesPromoteAll: vi.fn(), candidatesDiscardAll: vi.fn(),
+            candidatePromote: vi.fn(), candidateDiscard: vi.fn(),
+            contextBuild: vi.fn(),
         },
         setBase: vi.fn(),
     };
@@ -1066,5 +1078,323 @@ describe("RoutingModal", () => {
         modal.onOpen();
         await new Promise(r => setTimeout(r, 0));
         expect(apiMock.routingStatus).toHaveBeenCalled();
+    });
+});
+
+// ── ContextModal ──────────────────────────────────────────────────────────────
+
+/** Minimal ContextPack response fixture; override any field via spread. */
+function makeContextPack(override: Record<string, any> = {}): Record<string, any> {
+    return {
+        goal: "early computing pioneers",
+        token_budget: 4000,
+        tokens_used: 1823,
+        pages: [
+            {
+                slug: "alan-turing",
+                relevance: 3.42,
+                excerpt: "Alan Turing developed the theoretical basis of modern computation.",
+                source: "wiki/alan-turing.md",
+                confidence: "high",
+                tags: ["mathematics", "computation"],
+                estimated_tokens: 600,
+            },
+        ],
+        omitted: [],
+        ...override,
+    };
+}
+
+describe("ContextModal", () => {
+    it("registers synthadoc-context command with the correct name", async () => {
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+        const cmds = (plugin.addCommand as any).mock.calls.map((c: any) => c[0]);
+        const cmd = cmds.find((c: any) => c.id === "synthadoc-context");
+        expect(cmd).toBeDefined();
+        expect(cmd.name).toBe("Context: build context pack...");
+    });
+
+    it("calls api.contextBuild with the goal text and default token budget (4000)", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-context");
+        apiMock.contextBuild.mockResolvedValueOnce(makeContextPack());
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        // First textarea = goalInput; first input = budgetInput; first button = buildBtn
+        const goalInput = modal.contentEl.querySelector("textarea") as any;
+        goalInput.value = "early computing pioneers";
+        const buildBtn = modal.contentEl.querySelector("button") as any;
+        await buildBtn.onclick();
+        await flushPromises();
+
+        expect(apiMock.contextBuild).toHaveBeenCalledWith("early computing pioneers", 4000);
+    });
+
+    it("calls api.contextBuild with a user-specified token budget", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-context");
+        apiMock.contextBuild.mockResolvedValueOnce(makeContextPack({ token_budget: 2000, tokens_used: 800 }));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const goalInput = modal.contentEl.querySelector("textarea") as any;
+        goalInput.value = "AI history";
+        const budgetInput = modal.contentEl.querySelector("input") as any;
+        budgetInput.value = "2000";
+        const buildBtn = modal.contentEl.querySelector("button") as any;
+        await buildBtn.onclick();
+        await flushPromises();
+
+        expect(apiMock.contextBuild).toHaveBeenCalledWith("AI history", 2000);
+    });
+
+    it("clamps token budget to minimum 100 when a sub-minimum value is entered", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-context");
+        apiMock.contextBuild.mockResolvedValueOnce(makeContextPack({ token_budget: 100, tokens_used: 50 }));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const goalInput = modal.contentEl.querySelector("textarea") as any;
+        goalInput.value = "test topic";
+        const budgetInput = modal.contentEl.querySelector("input") as any;
+        budgetInput.value = "50"; // 50 < 100 → clamped to 100
+        const buildBtn = modal.contentEl.querySelector("button") as any;
+        await buildBtn.onclick();
+        await flushPromises();
+
+        expect(apiMock.contextBuild).toHaveBeenCalledWith("test topic", 100);
+    });
+
+    it("disables the build button while the request is in flight", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-context");
+        let resolvePack!: (v: any) => void;
+        apiMock.contextBuild.mockReturnValueOnce(new Promise(r => { resolvePack = r; }));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const goalInput = modal.contentEl.querySelector("textarea") as any;
+        goalInput.value = "computing history";
+        const buildBtn = modal.contentEl.querySelector("button") as any;
+
+        buildBtn.onclick(); // sets disabled=true synchronously before first await
+        expect(buildBtn.disabled).toBe(true);
+
+        resolvePack(makeContextPack());
+        await flushPromises();
+        expect(buildBtn.disabled).toBe(false);
+    });
+
+    it("reveals the result section after a successful build", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-context");
+        apiMock.contextBuild.mockResolvedValueOnce(makeContextPack());
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        // resultSection is the 7th child of contentEl (index 6)
+        const resultSection = modal.contentEl._children[6];
+        expect(resultSection.style.display).toBe("none");
+
+        const goalInput = modal.contentEl.querySelector("textarea") as any;
+        goalInput.value = "early computing pioneers";
+        const buildBtn = modal.contentEl.querySelector("button") as any;
+        await buildBtn.onclick();
+        await flushPromises();
+
+        expect(resultSection.style.display).toBe("block");
+    });
+
+    it("populates the result textarea with rendered markdown", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-context");
+        apiMock.contextBuild.mockResolvedValueOnce(makeContextPack());
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const goalInput = modal.contentEl.querySelector("textarea") as any;
+        goalInput.value = "early computing pioneers";
+        const buildBtn = modal.contentEl.querySelector("button") as any;
+        await buildBtn.onclick();
+        await flushPromises();
+
+        // resultArea = resultSection._children[2]
+        const resultArea = modal.contentEl._children[6]._children[2];
+        expect(resultArea.value).toContain("# Context Pack: early computing pioneers");
+        expect(resultArea.value).toContain("## [[alan-turing]]");
+        expect(resultArea.value).toContain("relevance: 3.42");
+        expect(resultArea.value).toContain("Token budget: 4000 | Used: 1823");
+    });
+
+    it("shows page count and token usage in the meta line", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-context");
+        apiMock.contextBuild.mockResolvedValueOnce(makeContextPack());
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const goalInput = modal.contentEl.querySelector("textarea") as any;
+        goalInput.value = "early computing pioneers";
+        const buildBtn = modal.contentEl.querySelector("button") as any;
+        await buildBtn.onclick();
+        await flushPromises();
+
+        // resultMeta = resultSection._children[1]
+        const resultMeta = modal.contentEl._children[6]._children[1];
+        expect(resultMeta.textContent).toContain("1 page");
+        expect(resultMeta.textContent).toContain("1823");
+        expect(resultMeta.textContent).toContain("4000");
+    });
+
+    it("shows omitted count in the meta line and omitted section in markdown", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-context");
+        apiMock.contextBuild.mockResolvedValueOnce(makeContextPack({
+            omitted: [{
+                slug: "grace-hopper", relevance: 1.2, excerpt: "...",
+                source: "wiki/grace-hopper.md", confidence: "high", tags: [], estimated_tokens: 400,
+            }],
+        }));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const goalInput = modal.contentEl.querySelector("textarea") as any;
+        goalInput.value = "early computing pioneers";
+        const buildBtn = modal.contentEl.querySelector("button") as any;
+        await buildBtn.onclick();
+        await flushPromises();
+
+        const resultMeta = modal.contentEl._children[6]._children[1];
+        expect(resultMeta.textContent).toContain("1 omitted");
+
+        const resultArea = modal.contentEl._children[6]._children[2];
+        expect(resultArea.value).toContain("## Omitted — token budget exceeded");
+        expect(resultArea.value).toContain("[[grace-hopper]]");
+        expect(resultArea.value).toContain("~400 tokens");
+    });
+
+    it("shows error message and re-enables button when api.contextBuild throws", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-context");
+        apiMock.contextBuild.mockRejectedValueOnce(new Error("server down"));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const goalInput = modal.contentEl.querySelector("textarea") as any;
+        goalInput.value = "test topic";
+        const buildBtn = modal.contentEl.querySelector("button") as any;
+        await buildBtn.onclick();
+        await flushPromises();
+
+        expect(buildBtn.disabled).toBe(false);
+        // statusEl = buildRow._children[1]
+        const statusEl = modal.contentEl._children[5]._children[1];
+        expect(statusEl.textContent).toContain("❌");
+        expect(statusEl.textContent).toContain("server down");
+    });
+
+    it("shows a warning and does not call the API when goal is empty", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-context");
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        // goalInput.value starts as "" — don't set it
+        const buildBtn = modal.contentEl.querySelector("button") as any;
+        buildBtn.onclick();
+
+        expect(apiMock.contextBuild).not.toHaveBeenCalled();
+        const statusEl = modal.contentEl._children[5]._children[1];
+        expect(statusEl.textContent).toContain("⚠");
+    });
+
+    it("copies the rendered result to the OS clipboard on Copy button click", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-context");
+        apiMock.contextBuild.mockResolvedValueOnce(makeContextPack());
+
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        vi.stubGlobal("navigator", { clipboard: { writeText } });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const goalInput = modal.contentEl.querySelector("textarea") as any;
+        goalInput.value = "early computing pioneers";
+        const buildBtn = modal.contentEl.querySelector("button") as any;
+        await buildBtn.onclick();
+        await flushPromises();
+
+        // copyBtn = actionRow._children[0]; actionRow = resultSection._children[3]
+        const copyBtn = modal.contentEl._children[6]._children[3]._children[0];
+        await copyBtn.onclick();
+        await flushPromises();
+
+        expect(writeText).toHaveBeenCalledWith(expect.stringContaining("# Context Pack"));
+        expect(writeText).toHaveBeenCalledWith(expect.stringContaining("[[alan-turing]]"));
+    });
+
+    it("includes tags in the rendered markdown when the page has tags", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-context");
+        apiMock.contextBuild.mockResolvedValueOnce(makeContextPack());
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const goalInput = modal.contentEl.querySelector("textarea") as any;
+        goalInput.value = "early computing pioneers";
+        const buildBtn = modal.contentEl.querySelector("button") as any;
+        await buildBtn.onclick();
+        await flushPromises();
+
+        const resultArea = modal.contentEl._children[6]._children[2];
+        expect(resultArea.value).toContain("Tags: mathematics, computation");
+    });
+
+    it("omits the Tags line from markdown when the page has no tags", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-context");
+        apiMock.contextBuild.mockResolvedValueOnce(makeContextPack({
+            pages: [{
+                slug: "test-page", relevance: 1.0, excerpt: "A test page.",
+                source: "wiki/test-page.md", confidence: "medium", tags: [], estimated_tokens: 200,
+            }],
+        }));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const goalInput = modal.contentEl.querySelector("textarea") as any;
+        goalInput.value = "test topic";
+        const buildBtn = modal.contentEl.querySelector("button") as any;
+        await buildBtn.onclick();
+        await flushPromises();
+
+        const resultArea = modal.contentEl._children[6]._children[2];
+        expect(resultArea.value).not.toContain("Tags:");
+    });
+
+    it("formats relevance to exactly 2 decimal places in the heading", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-context");
+        apiMock.contextBuild.mockResolvedValueOnce(makeContextPack({
+            pages: [{
+                slug: "alan-turing", relevance: 3, excerpt: "...",
+                source: "wiki/alan-turing.md", confidence: "high", tags: [], estimated_tokens: 300,
+            }],
+        }));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const goalInput = modal.contentEl.querySelector("textarea") as any;
+        goalInput.value = "computing";
+        const buildBtn = modal.contentEl.querySelector("button") as any;
+        await buildBtn.onclick();
+        await flushPromises();
+
+        const resultArea = modal.contentEl._children[6]._children[2];
+        expect(resultArea.value).toContain("relevance: 3.00");
     });
 });

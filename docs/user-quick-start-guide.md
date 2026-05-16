@@ -953,11 +953,31 @@ synthadoc candidates discard punch-card-era           # delete
 synthadoc candidates promote --all                    # promote everything
 ```
 
+### Manage staging from Obsidian
+
+**Set the policy** — Command Palette → `Synthadoc: Staging: manage staging policy...`:
+
+- The modal shows the current policy in plain language at the top.
+- Click **Off**, **All**, or **Threshold** in the segmented control.
+- When **Threshold** is selected, a second control appears — pick **High**, **Medium**, or **Low** as the minimum confidence.
+- Click **Save**. The status block updates immediately to confirm the change.
+- Click **Candidate pages →** at the bottom of the modal to jump straight to the Candidates panel.
+
+**Review and promote candidates** — Command Palette → `Synthadoc: Candidates: review candidate pages...`:
+
+- The modal lists every staged page with its slug, colour-coded confidence badge, and ingest timestamp.
+- Check individual rows and click **Promote Selected** or **Discard Selected**.
+- Use **Promote All** or **Discard All** to act on every candidate at once.
+- The table reloads after each action, so the count stays current.
+- Click **← Staging policy** at the bottom to jump back to the Staging modal.
+
 ### Turn staging off
 
 ```bash
 synthadoc staging policy off
 ```
+
+Or from Obsidian: `Synthadoc: Staging: manage staging policy...` → select **Off** → **Save**.
 
 ---
 
@@ -1123,6 +1143,21 @@ All commands are accessible via the Command Palette (`Ctrl/Cmd+P` → type `Synt
 | Command                                    | What it does                                                                                                                                                                                                                                                                                                                                              |
 | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Synthadoc: Routing: manage ROUTING.md...` | Modal panel with three buttons. **Init** creates `ROUTING.md` from your current `index.md` branch structure (enabled only when `ROUTING.md` does not exist). **Validate** reports dangling slugs — pages listed in `ROUTING.md` that no longer exist — as a dry-run with no changes made (enabled only when `ROUTING.md` exists). **Clean** removes dangling slugs from `ROUTING.md` and refreshes the preview (enabled only when `ROUTING.md` exists). Results show per-entry `[Branch] [[slug]]` detail rows inline. |
+
+### Staging & Candidates
+
+
+| Command                                          | What it does                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Synthadoc: Staging: manage staging policy...`   | Shows the current policy in plain language. A segmented control switches between **Off**, **All**, and **Threshold**. When **Threshold** is selected, a second control sets the minimum confidence (**High** / **Medium** / **Low**). **Save** applies the change immediately. A footer link opens the Candidates panel. |
+| `Synthadoc: Candidates: review candidate pages...` | Paginated table (50 per page) of all staged candidate pages. Each row shows the slug, colour-coded confidence badge, and ingest timestamp. Check rows and click **Promote Selected** or **Discard Selected**, or use **Promote All** / **Discard All** to act on every candidate at once. Table reloads after each action. A footer link opens the Staging policy panel. |
+
+### Context packs
+
+
+| Command                                    | What it does                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Synthadoc: Context: build context pack...` | Enter a goal or question and a token budget (default 4000). Press **Build Context Pack** or `Ctrl/Cmd+Enter`. The server decomposes the goal, retrieves the most relevant wiki pages via BM25, and packs them into a single cited Markdown document within the budget. The result appears in a read-only text area. **Copy to Clipboard** copies it to the OS clipboard; **Save as .md** downloads it as a Markdown file. |
 
 > **UX note:** All modals are draggable and support full text selection and copy-paste.
 

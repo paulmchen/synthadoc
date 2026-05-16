@@ -199,3 +199,178 @@ describe("api.routingClean", () => {
         );
     });
 });
+
+describe("api.stagingPolicy", () => {
+    it("GETs /staging/policy and returns policy and confidence_min", async () => {
+        mockResponse({ policy: "off", confidence_min: null });
+        const r = await (api as any).stagingPolicy() as any;
+        expect(r.policy).toBe("off");
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/staging/policy", method: "GET" })
+        );
+    });
+
+    it("returns threshold policy with confidence_min when set", async () => {
+        mockResponse({ policy: "threshold", confidence_min: "medium" });
+        const r = await (api as any).stagingPolicy() as any;
+        expect(r.policy).toBe("threshold");
+        expect(r.confidence_min).toBe("medium");
+    });
+});
+
+describe("api.stagingSetPolicy", () => {
+    it("POSTs to /staging/policy with policy only when no confidence_min provided", async () => {
+        mockResponse({ policy: "all", confidence_min: null });
+        await (api as any).stagingSetPolicy("all");
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({
+                url: "http://127.0.0.1:7070/staging/policy",
+                method: "POST",
+                body: JSON.stringify({ policy: "all" }),
+            })
+        );
+    });
+
+    it("includes confidence_min in body when provided", async () => {
+        mockResponse({ policy: "threshold", confidence_min: "medium" });
+        await (api as any).stagingSetPolicy("threshold", "medium");
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({
+                body: JSON.stringify({ policy: "threshold", confidence_min: "medium" }),
+            })
+        );
+    });
+
+    it("omits confidence_min from body when not provided (policy=off)", async () => {
+        mockResponse({ policy: "off", confidence_min: null });
+        await (api as any).stagingSetPolicy("off");
+        const call = mockRequestUrl.mock.calls[0][0];
+        expect(JSON.parse(call.body)).not.toHaveProperty("confidence_min");
+    });
+});
+
+describe("api.candidates", () => {
+    it("GETs /candidates and returns the list", async () => {
+        mockResponse([
+            { slug: "early-internet-history", title: "Early Internet History", confidence: "medium", ingested_at: "2026-05-06T14:22:11" },
+        ]);
+        const r = await (api as any).candidates() as any;
+        expect(r).toHaveLength(1);
+        expect(r[0].slug).toBe("early-internet-history");
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/candidates", method: "GET" })
+        );
+    });
+
+    it("returns empty array when no candidates exist", async () => {
+        mockResponse([]);
+        const r = await (api as any).candidates() as any;
+        expect(r).toEqual([]);
+    });
+});
+
+describe("api.candidatesPromoteAll", () => {
+    it("POSTs to /candidates/promote-all and returns promoted + updated counts", async () => {
+        mockResponse({ promoted: 3, updated: 1 });
+        const r = await (api as any).candidatesPromoteAll() as any;
+        expect(r.promoted).toBe(3);
+        expect(r.updated).toBe(1);
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/candidates/promote-all", method: "POST" })
+        );
+    });
+});
+
+describe("api.candidatesDiscardAll", () => {
+    it("POSTs to /candidates/discard-all and returns discarded count", async () => {
+        mockResponse({ discarded: 2 });
+        const r = await (api as any).candidatesDiscardAll() as any;
+        expect(r.discarded).toBe(2);
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/candidates/discard-all", method: "POST" })
+        );
+    });
+});
+
+describe("api.candidatePromote", () => {
+    it("POSTs to /candidates/{slug}/promote", async () => {
+        mockResponse({ promoted: "early-internet-history", new: true, updated: false });
+        await (api as any).candidatePromote("early-internet-history");
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({
+                url: "http://127.0.0.1:7070/candidates/early-internet-history/promote",
+                method: "POST",
+            })
+        );
+    });
+
+    it("URL-encodes slugs that contain special characters", async () => {
+        mockResponse({ promoted: "page with spaces", new: true, updated: false });
+        await (api as any).candidatePromote("page with spaces");
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({
+                url: "http://127.0.0.1:7070/candidates/page%20with%20spaces/promote",
+            })
+        );
+    });
+});
+
+describe("api.candidateDiscard", () => {
+    it("POSTs to /candidates/{slug}/discard", async () => {
+        mockResponse({ discarded: "punch-card-era" });
+        await (api as any).candidateDiscard("punch-card-era");
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({
+                url: "http://127.0.0.1:7070/candidates/punch-card-era/discard",
+                method: "POST",
+            })
+        );
+    });
+});
+
+describe("api.contextBuild", () => {
+    it("POSTs to /context/build with goal and token_budget", async () => {
+        mockResponse({
+            goal: "early computing pioneers",
+            token_budget: 4000,
+            tokens_used: 1823,
+            pages: [],
+            omitted: [],
+        });
+        const r = await (api as any).contextBuild("early computing pioneers", 4000) as any;
+        expect(r.goal).toBe("early computing pioneers");
+        expect(r.token_budget).toBe(4000);
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({
+                url: "http://127.0.0.1:7070/context/build",
+                method: "POST",
+                body: JSON.stringify({ goal: "early computing pioneers", token_budget: 4000 }),
+            })
+        );
+    });
+
+    it("returns pages and omitted arrays from the response", async () => {
+        mockResponse({
+            goal: "test",
+            token_budget: 2000,
+            tokens_used: 800,
+            pages: [{ slug: "alan-turing", relevance: 3.5, excerpt: "...", source: "wiki/alan-turing.md", confidence: "high", tags: [], estimated_tokens: 600 }],
+            omitted: [{ slug: "grace-hopper", relevance: 1.2, excerpt: "...", source: "wiki/grace-hopper.md", confidence: "high", tags: [], estimated_tokens: 400 }],
+        });
+        const r = await (api as any).contextBuild("test", 2000) as any;
+        expect(r.pages).toHaveLength(1);
+        expect(r.pages[0].slug).toBe("alan-turing");
+        expect(r.omitted).toHaveLength(1);
+        expect(r.omitted[0].slug).toBe("grace-hopper");
+    });
+
+    it("sends a custom token_budget when specified", async () => {
+        mockResponse({ goal: "AI", token_budget: 1500, tokens_used: 900, pages: [], omitted: [] });
+        await (api as any).contextBuild("AI", 1500);
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({
+                body: JSON.stringify({ goal: "AI", token_budget: 1500 }),
+            })
+        );
+    });
+});

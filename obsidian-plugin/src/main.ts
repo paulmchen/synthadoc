@@ -140,6 +140,11 @@ export default class SynthadocPlugin extends Plugin {
             name: "Candidates: review candidate pages...",
             callback: () => new CandidatesModal(this.app).open(),
         });
+        this.addCommand({
+            id: "synthadoc-context",
+            name: "Context: build context pack...",
+            callback: () => new ContextModal(this.app).open(),
+        });
 
         this.addRibbonIcon("book-open", "Synthadoc status", async () => {
             const [healthRes, statusRes] = await Promise.allSettled([
@@ -2383,6 +2388,199 @@ class CandidatesModal extends Modal {
     onClose(): void {
         this._candidates = [];
         this._selected.clear();
+        this.contentEl.empty();
+    }
+}
+
+// ── ContextModal ──────────────────────────────────────────────────────────────
+
+const DEFAULT_TOKEN_BUDGET = 4000;
+
+function renderContextPackMarkdown(pack: any): string {
+    const now = new Date().toISOString().slice(0, 19);
+    const omittedNote = pack.omitted?.length
+        ? ` | Omitted: ${pack.omitted.length} page(s) (budget exceeded)`
+        : "";
+    const lines: string[] = [
+        `# Context Pack: ${pack.goal}`,
+        `Generated: ${now}`,
+        `Token budget: ${pack.token_budget} | Used: ${pack.tokens_used}${omittedNote}`,
+        "",
+        "---",
+        "",
+    ];
+    for (const p of pack.pages ?? []) {
+        lines.push(`## [[${p.slug}]] — relevance: ${Number(p.relevance).toFixed(2)}`);
+        lines.push(`> ${p.excerpt}`);
+        lines.push(
+            `Source: \`${p.source}\` | Confidence: ${p.confidence}` +
+            (p.tags?.length ? ` | Tags: ${(p.tags as string[]).join(", ")}` : ""),
+        );
+        lines.push("");
+    }
+    if (pack.omitted?.length) {
+        lines.push("---", "", "## Omitted — token budget exceeded");
+        for (const p of pack.omitted) {
+            lines.push(`- [[${p.slug}]] — ~${p.estimated_tokens} tokens`);
+        }
+    }
+    return lines.join("\n");
+}
+
+class ContextModal extends Modal {
+    private _result = "";
+
+    onOpen(): void {
+        const { contentEl, modalEl } = this;
+        modalEl.style.width = "clamp(560px, 65vw, 900px)";
+
+        const bg = this.containerEl.querySelector(".modal-bg");
+        if (bg) bg.addEventListener("click", e => e.stopImmediatePropagation(), { capture: true });
+
+        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Context Pack" });
+        makeDraggable(modalEl, titleEl);
+
+        // Description
+        const desc = contentEl.createEl("p");
+        desc.style.cssText = "font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.5;";
+        desc.textContent =
+            "A context pack assembles the most relevant wiki pages into a single cited Markdown " +
+            "document within a token budget. Use it to ground an external LLM prompt, save evidence " +
+            "alongside a draft you are writing, or pipe it into another tool.";
+
+        // Goal input
+        const goalLabel = contentEl.createEl("div", { text: "Goal / question" });
+        goalLabel.style.cssText = "font-size:12px;font-weight:600;margin-bottom:4px;";
+        const goalInput = contentEl.createEl("textarea") as HTMLTextAreaElement;
+        goalInput.placeholder = "e.g. early computing pioneers";
+        goalInput.rows = 3;
+        goalInput.style.cssText = "width:100%;box-sizing:border-box;resize:vertical;font-size:13px;"
+            + "margin-bottom:12px;padding:6px 8px;border-radius:4px;"
+            + "border:1px solid var(--background-modifier-border);background:var(--background-primary);";
+
+        // Token budget row
+        const budgetRow = contentEl.createEl("div");
+        budgetRow.style.cssText = "display:flex;align-items:center;gap:10px;margin-bottom:14px;";
+        budgetRow.createEl("span", { text: "Token budget" }).style.cssText
+            = "font-size:12px;font-weight:600;white-space:nowrap;";
+        const budgetInput = budgetRow.createEl("input") as HTMLInputElement;
+        budgetInput.type = "number";
+        budgetInput.min = "100";
+        budgetInput.max = "32000";
+        budgetInput.step = "100";
+        budgetInput.value = String(DEFAULT_TOKEN_BUDGET);
+        budgetInput.style.cssText = "width:90px;padding:4px 6px;font-size:13px;border-radius:4px;"
+            + "border:1px solid var(--background-modifier-border);background:var(--background-primary);";
+        budgetRow.createEl("span", { text: "tokens" }).style.cssText
+            = "font-size:12px;color:var(--text-muted);";
+
+        // Build button + status
+        const buildRow = contentEl.createEl("div");
+        buildRow.style.cssText = "display:flex;align-items:center;gap:10px;margin-bottom:14px;";
+        const buildBtn = buildRow.createEl("button", { text: "Build Context Pack" }) as HTMLButtonElement;
+        buildBtn.style.cssText = "font-weight:bold;";
+        const statusEl = buildRow.createEl("span");
+        statusEl.style.cssText = "font-size:12px;color:var(--text-muted);";
+
+        // Result section (hidden until first build)
+        const resultSection = contentEl.createEl("div");
+        resultSection.style.display = "none";
+
+        const divider = resultSection.createEl("hr");
+        divider.style.cssText = "margin:0 0 10px;border:none;border-top:1px solid var(--background-modifier-border);";
+
+        const resultMeta = resultSection.createEl("div");
+        resultMeta.style.cssText = "font-size:12px;color:var(--text-muted);margin-bottom:6px;";
+
+        const resultArea = resultSection.createEl("textarea") as HTMLTextAreaElement;
+        resultArea.readOnly = true;
+        resultArea.rows = 14;
+        resultArea.style.cssText = "width:100%;box-sizing:border-box;resize:vertical;font-size:12px;"
+            + "font-family:var(--font-monospace);padding:8px;border-radius:4px;"
+            + "border:1px solid var(--background-modifier-border);background:var(--background-secondary);"
+            + "margin-bottom:10px;";
+
+        // Action buttons row
+        const actionRow = resultSection.createEl("div");
+        actionRow.style.cssText = "display:flex;gap:8px;align-items:center;";
+
+        const copyBtn = actionRow.createEl("button", { text: "Copy to Clipboard" }) as HTMLButtonElement;
+        const saveBtn = actionRow.createEl("button", { text: "Save as .md" }) as HTMLButtonElement;
+        const copyNote = actionRow.createEl("span");
+        copyNote.style.cssText = "font-size:12px;color:var(--text-muted);";
+
+        // Copy handler
+        copyBtn.onclick = async () => {
+            try {
+                await navigator.clipboard.writeText(this._result);
+                copyNote.textContent = "✅ Copied!";
+                setTimeout(() => { copyNote.textContent = ""; }, 2500);
+            } catch {
+                copyNote.textContent = "❌ Copy failed — select and copy manually.";
+            }
+        };
+
+        // Save as handler — triggers browser/Electron download
+        saveBtn.onclick = () => {
+            const slug = goalInput.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "context-pack";
+            const filename = `${slug}.md`;
+            const blob = new Blob([this._result], { type: "text/markdown;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+
+        // Build handler
+        const runBuild = async () => {
+            const goal = goalInput.value.trim();
+            if (!goal) {
+                statusEl.textContent = "⚠ Enter a goal or question first.";
+                return;
+            }
+            const budget = Math.max(100, parseInt(budgetInput.value, 10) || DEFAULT_TOKEN_BUDGET);
+            budgetInput.value = String(budget);
+
+            buildBtn.disabled = true;
+            statusEl.textContent = "⏳ Building…";
+            resultSection.style.display = "none";
+
+            try {
+                const pack = await api.contextBuild(goal, budget) as any;
+                this._result = renderContextPackMarkdown(pack);
+                resultArea.value = this._result;
+                resultMeta.textContent =
+                    `${pack.pages?.length ?? 0} page(s) included · ${pack.tokens_used} / ${pack.token_budget} tokens used`
+                    + (pack.omitted?.length ? ` · ${pack.omitted.length} omitted` : "");
+                resultSection.style.display = "block";
+                statusEl.textContent = "";
+                copyNote.textContent = "";
+            } catch (e: any) {
+                statusEl.textContent = `❌ ${e.message ?? "Failed to build context pack."}`;
+            } finally {
+                buildBtn.disabled = false;
+            }
+        };
+
+        buildBtn.onclick = runBuild;
+
+        // Ctrl/Cmd+Enter submits
+        goalInput.addEventListener("keydown", (e: KeyboardEvent) => {
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                runBuild();
+            }
+        });
+
+        goalInput.focus();
+    }
+
+    onClose(): void {
+        this._result = "";
         this.contentEl.empty();
     }
 }
