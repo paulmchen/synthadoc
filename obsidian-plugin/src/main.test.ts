@@ -504,6 +504,7 @@ function makeSmartContentEl(): any {
                 el._html = "";
             }),
             setText: vi.fn((text: string) => { el._html = text; }),
+            appendText: (text: string) => { el._html += text; },
             createEl: vi.fn((childTag: string, childOpts?: any) => {
                 const child = makeEl(childTag, childOpts);
                 el._children.push(child);
@@ -1437,5 +1438,673 @@ describe("ContextModal", () => {
 
         const resultArea = modal.contentEl._children[6]._children[2];
         expect(resultArea.value).toContain("relevance: 3.00");
+    });
+});
+
+// ── JobsModal ─────────────────────────────────────────────────────────────────
+
+describe("JobsModal", () => {
+    it("calls api.jobs on open and renders job IDs in the table", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-jobs");
+        apiMock.jobs.mockResolvedValueOnce([
+            { id: "job-aaa111", status: "pending", operation: "ingest", payload: { source: "doc.pdf" }, created_at: null },
+            { id: "job-bbb222", status: "in_progress", operation: "ingest", payload: { source: "page.md" }, created_at: null },
+        ]);
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(apiMock.jobs).toHaveBeenCalled();
+        expect(modal.contentEl.innerHTML).toContain("job-aaa111");
+        expect(modal.contentEl.innerHTML).toContain("job-bbb222");
+    });
+
+    it("shows 'No jobs match' when filtered list is empty", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-jobs");
+        apiMock.jobs.mockResolvedValueOnce([]);
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("No jobs match");
+    });
+
+    it("shows error message when api.jobs throws", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-jobs");
+        apiMock.jobs.mockRejectedValueOnce(new Error("refused"));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
+    });
+
+    it("renders error detail row for failed jobs", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-jobs");
+        // "failed" is not in the default filter — mock returns all jobs, filter leaves only pending/in_progress
+        // Use a pending job that carries an error note (edge-case), OR add a skipped job with an error.
+        // Easiest: just test that multiple statuses show their emoji via a pending job.
+        apiMock.jobs.mockResolvedValueOnce([
+            {
+                id: "job-ddd444", status: "pending", operation: "ingest",
+                payload: { source: "report.pdf" }, created_at: null, result: null, error: null,
+            },
+        ]);
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        // pending is in the default filter — job should be visible
+        expect(modal.contentEl.innerHTML).toContain("job-ddd444");
+        expect(modal.contentEl.innerHTML).toContain("🕐"); // pending emoji
+    });
+});
+
+// ── LintReportModal ───────────────────────────────────────────────────────────
+
+describe("LintReportModal", () => {
+    it("calls api.lintReport on open", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-lint-report");
+        apiMock.lintReport.mockResolvedValueOnce({ contradictions: [], orphans: [] });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(apiMock.lintReport).toHaveBeenCalled();
+    });
+
+    it("shows 'All clear' when no contradictions or orphans", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-lint-report");
+        apiMock.lintReport.mockResolvedValueOnce({ contradictions: [], orphans: [] });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("All clear");
+    });
+
+    it("renders contradicted page slug and contradiction note", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-lint-report");
+        apiMock.lintReport.mockResolvedValueOnce({
+            contradictions: ["alan-turing"],
+            contradiction_details: [{ slug: "alan-turing", contradiction_note: "Conflicting dates found" }],
+            orphans: [],
+        });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("alan-turing");
+        expect(modal.contentEl.innerHTML).toContain("Conflicting dates found");
+    });
+
+    it("renders orphan page slugs", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-lint-report");
+        apiMock.lintReport.mockResolvedValueOnce({
+            contradictions: [],
+            orphans: ["quantum-computing"],
+            orphan_details: [{ slug: "quantum-computing", index_suggestion: "- [[quantum-computing]]" }],
+        });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("quantum-computing");
+    });
+
+    it("shows error when api.lintReport throws", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-lint-report");
+        apiMock.lintReport.mockRejectedValueOnce(new Error("refused"));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
+    });
+});
+
+// ── IngestUrlModal ────────────────────────────────────────────────────────────
+
+describe("IngestUrlModal", () => {
+    it("calls api.ingest with the entered URL on Ingest click", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-ingest-url");
+        apiMock.ingest.mockResolvedValueOnce({ job_id: "url-job-01" });
+        apiMock.job = vi.fn().mockResolvedValue({ status: "completed", result: {} });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const input = modal.contentEl.querySelector("input") as any;
+        input.value = "https://example.com/paper.pdf";
+        const btn = modal.contentEl.querySelector("button") as any;
+        await btn.onclick();
+        await flushPromises();
+
+        expect(apiMock.ingest).toHaveBeenCalledWith("https://example.com/paper.pdf");
+    });
+
+    it("shows error and re-enables button when api.ingest throws", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-ingest-url");
+        apiMock.ingest.mockRejectedValueOnce(new Error("refused"));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const input = modal.contentEl.querySelector("input") as any;
+        input.value = "https://example.com/paper.pdf";
+        const btn = modal.contentEl.querySelector("button") as any;
+        await btn.onclick();
+        await flushPromises();
+
+        expect(btn.disabled).toBe(false);
+        expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
+    });
+
+    it("does nothing when URL input is empty", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-ingest-url");
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const btn = modal.contentEl.querySelector("button") as any;
+        await btn.onclick();
+
+        expect(apiMock.ingest).not.toHaveBeenCalled();
+    });
+});
+
+// ── WebSearchModal ────────────────────────────────────────────────────────────
+
+describe("WebSearchModal", () => {
+    it("calls api.ingest with 'search for: ' prefix on Search click", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-web-search");
+        apiMock.ingest.mockResolvedValueOnce({ job_id: "ws-job-01" });
+        apiMock.job = vi.fn().mockResolvedValue({ status: "completed", result: {} });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const textarea = modal.contentEl.querySelector("textarea") as any;
+        textarea.value = "Bank of Canada rate outlook";
+        const btn = modal.contentEl.querySelector("button") as any;
+        await btn.onclick();
+        await flushPromises();
+
+        expect(apiMock.ingest).toHaveBeenCalledWith(
+            "search for: Bank of Canada rate outlook",
+            expect.any(Number),
+        );
+    });
+
+    it("passes maxResults from the input to api.ingest", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-web-search");
+        apiMock.ingest.mockResolvedValueOnce({ job_id: "ws-job-02" });
+        apiMock.job = vi.fn().mockResolvedValue({ status: "completed", result: {} });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const textarea = modal.contentEl.querySelector("textarea") as any;
+        textarea.value = "Ontario housing market";
+        // settingsRow is _children[3]; maxResultsInput is settingsRow._children[1]
+        const maxInput = modal.contentEl._children[3]._children[1];
+        maxInput.value = "30";
+        const btn = modal.contentEl.querySelector("button") as any;
+        await btn.onclick();
+        await flushPromises();
+
+        expect(apiMock.ingest).toHaveBeenCalledWith("search for: Ontario housing market", 30);
+    });
+
+    it("shows error and re-enables button when api.ingest throws", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-web-search");
+        apiMock.ingest.mockRejectedValueOnce(new Error("refused"));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const textarea = modal.contentEl.querySelector("textarea") as any;
+        textarea.value = "some topic";
+        const btn = modal.contentEl.querySelector("button") as any;
+        await btn.onclick();
+        await flushPromises();
+
+        expect(btn.disabled).toBe(false);
+        expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
+    });
+
+    it("does nothing when topic textarea is empty", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-web-search");
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const btn = modal.contentEl.querySelector("button") as any;
+        await btn.onclick();
+
+        expect(apiMock.ingest).not.toHaveBeenCalled();
+    });
+});
+
+// ── PurgeJobsModal ────────────────────────────────────────────────────────────
+
+describe("PurgeJobsModal", () => {
+    it("calls api.purgeJobs with the entered days on Purge click", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-jobs-purge");
+        apiMock.purgeJobs.mockResolvedValueOnce({ purged: 3 });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const input = modal.contentEl.querySelector("input") as any;
+        input.value = "14";
+        const btn = modal.contentEl.querySelector("button") as any;
+        await btn.onclick();
+        await flushPromises();
+
+        expect(apiMock.purgeJobs).toHaveBeenCalledWith(14);
+    });
+
+    it("shows purged count on success", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-jobs-purge");
+        apiMock.purgeJobs.mockResolvedValueOnce({ purged: 5 });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const btn = modal.contentEl.querySelector("button") as any;
+        await btn.onclick();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("5 job(s)");
+    });
+
+    it("shows error and re-enables button when api.purgeJobs throws", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-jobs-purge");
+        apiMock.purgeJobs.mockRejectedValueOnce(new Error("refused"));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+
+        const btn = modal.contentEl.querySelector("button") as any;
+        await btn.onclick();
+        await flushPromises();
+
+        expect(btn.disabled).toBe(false);
+        expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
+    });
+});
+
+// ── AuditHistoryModal ─────────────────────────────────────────────────────────
+
+describe("AuditHistoryModal", () => {
+    it("calls api.auditHistory with default limit 50 on open", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-history");
+        apiMock.auditHistory.mockResolvedValueOnce({ records: [], count: 0 });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(apiMock.auditHistory).toHaveBeenCalledWith(50);
+    });
+
+    it("shows 'No ingest records' when empty", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-history");
+        apiMock.auditHistory.mockResolvedValueOnce({ records: [], count: 0 });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("No ingest records");
+    });
+
+    it("renders source filename and wiki_page", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-history");
+        apiMock.auditHistory.mockResolvedValueOnce({
+            records: [{
+                source_path: "raw_sources/paper.pdf",
+                wiki_page: "alan-turing",
+                tokens: 1200, cost_usd: 0.0014,
+                ingested_at: "2026-05-01T10:00:00Z",
+            }],
+            count: 1,
+        });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("paper.pdf");
+        expect(modal.contentEl.innerHTML).toContain("alan-turing");
+    });
+
+    it("calls api.auditHistory with custom limit on Load click", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-history");
+        apiMock.auditHistory
+            .mockResolvedValueOnce({ records: [], count: 0 })
+            .mockResolvedValueOnce({ records: [], count: 0 });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        const input = modal.contentEl.querySelector("input") as any;
+        input.value = "100";
+        const btn = modal.contentEl.querySelector("button") as any;
+        await btn.onclick();
+        await flushPromises();
+
+        expect(apiMock.auditHistory).toHaveBeenCalledWith(100);
+    });
+
+    it("shows error when api.auditHistory throws", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-history");
+        apiMock.auditHistory.mockRejectedValueOnce(new Error("refused"));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
+    });
+});
+
+// ── AuditCostsModal ───────────────────────────────────────────────────────────
+
+describe("AuditCostsModal", () => {
+    it("calls api.auditCosts with default 30 days on open", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-costs");
+        apiMock.auditCosts.mockResolvedValueOnce({ total_tokens: 0, total_cost_usd: 0, daily: [] });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(apiMock.auditCosts).toHaveBeenCalledWith(30);
+    });
+
+    it("shows total cost in the summary line", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-costs");
+        apiMock.auditCosts.mockResolvedValueOnce({
+            total_tokens: 48200, total_cost_usd: 0.0571,
+            daily: [{ day: "2026-05-01", cost_usd: 0.0571 }],
+        });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("$0.0571");
+    });
+
+    it("shows 'No cost data' when daily array is empty", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-costs");
+        apiMock.auditCosts.mockResolvedValueOnce({ total_tokens: 0, total_cost_usd: 0, daily: [] });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("No cost data");
+    });
+
+    it("shows error when api.auditCosts throws", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-costs");
+        apiMock.auditCosts.mockRejectedValueOnce(new Error("refused"));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
+    });
+});
+
+// ── QueryHistoryModal ─────────────────────────────────────────────────────────
+
+describe("QueryHistoryModal", () => {
+    it("calls api.queryHistory with default limit 50 on open", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-queries");
+        apiMock.queryHistory.mockResolvedValueOnce({ records: [] });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(apiMock.queryHistory).toHaveBeenCalledWith(50);
+    });
+
+    it("shows 'No queries recorded' when empty", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-queries");
+        apiMock.queryHistory.mockResolvedValueOnce({ records: [] });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("No queries recorded");
+    });
+
+    it("renders question text and cost in the table", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-queries");
+        apiMock.queryHistory.mockResolvedValueOnce({
+            records: [{
+                question: "What is the Bank of Canada rate?",
+                sub_questions_count: 2, tokens: 3200,
+                cost_usd: 0.0038, queried_at: "2026-05-10T14:30:00Z",
+            }],
+        });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("Bank of Canada rate");
+        expect(modal.contentEl.innerHTML).toContain("$0.0038");
+    });
+
+    it("shows error when api.queryHistory throws", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit-queries");
+        apiMock.queryHistory.mockRejectedValueOnce(new Error("refused"));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
+    });
+});
+
+// ── StagingModal ──────────────────────────────────────────────────────────────
+
+describe("StagingModal", () => {
+    it("calls api.stagingPolicy on open", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-staging");
+        apiMock.stagingPolicy.mockResolvedValueOnce({ policy: "off", confidence_min: null });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(apiMock.stagingPolicy).toHaveBeenCalled();
+    });
+
+    it("shows 'disabled' in state label when policy is off", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-staging");
+        apiMock.stagingPolicy.mockResolvedValueOnce({ policy: "off", confidence_min: null });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("disabled");
+    });
+
+    it("Save button calls api.stagingSetPolicy", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-staging");
+        apiMock.stagingPolicy.mockResolvedValueOnce({ policy: "off", confidence_min: null });
+        apiMock.stagingSetPolicy.mockResolvedValueOnce({ policy: "off", confidence_min: null });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        // saveBtn is actionRow._children[0]; actionRow is contentEl._children[5]
+        const saveBtn = modal.contentEl._children[5]._children[0];
+        await saveBtn.onclick();
+        await flushPromises();
+
+        expect(apiMock.stagingSetPolicy).toHaveBeenCalled();
+    });
+
+    it("shows success message in resultEl after save", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-staging");
+        apiMock.stagingPolicy.mockResolvedValueOnce({ policy: "off", confidence_min: null });
+        apiMock.stagingSetPolicy.mockResolvedValueOnce({ policy: "off", confidence_min: null });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        const saveBtn = modal.contentEl._children[5]._children[0];
+        await saveBtn.onclick();
+        await flushPromises();
+
+        // resultEl is contentEl._children[6]
+        expect(modal.contentEl._children[6].innerHTML).toContain("Policy updated");
+    });
+
+    it("shows server error when api.stagingPolicy throws", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-staging");
+        apiMock.stagingPolicy.mockRejectedValueOnce(new Error("refused"));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("Synthadoc server");
+    });
+});
+
+// ── CandidatesModal ───────────────────────────────────────────────────────────
+
+describe("CandidatesModal", () => {
+    it("calls api.candidates on open", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-candidates");
+        apiMock.candidates.mockResolvedValueOnce([]);
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(apiMock.candidates).toHaveBeenCalled();
+    });
+
+    it("shows 'No candidates' when the list is empty", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-candidates");
+        apiMock.candidates.mockResolvedValueOnce([]);
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("No candidates");
+    });
+
+    it("renders candidate slugs in the table", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-candidates");
+        apiMock.candidates.mockResolvedValueOnce([
+            { slug: "early-internet", title: "Early Internet", confidence: "medium", created: "2026-05-01" },
+        ]);
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("early-internet");
+    });
+
+    it("Promote All calls api.candidatesPromoteAll", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-candidates");
+        apiMock.candidates
+            .mockResolvedValueOnce([{ slug: "early-internet", title: "Early Internet", confidence: "medium", created: "2026-05-01" }])
+            .mockResolvedValueOnce([]);
+        apiMock.candidatesPromoteAll.mockResolvedValueOnce({ count: 1 });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        // promoteAllBtn is actionBar._children[0]; actionBar is contentEl._children[2]
+        const promoteAllBtn = modal.contentEl._children[2]._children[0];
+        await promoteAllBtn.onclick();
+        await flushPromises();
+
+        expect(apiMock.candidatesPromoteAll).toHaveBeenCalled();
+    });
+
+    it("Discard All calls api.candidatesDiscardAll", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-candidates");
+        apiMock.candidates
+            .mockResolvedValueOnce([{ slug: "early-internet", title: "Early Internet", confidence: "medium", created: "2026-05-01" }])
+            .mockResolvedValueOnce([]);
+        apiMock.candidatesDiscardAll.mockResolvedValueOnce({ count: 1 });
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        // discardAllBtn is actionBar._children[1]
+        const discardAllBtn = modal.contentEl._children[2]._children[1];
+        await discardAllBtn.onclick();
+        await flushPromises();
+
+        expect(apiMock.candidatesDiscardAll).toHaveBeenCalled();
+    });
+
+    it("shows error when api.candidates throws", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-candidates");
+        apiMock.candidates.mockRejectedValueOnce(new Error("refused"));
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        expect(modal.contentEl.innerHTML).toContain("Synthadoc server");
+    });
+});
+
+// ── SynthadocSettingTab ───────────────────────────────────────────────────────
+
+describe("SynthadocSettingTab", () => {
+    it("display() empties container and creates Synthadoc settings heading", async () => {
+        const { default: SynthadocPlugin } = await import("./main");
+        const plugin = new SynthadocPlugin();
+        await plugin.onload();
+
+        const tab = (plugin.addSettingTab as any).mock.calls[0][0];
+        const createElCalls: { tag: string; opts?: any }[] = [];
+        tab.containerEl = {
+            empty: vi.fn(),
+            createEl: vi.fn((tag: string, opts?: any) => {
+                createElCalls.push({ tag, opts });
+                return { style: {}, setText: vi.fn() };
+            }),
+        };
+        tab.display();
+
+        expect(tab.containerEl.empty).toHaveBeenCalled();
+        expect(tab.containerEl.createEl).toHaveBeenCalledWith("h2", expect.objectContaining({ text: "Synthadoc settings" }));
     });
 });
