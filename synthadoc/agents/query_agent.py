@@ -282,12 +282,13 @@ class QueryAgent:
                 if _page_on_topic:
                     _pages_with_overlap += 1
 
-            # Signals 4 and 5 share a common guard: if ≥ half the candidates have
-            # dedicated on-topic coverage, the wiki covers the domain well enough
-            # that vocabulary mismatches ("expectation" absent when the wiki says
-            # "assumptions") or shallow references ("moore" mentioned once per page)
-            # should not override the positive signal from signal 3.
-            _signals_45_active = _pages_with_overlap < _n_cands // 2
+            # Signal 4 guard: if ≥ half the candidates have dedicated on-topic
+            # coverage, a term with doc_freq=0 is almost certainly a synonym
+            # mismatch ("backyard" absent when the wiki says "garden") rather than
+            # a genuine absence.  Signal 4 needs this guard; signal 5 does not —
+            # signal 5 only fires for terms with doc_freq > 0 and relies on
+            # guard B (doc_freq cap) as the sole discriminator.
+            _signal4_active = _pages_with_overlap < _n_cands // 2
 
             # Signal 4: a defining concept word is entirely absent from the wiki.
             # When a query has ≥ 2 key terms and at least one appears in zero
@@ -301,41 +302,49 @@ class QueryAgent:
             # are generic corpus words, not topic discriminators — the zero-freq term
             # is a synonym mismatch, not a true gap.
             #
-            # On-topic guard: shared with signal 5 — if coverage is already good
-            # (≥ n_cands//2 pages), vocabulary mismatches in the query do not
-            # indicate a knowledge gap.
+            # On-topic guard: if coverage is already good (≥ n_cands//2 pages),
+            # a doc_freq=0 term is likely a synonym mismatch, not a genuine absence.
             _any_term_missing = (
-                _signals_45_active
+                _signal4_active
                 and bool(_covered)
                 and len(_term_doc_freq) >= 2
                 and any(f == 0 for f in _term_doc_freq.values())
                 and max(_covered.values()) / len(candidates) <= 0.8
             )
 
-            # Signal 5: a genuinely sparse topic term never appears with meaningful
-            # frequency (≥ MIN_TERM_FREQ) in any single candidate page — AND the
-            # overall dedicated coverage is thin (fewer than half the candidates
-            # are on-topic).
-            #
-            # Guard A — on_topic_pages (shared _signals_45_active): see above.
+            # Signal 5: a specific topic term exists in the wiki but never appears
+            # with meaningful frequency (≥ MIN_TERM_FREQ) in any single candidate
+            # page — i.e. only passing references, not dedicated coverage.
             #
             # Guard B — doc_freq cap: a term appearing in ≥ ⌈n_cands/3⌉ candidates
             # is a reference term (present in the domain), not an absent concept.
             # Low doc_freq + qualifying_pages=0 is the fingerprint of a genuine gap.
+            # Guard B alone is sufficient; guard A is intentionally omitted here.
             #
-            # "quantum error correction" (gap): on_topic_pages=2/8 (guard A passes),
-            # "quantum" doc_freq=1–2 < threshold (guard B passes) → gap=True ✓
+            # Why no guard A: when on_topic_pages = n_cands//2 exactly, guard A
+            # would block signal 5 even when min_qualifying=0 for the discriminating
+            # term — this is the bug where half the pages share vocabulary (e.g.
+            # "agent", "judge") while the specific concept ("methodologies") has
+            # zero dedicated coverage.  Guard B catches that case: if the term's
+            # doc_freq is below the threshold it is genuinely absent, not just
+            # phrased differently.
             #
-            # "Moore's Law" in history-of-computing (no gap): on_topic_pages=4/8
-            # ≥ n_cands//2=4 → guard A blocks both signal 4 and signal 5 ✓
+            # "quantum error correction" (gap): "quantum" doc_freq=2 < threshold(3),
+            # qualifying=0 → gap=True ✓
+            #
+            # "Moore's Law" (no gap): "moore" doc_freq=4 ≥ threshold(3) → guard B
+            # blocks → gap=False ✓
+            #
+            # "agent-as-a-judge methodologies" (gap fixed): on_topic_pages=4/8 (was
+            # blocking guard A), "methodologie" doc_freq=1–2 < threshold(3),
+            # qualifying=0 → gap=True ✓
             _min_specific_qualifying = (
                 min(_term_qualifying_pages.values())
                 if _term_qualifying_pages else 0
             )
             _signal5_doc_freq_cap = max(2, (_n_cands + 2) // 3)
             _defining_term_absent = (
-                _signals_45_active
-                and bool(_specific)
+                bool(_specific)
                 and len(_term_doc_freq) >= 2
                 and any(
                     _term_qualifying_pages[t] == 0

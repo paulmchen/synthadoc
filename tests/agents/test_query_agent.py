@@ -1233,14 +1233,12 @@ async def test_gap_signal5_high_docfreq_reference_term_does_not_fire(tmp_wiki):
 
     'moore' appears in 4 of 8 pages (≥ threshold=3), each time as a single passing
     reference — count("moore")=1 < 2 per page → qualifying_pages("moore")=0.
-    Old signal 5 would fire (min_qualifying=0).  New signal 5 only fires when the
-    zero-qualifying term also has low doc_freq: 4 ≥ threshold(3) → no fire.
+    Signal 5 is blocked by guard B alone: doc_freq=4 ≥ threshold(3) → no fire.
+    (Guard A no longer applies to signal 5; guard B is the sole discriminator.)
 
-    Guard A (on_topic): 4 of 8 pages qualify → _pages_with_overlap=4 == n_cands//2=4,
-    so 4 < 4 is False → signal 5 blocked.  Guard B (doc_freq): "moore" doc_freq=4 ≥
-    threshold(3) → also blocked.  The 4 filler pages contain none of the query's key
-    terms, keeping hardware/design/software at 50% doc_freq (below 80% threshold) so
-    they remain as specific discriminating terms rather than being filtered as generic.
+    The 4 filler pages contain none of the query's key terms, keeping
+    hardware/design/software at 50% doc_freq (below 80% threshold) so they remain
+    as specific discriminating terms rather than being filtered as generic.
     """
     store = WikiStorage(tmp_wiki / "wiki")
     # 4 pages: "moore" appears exactly once (passing reference), but hardware/design/
@@ -1292,6 +1290,152 @@ async def test_gap_signal5_high_docfreq_reference_term_does_not_fire(tmp_wiki):
     # "moore": doc_freq=4 >= threshold(3), qualifying=0 -> signal 5 does NOT fire.
     # hardware/design/software all have qualifying_pages=4 -> signal 3 passes -> no gap.
     assert result.knowledge_gap is False
+
+
+@pytest.mark.asyncio
+async def test_gap_signal5_fires_when_on_topic_pages_equals_half_and_term_low_docfreq(tmp_wiki):
+    """Regression: signal 5 must fire when on_topic_pages = n_cands//2 exactly
+    (old guard A blocked it) and the discriminating term has low doc_freq and
+    qualifying_pages=0.
+
+    Real-world case: 'judge agent methodologies' query against a wiki that covers
+    agent/judge well but never dedicates content to 'methodologies'.
+    8 pages retrieved; 4 are on-topic for 'agent'/'judge' — exactly n_cands//2.
+
+    NOTE: the query must NOT use 'agent-as-a-judge' (hyphenated) because the
+    tokeniser turns the whole phrase into the compound key term 'agent as a judge',
+    which won't match individual words in page content and fires signal 3 instead.
+
+    Old guard A: 4 < 4 = False → blocked signal 5 → gap=False (bug).
+    Fix: guard A removed from signal 5; guard B alone applies.
+    'methodologie' doc_freq=2 < threshold(3) and qualifying=0 → gap=True ✓
+
+    Signal breakdown:
+    - Signal 1: 8 candidates ≥ 3 → no fire
+    - Signal 2: gap_score_threshold=0.01 → no fire
+    - Signal 3: on_topic_pages=4 ≥ 2 → no fire
+    - Signal 4: _signal4_active=False (4<4=False); also no term has doc_freq=0
+    - Signal 5 (fixed): guard A removed; 'methodologie' doc_freq=2 < cap(3),
+      qualifying=0 → gap=True ✓
+    """
+    store = WikiStorage(tmp_wiki / "wiki")
+    # 4 pages: 'agent' ≥ 4 times, 'judge' ≥ 3 times; 'methodologie' absent.
+    agent_judge_content = (
+        "An agent evaluates responses by acting as a judge. "
+        "The agent judge assigns numeric scores based on rubrics. "
+        "Agent-based judging provides consistent results. "
+        "The judge agent produces detailed feedback for each agent."
+    )
+    for i in range(4):
+        store.write_page(f"agent-judge-{i}", WikiPage(
+            title=f"Agent Judge {i}", tags=["llm"],
+            content=agent_judge_content,
+            status="active", confidence="high", sources=[],
+        ))
+    # 2 pages: 'methodologies' appears exactly once per page → doc_freq=2, qualifying=0.
+    for i in range(2):
+        store.write_page(f"eval-methods-{i}", WikiPage(
+            title=f"Evaluation Methods {i}", tags=["eval"],
+            content=(
+                "Various methodologies exist for benchmarking AI systems. "
+                "This page covers human review and automated scoring approaches."
+            ),
+            status="active", confidence="high", sources=[],
+        ))
+    # 2 filler pages with none of the query's key terms.
+    for i in range(2):
+        store.write_page(f"filler-{i}", WikiPage(
+            title=f"Filler {i}", tags=[],
+            content="The quick brown fox jumps over the lazy dog. Propane grills need cleaning.",
+            status="active", confidence="high", sources=[],
+        ))
+
+    all_slugs = (
+        [f"agent-judge-{i}" for i in range(4)]
+        + [f"eval-methods-{i}" for i in range(2)]
+        + [f"filler-{i}" for i in range(2)]
+    )
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    provider = AsyncMock()
+    provider.complete.side_effect = [
+        CompletionResponse(text='["What are judge agent methodologies?"]',
+                           input_tokens=5, output_tokens=5),
+        CompletionResponse(text='["agent judge evaluation overview", "llm judge benchmarks"]',
+                           input_tokens=8, output_tokens=8),
+        CompletionResponse(text="No dedicated methodology content found.", input_tokens=80, output_tokens=15),
+    ]
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.01)
+    with patch.object(agent._search, "bm25_search",
+                      return_value=_fake_results(all_slugs, score=8.0)):
+        result = await agent.query("What are judge agent methodologies?")
+
+    # Before fix: gap=False (guard A blocked signal 5 because 4 < 4 = False).
+    # After fix: gap=True ('methodologie' doc_freq=2 < cap(3), qualifying=0).
+    assert result.knowledge_gap is True
+    assert len(result.suggested_searches) >= 1
+
+
+@pytest.mark.asyncio
+async def test_gap_signal5_guard_b_still_blocks_high_docfreq_without_guard_a(tmp_wiki):
+    """Guard B must still prevent signal 5 when the discriminating term is a
+    domain reference term (doc_freq ≥ threshold) even though guard A is removed.
+
+    Same scenario as the regression test above, but 'methodologies' now appears
+    in 4 of 8 pages (each mentioning it exactly once) → doc_freq=4 ≥ threshold(3).
+    qualifying_pages=0 (never ≥ 2 in any page), so without guard B signal 5 would
+    fire.  Guard B blocks it: 4 ≥ cap(3) → no gap.
+
+    Signal breakdown:
+    - Signal 3: on_topic_pages=4 ≥ 2 → no fire
+    - Signal 5: 'methodologie' qualifying=0 BUT doc_freq=4 ≥ cap(3) → guard B
+      blocks → no fire → gap=False ✓
+    """
+    store = WikiStorage(tmp_wiki / "wiki")
+    # 4 pages: 'agent' ≥ 4 times, 'judge' ≥ 3 times; 'methodologie' absent.
+    agent_judge_content = (
+        "An agent evaluates responses by acting as a judge. "
+        "The agent judge assigns numeric scores based on rubrics. "
+        "Agent-based judging provides consistent results. "
+        "The judge agent produces detailed feedback for each agent."
+    )
+    for i in range(4):
+        store.write_page(f"agent-judge2-{i}", WikiPage(
+            title=f"Agent Judge {i}", tags=["llm"],
+            content=agent_judge_content,
+            status="active", confidence="high", sources=[],
+        ))
+    # 4 pages: 'methodologies' appears exactly once each → doc_freq=4 ≥ cap(3).
+    for i in range(4):
+        store.write_page(f"eval-ref-{i}", WikiPage(
+            title=f"Eval Reference {i}", tags=["eval"],
+            content=(
+                "Various methodologies exist for benchmarking AI systems. "
+                "This page covers human review and automated scoring approaches."
+            ),
+            status="active", confidence="high", sources=[],
+        ))
+
+    all_slugs = (
+        [f"agent-judge2-{i}" for i in range(4)]
+        + [f"eval-ref-{i}" for i in range(4)]
+    )
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    provider = AsyncMock()
+    provider.complete.side_effect = [
+        CompletionResponse(text='["What are judge agent methodologies?"]',
+                           input_tokens=5, output_tokens=5),
+        CompletionResponse(text="Agent judge evaluation overview.", input_tokens=80, output_tokens=15),
+    ]
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.01)
+    with patch.object(agent._search, "bm25_search",
+                      return_value=_fake_results(all_slugs, score=8.0)):
+        result = await agent.query("What are judge agent methodologies?")
+
+    # 'methodologie' doc_freq=4 ≥ cap(3) → guard B blocks signal 5 → no gap.
+    assert result.knowledge_gap is False
+    assert result.suggested_searches == []
 
 
 # ── CJK (Chinese / Japanese / Korean) coverage ───────────────────────────────
