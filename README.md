@@ -39,6 +39,12 @@ Synthadoc reads your raw source documents — PDFs, spreadsheets, PPTs, web page
 
 ---
 
+[![Watch the Synthadoc demo](https://img.youtube.com/vi/rIGO6zi9XQE/maxresdefault.jpg)](https://www.youtube.com/watch?v=rIGO6zi9XQE)
+
+▶ [Watch the demo on YouTube](https://www.youtube.com/watch?v=rIGO6zi9XQE)
+
+---
+
 ## Table of Contents
 
 - [Who Is It For?](#who-is-it-for)
