@@ -12,6 +12,7 @@ build/
 venv/
 node_modules/
 obsidian-plugin/node_modules/
+obsidian-plugin/coverage/
 .VSCodeCounter/
 .claude/settings.local.json
 
