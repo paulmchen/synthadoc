@@ -207,7 +207,6 @@ class Orchestrator:
             await self._queue.fail_permanent(job_id, str(e))
         except Exception as e:
             import httpx
-            import logging
             from synthadoc.errors import (
                 DomainBlockedException, DailyQuotaExhaustedException,
                 CodingToolQuotaExhaustedException,

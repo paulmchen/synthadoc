@@ -114,3 +114,62 @@ def test_scaffold_exits_when_scaffold_fails(tmp_path):
         result = runner.invoke(app, ["scaffold", "--wiki", str(wiki_dir)])
 
     assert result.exit_code != 0
+
+
+def test_scaffold_missing_wiki_dir_exits(tmp_path):
+    """scaffold exits non-zero when the wiki directory does not exist."""
+    nonexistent = tmp_path / "no-such-wiki"
+    result = runner.invoke(app, ["scaffold", "--wiki", str(nonexistent)])
+    assert result.exit_code != 0
+
+
+def test_scaffold_missing_config_exits(tmp_path):
+    """scaffold exits non-zero when config.toml is absent."""
+    wiki_dir = tmp_path / "bare-wiki"
+    (wiki_dir / "wiki").mkdir(parents=True)
+    result = runner.invoke(app, ["scaffold", "--wiki", str(wiki_dir)])
+    assert result.exit_code != 0
+
+
+def test_protected_slugs_returns_linked_existing_pages(tmp_path):
+    """_protected_slugs includes slugs that are both linked from index.md and have a wiki file."""
+    from synthadoc.cli.scaffold import _protected_slugs
+    (tmp_path / "wiki").mkdir()
+    (tmp_path / "wiki" / "index.md").write_text(
+        "# Index\n\n[[neural-networks]] and [[robotics]]\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "wiki" / "neural-networks.md").write_text("# NN\n", encoding="utf-8")
+    # robotics.md does not exist — must not be included
+    slugs = _protected_slugs(tmp_path)
+    assert "neural-networks" in slugs
+    assert "robotics" not in slugs
+
+
+def test_protected_slugs_empty_when_no_index(tmp_path):
+    """_protected_slugs returns [] when index.md is absent."""
+    from synthadoc.cli.scaffold import _protected_slugs
+    (tmp_path / "wiki").mkdir()
+    slugs = _protected_slugs(tmp_path)
+    assert slugs == []
+
+
+def test_apply_categories_stamps_headings_on_pages(tmp_path):
+    """_apply_categories reads H2 headings from index.md and stamps categories on linked pages."""
+    from synthadoc.cli.scaffold import _apply_categories
+    from synthadoc.storage.wiki import WikiStorage
+
+    wiki_dir = tmp_path / "wiki"
+    wiki_dir.mkdir()
+    (wiki_dir / "neural-networks.md").write_text(
+        "---\ntitle: Neural Networks\ntags: []\nstatus: active\n"
+        "confidence: high\ncreated: '2026-01-01'\nsources: []\n---\nContent.",
+        encoding="utf-8",
+    )
+    index_md = "# Index\n\n## Key Concepts\n- [[neural-networks]]\n"
+    updated = _apply_categories(tmp_path, index_md)
+    assert updated >= 1
+    store = WikiStorage(wiki_dir)
+    page = store.read_page("neural-networks")
+    assert page is not None
+    assert "Key Concepts" in (page.categories or [])

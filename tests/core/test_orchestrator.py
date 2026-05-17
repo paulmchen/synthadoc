@@ -174,6 +174,117 @@ async def test_vector_migration_skips_already_embedded(tmp_wiki):
 
 
 @pytest.mark.asyncio
+async def test_run_ingest_domain_blocked_skips_job(tmp_wiki):
+    """DomainBlockedException must skip the job without retrying."""
+    from synthadoc.errors import DomainBlockedException
+
+    orch = Orchestrator(wiki_root=tmp_wiki, config=load_config())
+    await orch.init()
+    job_id = await orch._queue.enqueue("ingest", {"source": "https://blocked.com/page", "force": False})
+
+    exc = DomainBlockedException(domain="blocked.com", url="https://blocked.com/page", status_code=403)
+    mock_agent = MagicMock()
+    mock_agent.ingest = AsyncMock(side_effect=exc)
+    with patch("synthadoc.core.orchestrator.make_provider", return_value=MagicMock()), \
+         patch("synthadoc.agents.ingest_agent.IngestAgent", return_value=mock_agent):
+        await orch._run_ingest(job_id, "https://blocked.com/page", auto_confirm=True)
+
+    from synthadoc.core.queue import JobStatus
+    skipped = await orch._queue.list_jobs(status=JobStatus.SKIPPED)
+    assert any(j.id == job_id for j in skipped)
+
+
+@pytest.mark.asyncio
+async def test_run_ingest_daily_quota_exhausted_fails_permanent(tmp_wiki):
+    """DailyQuotaExhaustedException must permanently fail the job (no retry)."""
+    from synthadoc.errors import DailyQuotaExhaustedException
+
+    orch = Orchestrator(wiki_root=tmp_wiki, config=load_config())
+    await orch.init()
+    job_id = await orch._queue.enqueue("ingest", {"source": "https://example.com", "force": False})
+
+    exc = DailyQuotaExhaustedException(provider="anthropic")
+    mock_agent = MagicMock()
+    mock_agent.ingest = AsyncMock(side_effect=exc)
+    with patch("synthadoc.core.orchestrator.make_provider", return_value=MagicMock()), \
+         patch("synthadoc.agents.ingest_agent.IngestAgent", return_value=mock_agent):
+        await orch._run_ingest(job_id, "https://example.com", auto_confirm=True)
+
+    from synthadoc.core.queue import JobStatus
+    failed = await orch._queue.list_jobs(status=JobStatus.FAILED)
+    assert any(j.id == job_id for j in failed)
+
+
+@pytest.mark.asyncio
+async def test_run_ingest_coding_tool_quota_fails_permanent(tmp_wiki):
+    """CodingToolQuotaExhaustedException must permanently fail the job."""
+    from synthadoc.errors import CodingToolQuotaExhaustedException
+
+    orch = Orchestrator(wiki_root=tmp_wiki, config=load_config())
+    await orch.init()
+    job_id = await orch._queue.enqueue("ingest", {"source": "https://example.com", "force": False})
+
+    exc = CodingToolQuotaExhaustedException("claude-code")
+    mock_agent = MagicMock()
+    mock_agent.ingest = AsyncMock(side_effect=exc)
+    with patch("synthadoc.core.orchestrator.make_provider", return_value=MagicMock()), \
+         patch("synthadoc.agents.ingest_agent.IngestAgent", return_value=mock_agent):
+        await orch._run_ingest(job_id, "https://example.com", auto_confirm=True)
+
+    from synthadoc.core.queue import JobStatus
+    failed = await orch._queue.list_jobs(status=JobStatus.FAILED)
+    assert any(j.id == job_id for j in failed)
+
+
+@pytest.mark.asyncio
+async def test_run_ingest_connect_error_retries_job(tmp_wiki):
+    """httpx.ConnectError must re-queue the job for retry (PENDING)."""
+    orch = Orchestrator(wiki_root=tmp_wiki, config=load_config())
+    await orch.init()
+    job_id = await orch._queue.enqueue("ingest", {"source": "https://unreachable.com", "force": False})
+
+    mock_agent = MagicMock()
+    mock_agent.ingest = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
+    with patch("synthadoc.core.orchestrator.make_provider", return_value=MagicMock()), \
+         patch("synthadoc.agents.ingest_agent.IngestAgent", return_value=mock_agent):
+        await orch._run_ingest(job_id, "https://unreachable.com", auto_confirm=True)
+
+    from synthadoc.core.queue import JobStatus
+    pending = await orch._queue.list_jobs(status=JobStatus.PENDING)
+    assert any(j.id == job_id for j in pending)
+
+
+@pytest.mark.asyncio
+async def test_run_ingest_environment_error_fails_permanent(tmp_wiki):
+    """EnvironmentError (missing provider binary) must permanently fail the job."""
+    orch = Orchestrator(wiki_root=tmp_wiki, config=load_config())
+    await orch.init()
+    job_id = await orch._queue.enqueue("ingest", {"source": "file.pdf", "force": False})
+
+    mock_agent = MagicMock()
+    mock_agent.ingest = AsyncMock(side_effect=EnvironmentError("binary not found"))
+    with patch("synthadoc.core.orchestrator.make_provider", return_value=MagicMock()), \
+         patch("synthadoc.agents.ingest_agent.IngestAgent", return_value=mock_agent):
+        await orch._run_ingest(job_id, "file.pdf", auto_confirm=True)
+
+    from synthadoc.core.queue import JobStatus
+    failed = await orch._queue.list_jobs(status=JobStatus.FAILED)
+    assert any(j.id == job_id for j in failed)
+
+
+@pytest.mark.asyncio
+async def test_resume_returns_job_count(tmp_wiki):
+    """resume() must re-queue all pending jobs and return the count."""
+    orch = Orchestrator(wiki_root=tmp_wiki, config=load_config())
+    await orch.init()
+    await orch._queue.enqueue("ingest", {"source": "file1.md", "force": False})
+    await orch._queue.enqueue("ingest", {"source": "file2.md", "force": False})
+
+    count = await orch.resume()
+    assert count >= 2
+
+
+@pytest.mark.asyncio
 async def test_vector_migration_noop_when_vector_disabled(tmp_wiki):
     """_run_vector_migration must be a no-op when search.vector=False."""
     from unittest.mock import patch
