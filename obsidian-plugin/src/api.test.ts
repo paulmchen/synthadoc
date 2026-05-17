@@ -328,6 +328,152 @@ describe("api.candidateDiscard", () => {
     });
 });
 
+describe("api.retryJob", () => {
+    it("POSTs to /jobs/{jobId}/retry", async () => {
+        mockResponse({ job_id: "abc-123", status: "pending" });
+        await api.retryJob("abc-123");
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/jobs/abc-123/retry", method: "POST" })
+        );
+    });
+});
+
+describe("api.deleteJob", () => {
+    it("DELETEs /jobs/{jobId}", async () => {
+        mockResponse({ deleted: "abc-123" });
+        await api.deleteJob("abc-123");
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/jobs/abc-123", method: "DELETE" })
+        );
+    });
+});
+
+describe("api.purgeJobs", () => {
+    it("DELETEs /jobs?older_than with specified days", async () => {
+        mockResponse({ purged: 5 });
+        await api.purgeJobs(7);
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/jobs?older_than=7", method: "DELETE" })
+        );
+    });
+});
+
+describe("api.scaffold", () => {
+    it("POSTs to /jobs/scaffold with domain in body", async () => {
+        mockResponse({ job_id: "scaffold-job-1" });
+        await api.scaffold("Robotics");
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({
+                url: "http://127.0.0.1:7070/jobs/scaffold",
+                method: "POST",
+                body: JSON.stringify({ domain: "Robotics" }),
+            })
+        );
+    });
+});
+
+describe("api.job", () => {
+    it("GETs /jobs/{jobId} and returns job detail", async () => {
+        mockResponse({ job_id: "abc-123", status: "completed", source: "paper.pdf" });
+        const r = await api.job("abc-123") as any;
+        expect(r.job_id).toBe("abc-123");
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/jobs/abc-123", method: "GET" })
+        );
+    });
+});
+
+describe("api.auditHistory", () => {
+    it("GETs /audit/history with default limit of 50", async () => {
+        mockResponse([]);
+        await api.auditHistory();
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/audit/history?limit=50", method: "GET" })
+        );
+    });
+
+    it("GETs /audit/history with custom limit", async () => {
+        mockResponse([]);
+        await api.auditHistory(10);
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/audit/history?limit=10" })
+        );
+    });
+});
+
+describe("api.auditCosts", () => {
+    it("GETs /audit/costs with default 30-day window", async () => {
+        mockResponse({ total_usd: 1.23 });
+        await api.auditCosts();
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/audit/costs?days=30", method: "GET" })
+        );
+    });
+
+    it("GETs /audit/costs with custom days", async () => {
+        mockResponse({ total_usd: 0.45 });
+        await api.auditCosts(7);
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/audit/costs?days=7" })
+        );
+    });
+});
+
+describe("api.queryHistory", () => {
+    it("GETs /audit/queries with default limit of 50", async () => {
+        mockResponse([]);
+        await api.queryHistory();
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/audit/queries?limit=50", method: "GET" })
+        );
+    });
+
+    it("GETs /audit/queries with custom limit", async () => {
+        mockResponse([]);
+        await api.queryHistory(20);
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/audit/queries?limit=20" })
+        );
+    });
+});
+
+describe("api.auditEvents", () => {
+    it("GETs /audit/events with default limit of 100", async () => {
+        mockResponse([]);
+        await api.auditEvents();
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/audit/events?limit=100", method: "GET" })
+        );
+    });
+
+    it("GETs /audit/events with custom limit", async () => {
+        mockResponse([]);
+        await api.auditEvents(25);
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ url: "http://127.0.0.1:7070/audit/events?limit=25" })
+        );
+    });
+});
+
+describe("api.ingest with maxResults", () => {
+    it("includes max_results in body when maxResults is provided", async () => {
+        mockResponse({ job_id: "job-456" });
+        await api.ingest("paper.pdf", 20);
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({
+                body: JSON.stringify({ source: "paper.pdf", max_results: 20 }),
+            })
+        );
+    });
+
+    it("omits max_results from body when maxResults is not provided", async () => {
+        mockResponse({ job_id: "job-789" });
+        await api.ingest("paper.pdf");
+        const call = mockRequestUrl.mock.calls[0][0];
+        expect(JSON.parse(call.body)).not.toHaveProperty("max_results");
+    });
+});
+
 describe("api.contextBuild", () => {
     it("POSTs to /context/build with goal and token_budget", async () => {
         mockResponse({

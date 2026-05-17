@@ -4,10 +4,12 @@
   "scripts": {
     "build": "node esbuild.config.mjs production",
     "dev": "node esbuild.config.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@vitest/coverage-v8": "^4.1.4",
     "builtin-modules": "^3.3.0",
     "esbuild": "^0.28.0",
     "obsidian": "latest",
