@@ -293,6 +293,10 @@ class IngestModal extends Modal {
                         else if (phase === "found_urls") {
                             const total = job.progress?.total ?? 0;
                             statusEl.setText(`Found ${total} URL${total !== 1 ? "s" : ""} — ingesting…`);
+                        } else if (job.status === "pending") {
+                            statusEl.setText("⏳ Queued — waiting for worker (other jobs are running)…");
+                        } else if (job.status === "in_progress") {
+                            statusEl.setText("⏳ Starting web search…");
                         }
                     }
                     if (childJobIds.length > 0) {
