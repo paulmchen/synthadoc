@@ -562,7 +562,7 @@ Note: BM25 IDF requires a minimum of 3 documents in the corpus for non-zero scor
 |--------|------|---------|----------|
 | `POST` | `/jobs/ingest` | `{source: str}` | `{job_id: str}` |
 | `POST` | `/jobs/lint` | `{scope?: str}` | `{job_id: str}` |
-| `GET` | `/jobs` | `?status=<filter>` | `[Job]` |
+| `GET` | `/jobs` | `?status=<filter>&sort=<col>&order=<dir>` | `[Job]` |
 | `GET` | `/jobs/{id}` | — | `Job` |
 | `DELETE` | `/jobs/{id}` | — | `{deleted: job_id}` |
 | `GET` | `/query` | `?q=<question>` | `{answer: str, citations: [str]}` |
@@ -570,6 +570,16 @@ Note: BM25 IDF requires a minimum of 3 documents in the corpus for non-zero scor
 | `GET` | `/status` | — | `WikiStatus` |
 | `GET` | `/lint/report` | — | `LintReport` |
 | `GET` | `/health` | — | `{status: "ok"}` |
+
+**`GET /jobs` query parameters:**
+
+| Parameter | Values | Default | Description |
+|-----------|--------|---------|-------------|
+| `status` | `pending` \| `in_progress` \| `completed` \| `failed` \| `skipped` \| `dead` \| `cancelled` | _(all)_ | Filter to one status |
+| `sort` | `created_at` \| `status` \| `operation` | `created_at` | Column to sort by |
+| `order` | `asc` \| `desc` | `asc` | Sort direction |
+
+**Operation types:** `ingest` (file/URL/web-search ingest jobs) and `lint` (lint pass jobs).
 
 **Job object:**
 
@@ -634,15 +644,12 @@ Reload the plugin (toggle off/on) after copying — a full Obsidian restart is n
 
 | Command | Behaviour |
 |---------|-----------|
-| `Synthadoc: Ingest current file as source` | Queues the active file. When no file is active, opens a fuzzy-search file picker (SuggestModal) scoped to `raw_sources/` |
-| `Synthadoc: Ingest all sources` | Queues every supported file under the configured raw sources folder |
-| `Synthadoc: Ingest from URL...` | Modal with URL input; queues a web URL for ingest |
-| `Synthadoc: Query wiki...` | Responsive modal (min 520px, 60vw, max 860px); markdown-rendered answer with citation footer; stays open when clicking elsewhere — must be closed explicitly via ✕ or Escape |
-| `Synthadoc: Lint report` | Modal showing contradicted pages and orphans with remediation hints |
-| `Synthadoc: Run lint` | Queues a lint job; shows a notice with contradiction + orphan counts when complete |
-| `Synthadoc: Run lint with auto-resolve` | Same as above but passes `auto_resolve: true` — LLM resolves contradictions automatically when confidence ≥ threshold |
-| `Synthadoc: List jobs...` | Modal with status-filter dropdown, results table, error details |
-| `Synthadoc: Web search...` | Live-polling modal — type a plain topic; set max results (1–50, default 20) and poll interval (500–10000 ms, default 2000 ms); shows phase text, pages list, and URL errors in real time as fan-out jobs complete |
+| `Synthadoc: Ingest...` | Tabbed modal with four ingest modes. **From URL** — paste any URL and queue it for ingest; polls job status live. **All sources in folder** — queues every supported file in the configured raw sources folder. **Pick files** — click **Browse…** to select a folder from the OS picker, then **Scan** to list supported files; wiki sub-folder contents and common system files (`log.md`, `routing.md`, `agents.md`, `readme.md`, `dashboard.md`, `index.md`, `overview.md`, `claude.md`) are excluded automatically and the exclusion count is displayed; select files and click **Ingest selected**. **Web search** — type a topic, set max results and poll interval; polls live showing phase text, pages list, and per-URL errors until all fan-out jobs settle. |
+| `Synthadoc: Ingest: web search...` | Standalone live-polling web search modal — type a topic; set max results (1–50, default 20) and poll interval (500–10000 ms, default 2000 ms); shows phase text, pages list, and URL errors as fan-out jobs complete. `Ctrl/Cmd+Enter` to submit. |
+| `Synthadoc: Query: ask the wiki...` | Responsive modal (min 520px, 60vw, max 860px); markdown-rendered answer with citation footer; stays open when clicking elsewhere — must be closed explicitly via ✕ or Escape |
+| `Synthadoc: Lint: report` | Modal showing contradicted pages and orphans with remediation hints |
+| `Synthadoc: Lint: run...` | Modal with **Auto-resolve** checkbox. Queues a lint job; polls progress live; reports contradiction + orphan counts when complete. Tick the checkbox to automatically resolve contradictions at ≥ 85% confidence. |
+| `Synthadoc: Jobs: list...` | Modal with status-filter checkboxes (pending, in_progress, completed, failed, skipped, dead, cancelled), sortable results table (click **Status**, **Operation**, or **Created** headers to sort ascending; click again to reverse; ▲/▼ indicates active sort, ⇅ indicates unsorted; default: newest first), error detail rows for failed/dead jobs, pagination (25 per page), auto-refresh countdown, and a **Delete selected** button for completed/failed/dead/skipped/cancelled jobs |
 | `Synthadoc: Routing: manage ROUTING.md...` | Modal panel with three buttons. **Init** creates ROUTING.md from the current index.md branch structure (enabled only when ROUTING.md does not exist). **Validate** reports dangling slugs — pages listed in ROUTING.md that no longer exist in the wiki (enabled only when ROUTING.md exists). **Clean** removes dangling slugs from ROUTING.md (enabled only when ROUTING.md exists). After each action the result appears inline with per-entry `[Branch] [[slug]]` detail rows. |
 | `Synthadoc: Staging: manage staging policy...` | Modal panel showing the current policy state. A segmented control switches between **Off**, **All**, and **Threshold**. When **Threshold** is selected, a second segmented control sets the minimum confidence (**High** / **Medium** / **Low**). A **Save** button persists the change via the HTTP API and updates the inline status. A footer link opens the Candidates modal directly. |
 | `Synthadoc: Candidates: review candidate pages...` | Paginated table (50 per page) of all staged candidate pages. Each row shows the slug, a colour-coded confidence badge, and a checkbox. **Promote All** and **Discard All** act on every candidate; **Promote Selected** and **Discard Selected** act on checked rows. The table reloads automatically after each action. A footer link opens the Staging policy modal. |
@@ -694,7 +701,7 @@ synthadoc
 │   ├── run [-w wiki] [--scope contradictions|orphans|all] [--auto-resolve]
 │   └── report [-w wiki]
 ├── jobs
-│   ├── list [-w wiki] [--status pending|completed|failed|dead]
+│   ├── list [-w wiki] [--status pending|in_progress|completed|failed|skipped|dead|cancelled] [--sort created_at|status|operation] [--order asc|desc]
 │   ├── status <id> [-w wiki]
 │   ├── retry <id> [-w wiki]
 │   ├── delete <id> [-w wiki]

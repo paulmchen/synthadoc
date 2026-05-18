@@ -665,13 +665,25 @@ synthadoc lint report -w my-wiki
 ### Monitoring jobs
 
 ```bash
-# List all jobs (most recent first)
+# List all jobs (oldest first by default)
 synthadoc jobs list -w my-wiki
 
-# Filter by status
+# Sort column — created_at (default) | status | operation
+synthadoc jobs list --sort created_at -w my-wiki   # oldest first (default)
+synthadoc jobs list --sort status -w my-wiki        # alphabetical by status
+synthadoc jobs list --sort operation -w my-wiki     # alphabetical by operation type
+
+# Sort direction — asc (default) | desc
+synthadoc jobs list --order desc -w my-wiki                     # newest first
+synthadoc jobs list --sort status --order desc -w my-wiki       # status Z→A
+
+# Filter by status — pending | in_progress | completed | failed | skipped | dead | cancelled
 synthadoc jobs list --status pending -w my-wiki
 synthadoc jobs list --status failed -w my-wiki
 synthadoc jobs list --status dead -w my-wiki
+
+# Combine sort, order, and status freely
+synthadoc jobs list --status failed --sort created_at --order desc -w my-wiki
 
 # Single job detail
 synthadoc jobs status <job-id> -w my-wiki

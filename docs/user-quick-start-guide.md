@@ -360,7 +360,7 @@ synthadoc jobs list --status pending
 synthadoc jobs list --status completed
 ```
 
-Or from Obsidian: Command Palette → `Synthadoc: Jobs: list...` → use the filter dropdown.
+Or from Obsidian: Command Palette → `Synthadoc: Jobs: list...` → use the status-filter checkboxes. The table defaults to newest jobs first; click **Status**, **Operation**, or **Created** headers to re-sort.
 
 ![Obsidian Jobs list modal with status filter dropdown](png/synthadoc-jobs-modal.png)
 
@@ -1085,12 +1085,10 @@ All commands are accessible via the Command Palette (`Ctrl/Cmd+P` → type `Synt
 ### Ingest
 
 
-| Command                                    | What it does                                                                                                                                                                                                                       |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Synthadoc: Ingest: current file`          | Ingests the active note with live progress polling. If no file is open, shows a file picker scoped to`raw_sources/`.                                                                                                               |
-| `Synthadoc: Ingest: all sources in folder` | Scans the`raw_sources` folder and queues every supported file for ingestion.                                                                                                                                                       |
-| `Synthadoc: Ingest: from URL...`           | Modal — paste any URL and queue it for fetch and ingestion. Polls job status live and shows progress until the job settles.                                                                                                       |
-| `Synthadoc: Ingest: web search...`         | Live-polling modal — type a topic, set max results (1–50, default 20) and poll interval (500–10000 ms, default 2000 ms). Shows phase text, live pages list, and URL errors as fan-out jobs complete.`Ctrl/Cmd+Enter` to submit. |
+| Command                            | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Synthadoc: Ingest...`             | Tabbed modal with four ingest modes: **From URL** (paste a URL, polls live until complete), **All sources in folder** (queues every supported file in `raw_sources/`), **Pick files** (click **Browse…** to choose a folder, click **Scan** to list supported files — `wiki/` sub-folder contents and system files such as `log.md`, `routing.md`, `agents.md`, `readme.md`, `dashboard.md`, `index.md`, `overview.md`, and `claude.md` are excluded automatically with a count shown — then select files and click **Ingest selected**), and **Web search** (type a topic, set max results and poll interval, polls live). |
+| `Synthadoc: Ingest: web search...` | Standalone live-polling modal — type a topic, set max results (1–50, default 20) and poll interval (500–10000 ms, default 2000 ms). Shows phase text, live pages list, and URL errors as fan-out jobs complete. `Ctrl/Cmd+Enter` to submit.                                                                                                                                                                                                                |
 
 ### Query
 
@@ -1110,11 +1108,11 @@ All commands are accessible via the Command Palette (`Ctrl/Cmd+P` → type `Synt
 ### Jobs
 
 
-| Command                                         | What it does                                                                                                                   |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `Synthadoc: Jobs: list...`                      | Job table with status-filter dropdown (pending, in_progress, completed, failed, skipped, dead).                                |
-| `Synthadoc: Jobs: retry failed or dead jobs...` | Multi-select table of all failed and dead jobs; all checkboxes pre-ticked. Polls progress live until all selected jobs settle. |
-| `Synthadoc: Jobs: purge old completed/dead...`  | Removes completed and dead jobs older than N days (default: 7).                                                                |
+| Command                                         | What it does                                                                                                                                                                                                                                                                                                                                              |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Synthadoc: Jobs: list...`                      | Job table with status-filter checkboxes (pending, in_progress, completed, failed, skipped, dead, cancelled). Defaults to newest jobs first. Click **Status**, **Operation**, or **Created** column headers to sort — ▲ ascending, ▼ descending, ⇅ unsorted; click again to toggle direction. Supported operation types: `ingest`, `lint`. Auto-refreshes every 10 s (configurable). Paginated at 25 per page. Error details shown inline for failed/dead jobs. |
+| `Synthadoc: Jobs: retry failed or dead jobs...` | Multi-select table of all failed and dead jobs; all checkboxes pre-ticked. Polls progress live until all selected jobs settle.                                                                                                                                                                                                            |
+| `Synthadoc: Jobs: purge old completed/dead...`  | Removes completed and dead jobs older than N days (default: 7).                                                                                                                                                                                                                                                                          |
 
 > **Tip — cancelling a bad batch:** `synthadoc jobs cancel -w <wiki> --yes` marks every
 > pending job as `skipped` immediately. Follow up with `synthadoc jobs purge` to remove
