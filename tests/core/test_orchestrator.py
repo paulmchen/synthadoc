@@ -273,6 +273,73 @@ async def test_run_ingest_environment_error_fails_permanent(tmp_wiki):
 
 
 @pytest.mark.asyncio
+async def test_run_ingest_sources_txt_is_expanded_into_child_jobs(tmp_wiki):
+    """A sources.txt whose every content line is a URL/intent/path fans out into one job each."""
+    from synthadoc.core.orchestrator import Orchestrator
+    from synthadoc.config import load_config
+    from synthadoc.core.queue import JobStatus
+
+    orch = Orchestrator(wiki_root=tmp_wiki, config=load_config())
+    await orch.init()
+
+    manifest = tmp_wiki / "sources.txt"
+    manifest.write_text(
+        "# batch ingest\n"
+        "https://example.com/page-one\n"
+        "https://example.com/page-two\n"
+        "search for: history of computing\n",
+        encoding="utf-8",
+    )
+    job_id = await orch._queue.enqueue("ingest", {"source": str(manifest), "force": False})
+    await orch._run_ingest(job_id, str(manifest), auto_confirm=True)
+
+    from synthadoc.core.queue import JobStatus
+    completed = await orch._queue.list_jobs(status=JobStatus.COMPLETED)
+    parent = next((j for j in completed if j.id == job_id), None)
+    assert parent is not None, "parent job should be completed"
+    assert parent.result["child_sources_enqueued"] == 3
+    assert len(parent.result["child_job_ids"]) == 3
+
+    pending = await orch._queue.list_jobs(status=JobStatus.PENDING)
+    assert len(pending) == 3
+    sources = {j.payload["source"] for j in pending}
+    assert "https://example.com/page-one" in sources
+    assert "https://example.com/page-two" in sources
+    assert "search for: history of computing" in sources
+
+
+@pytest.mark.asyncio
+async def test_run_ingest_plain_txt_is_not_treated_as_manifest(tmp_wiki):
+    """A .txt file containing prose (not all-URL/intent lines) goes through normal ingest."""
+    from synthadoc.core.orchestrator import Orchestrator
+    from synthadoc.config import load_config
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from synthadoc.agents.ingest_agent import IngestResult
+
+    orch = Orchestrator(wiki_root=tmp_wiki, config=load_config())
+    await orch.init()
+
+    prose = tmp_wiki / "notes.txt"
+    prose.write_text(
+        "The history of computing spans several decades.\n"
+        "Key figures include Turing, Von Neumann, and Dijkstra.\n",
+        encoding="utf-8",
+    )
+    job_id = await orch._queue.enqueue("ingest", {"source": str(prose), "force": False})
+
+    mock_agent = MagicMock()
+    normal_result = IngestResult(source=str(prose))
+    normal_result.pages_created = ["computing-history"]
+    mock_agent.ingest = AsyncMock(return_value=normal_result)
+
+    with patch("synthadoc.core.orchestrator.make_provider", return_value=MagicMock()), \
+         patch("synthadoc.agents.ingest_agent.IngestAgent", return_value=mock_agent):
+        await orch._run_ingest(job_id, str(prose), auto_confirm=True)
+
+    mock_agent.ingest.assert_called_once()  # went through normal ingest, not manifest expansion
+
+
+@pytest.mark.asyncio
 async def test_resume_returns_job_count(tmp_wiki):
     """resume() must re-queue all pending jobs and return the count."""
     orch = Orchestrator(wiki_root=tmp_wiki, config=load_config())

@@ -23,6 +23,58 @@ from synthadoc.storage.wiki import WikiStorage
 
 logger = logging.getLogger(__name__)
 
+# Intent prefixes accepted on manifest lines (matched case-insensitively).
+_MANIFEST_INTENT_PREFIXES = (
+    "search for:", "find on the web:", "look up:", "web search:",
+    "browse:", "fetch url:", "web page:", "website:",
+)
+
+
+def _read_manifest(path: Path) -> list[str] | None:
+    """Return source lines from a .txt manifest, or None if the file is not a manifest.
+
+    A file qualifies as a manifest when every non-empty, non-comment line is one of:
+    - an http/https URL
+    - a recognised intent phrase (e.g. "search for: …")
+    - a file path that exists on disk (resolved relative to the manifest's directory)
+
+    A file with no content lines does NOT qualify (avoid treating empty .txt as manifest).
+    """
+    try:
+        raw_lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return None
+
+    content_lines = [l.strip() for l in raw_lines if l.strip() and not l.strip().startswith("#")]
+    if not content_lines:
+        return None
+
+    base = path.parent
+    for line in content_lines:
+        lower = line.lower()
+        if line.startswith(("http://", "https://")):
+            continue
+        if any(lower.startswith(p) for p in _MANIFEST_INTENT_PREFIXES):
+            continue
+        candidate = Path(line)
+        resolved = candidate if candidate.is_absolute() else (base / candidate)
+        if resolved.exists():
+            continue
+        return None  # line is not a URL, intent, or valid path — not a manifest
+
+    return content_lines
+
+
+def _resolve_manifest_source(line: str, base: Path) -> str:
+    """Convert a manifest line to the absolute form expected by the ingest pipeline."""
+    lower = line.lower()
+    if line.startswith(("http://", "https://")) or any(
+        lower.startswith(p) for p in _MANIFEST_INTENT_PREFIXES
+    ):
+        return line  # URLs and intent phrases pass through unchanged
+    candidate = Path(line)
+    return str(candidate if candidate.is_absolute() else (base / candidate).resolve())
+
 
 class Orchestrator:
     def __init__(self, wiki_root: Path, config: Optional[Config] = None) -> None:
@@ -130,6 +182,32 @@ class Orchestrator:
             # take effect without a server restart.
             _cfg_path = self._root / ".synthadoc" / "config.toml"
             cfg = load_config(project_config=_cfg_path) if _cfg_path.exists() else self._cfg
+
+            # Manifest expansion: a .txt file where every line is a URL / intent / path
+            # is treated as a batch source list — fan out into one child job per line.
+            _src_path = Path(source) if not source.startswith(("http://", "https://")) else None
+            if _src_path and _src_path.suffix.lower() == ".txt" and _src_path.exists():
+                _manifest_lines = _read_manifest(_src_path)
+                if _manifest_lines is not None:
+                    await self._queue.update_progress(job_id, {"phase": "expanding_manifest"})
+                    _resolved = [_resolve_manifest_source(l, _src_path.parent)
+                                 for l in _manifest_lines]
+                    if max_results is not None:
+                        _resolved = _resolved[:max_results]
+                    child_ids = await self._queue.enqueue_many(
+                        "ingest",
+                        [{"source": s, "force": force} for s in _resolved],
+                    )
+                    await self._queue.complete(job_id, result={
+                        "pages_created": [], "pages_updated": [], "pages_flagged": [],
+                        "child_sources_enqueued": len(_resolved),
+                        "child_job_ids": child_ids,
+                        "tokens_used": 0, "cost_usd": 0.0,
+                        "manifest": str(_src_path),
+                    })
+                    logger.info("Manifest %s expanded into %d child jobs", _src_path, len(_resolved))
+                    return
+
             _is_web_search = bool(_WEB_SEARCH_RE.match(source))
             if _is_web_search:
                 await self._queue.update_progress(job_id, {"phase": "searching"})
