@@ -8,6 +8,12 @@ const SUPPORTED_EXTENSIONS = new Set([
     "png", "jpg", "jpeg", "webp", "gif", "tiff",
 ]);
 
+// Filenames excluded from Pick-files scan: generated wiki output and known system/config files.
+const PICK_FILES_EXCLUDED_NAMES = new Set([
+    "log.md", "routing.md", "agents.md", "readme.md",
+    "dashboard.md", "index.md", "overview.md", "claude.md",
+]);
+
 interface SynthadocSettings {
     serverUrl: string;
     rawSourcesFolder: string;
@@ -636,12 +642,33 @@ class IngestModal extends Modal {
             if (!selectedAbsPath) return;  // Browse has not been used yet
             const folder = selectedFolder.trim().replace(/\/$/, "");
             // folder is "" when the vault root itself was selected — matches all vault files
+            let wikiExcluded = 0;
+            let systemExcluded = 0;
             const files = (this.app.vault.getFiles() as any[]).filter((f: any) => {
                 if (folder && !f.path.startsWith(folder + "/")) return false;
-                return SUPPORTED_EXTENSIONS.has((f.extension ?? "").toLowerCase());
+                if (!SUPPORTED_EXTENSIONS.has((f.extension ?? "").toLowerCase())) return false;
+                // Exclude files inside any wiki/ subfolder (those are generated wiki pages)
+                const relative = folder ? f.path.slice(folder.length + 1) : f.path;
+                if (relative.startsWith("wiki/") || relative.includes("/wiki/")) {
+                    wikiExcluded++;
+                    return false;
+                }
+                // Exclude known system / config filenames
+                if (PICK_FILES_EXCLUDED_NAMES.has((f.name ?? "").toLowerCase())) {
+                    systemExcluded++;
+                    return false;
+                }
+                return true;
             });
             renderFiles(files);
-            statusEl.innerHTML = "";
+            const parts: string[] = [];
+            if (wikiExcluded > 0) parts.push(`${wikiExcluded} wiki page${wikiExcluded !== 1 ? "s" : ""}`);
+            if (systemExcluded > 0) parts.push(`${systemExcluded} system file${systemExcluded !== 1 ? "s" : ""}`);
+            if (parts.length > 0) {
+                statusEl.innerHTML = `<span style="color:var(--text-muted);font-size:12px">ℹ Excluded ${parts.join(" and ")} — not source files</span>`;
+            } else {
+                statusEl.innerHTML = "";
+            }
             jobsLink.style.display = "none";
         };
 

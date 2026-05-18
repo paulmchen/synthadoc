@@ -804,6 +804,50 @@ describe("IngestModal Pick-files tab", () => {
         expect(ingestBtn.disabled).toBe(false);
         expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
     });
+
+    it("excludes wiki/ subfolder files and system files, shows exclusion message", async () => {
+        const { ModalClass } = await getModal("synthadoc-ingest",
+            makeVault([
+                { path: "src/notes/a.pdf",      extension: "pdf" },           // included
+                { path: "src/wiki/page.md",      extension: "md",  name: "page.md" },      // excluded: wiki/
+                { path: "src/sub/wiki/deep.md",  extension: "md",  name: "deep.md" },      // excluded: /wiki/
+                { path: "src/log.md",            extension: "md",  name: "log.md" },       // excluded: system
+                { path: "src/README.md",         extension: "md",  name: "README.md" },    // excluded: system
+                { path: "src/routing.md",        extension: "md",  name: "routing.md" },   // excluded: system
+                { path: "src/notes/b.txt",       extension: "txt", name: "b.txt" },        // included
+            ])
+        );
+        const modal = new ModalClass();
+        modal.onOpen();
+        const { browseBtn, scanBtn, listEl } = getPickFiles(modal);
+        // also grab statusEl: panel._children[4]
+        const statusEl = modal.contentEl._children[5]._children[4];
+        mockBrowse("src");
+        await browseBtn.onclick();
+        scanBtn.onclick();
+
+        expect(listEl._children.length).toBe(2); // a.pdf + b.txt
+        expect(statusEl.innerHTML).toContain("wiki page");
+        expect(statusEl.innerHTML).toContain("system file");
+    });
+
+    it("shows no exclusion message when nothing is filtered", async () => {
+        const { ModalClass } = await getModal("synthadoc-ingest",
+            makeVault([
+                { path: "src/a.pdf", extension: "pdf" },
+                { path: "src/b.txt", extension: "txt" },
+            ])
+        );
+        const modal = new ModalClass();
+        modal.onOpen();
+        const { browseBtn, scanBtn } = getPickFiles(modal);
+        const statusEl = modal.contentEl._children[5]._children[4];
+        mockBrowse("src");
+        await browseBtn.onclick();
+        scanBtn.onclick();
+
+        expect(statusEl.innerHTML).toBe("");
+    });
 });
 
 describe("RetryJobModal", () => {
