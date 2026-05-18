@@ -273,6 +273,10 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
         worker = asyncio.create_task(_worker_loop(orch))
         yield
         worker.cancel()
+        try:
+            await worker
+        except asyncio.CancelledError:
+            pass
 
     app = FastAPI(title="synthadoc", version=synthadoc.__version__, lifespan=lifespan)
     app.add_middleware(ContentSizeLimitMiddleware, max_bytes=max_body_bytes)
