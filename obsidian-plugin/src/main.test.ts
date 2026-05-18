@@ -188,22 +188,23 @@ describe("IngestModal All-sources tab", () => {
         },
     });
 
-    // contentEl children: [0]=h3, [1]=tabBar, [2]=URL panel, [3]=All-sources panel, [4]=Pick-files panel
+    // contentEl children: [0]=h3, [1]=tabBar, [2]=WS panel, [3]=URL panel, [4]=All-sources panel, [5]=Pick-files panel
+    // All-sources panel: [0]=folderRow([0]=label,[1]=folderDisplay), [1]=statusEl, [2]=forceRow, [3]=btnRow([0]=ingestBtn)
     const getAllSources = (modal: any) => {
-        const panel = modal.contentEl._children[3];
+        const panel = modal.contentEl._children[4];
         return {
-            folderInput: panel._children[0]._children[1] as any,
-            ingestBtn:   panel._children[2]._children[0] as any,
+            folderDisplay: panel._children[0]._children[1] as any,
+            ingestBtn:     panel._children[3]._children[0] as any,
         };
     };
 
-    it("pre-fills folder input from the rawSourcesFolder setting", async () => {
+    it("shows rawSourcesFolder as read-only folder display", async () => {
         const { ModalClass } = await getModal("synthadoc-ingest",
             makeVault([{ path: "raw_sources/a.pdf", extension: "pdf" }])
         );
         const modal = new ModalClass();
         modal.onOpen();
-        expect(getAllSources(modal).folderInput.value).toBe("raw_sources");
+        expect(getAllSources(modal).folderDisplay.textContent).toBe("raw_sources");
     });
 
     it("calls api.ingest for each supported file in the folder on Ingest all click", async () => {
@@ -229,8 +230,8 @@ describe("IngestModal All-sources tab", () => {
         await flushPromises();
 
         expect(apiMock.ingest).toHaveBeenCalledTimes(2);
-        expect(apiMock.ingest).toHaveBeenCalledWith("/abs/raw_sources/file-a.pdf");
-        expect(apiMock.ingest).toHaveBeenCalledWith("/abs/raw_sources/file-b.png");
+        expect(apiMock.ingest).toHaveBeenCalledWith("/abs/raw_sources/file-a.pdf", undefined, false);
+        expect(apiMock.ingest).toHaveBeenCalledWith("/abs/raw_sources/file-b.png", undefined, false);
     });
 
     it("disables Ingest all button while jobs are in flight", async () => {
@@ -717,13 +718,14 @@ describe("IngestModal Pick-files tab", () => {
         },
     });
 
-    // contentEl children: [0]=h3, [1]=tabBar, [2]=URL panel, [3]=All-sources panel, [4]=Pick-files panel
+    // contentEl children: [0]=h3, [1]=tabBar, [2]=WS panel, [3]=URL panel, [4]=All-sources panel, [5]=Pick-files panel
+    // Pick-files panel: [0]=folderRow([0]=label,[1]=display,[2]=browseBtn,[3]=scanBtn), [1]=selectRow, [2]=listEl, [3]=statusEl, [4]=forceRow, [5]=btnRow
     const getPickFiles = (modal: any) => {
-        const panel = modal.contentEl._children[4];
+        const panel = modal.contentEl._children[5];
         return {
-            scanBtn:   panel._children[0]._children[2] as any,
+            scanBtn:   panel._children[0]._children[3] as any,
             listEl:    panel._children[2] as any,
-            ingestBtn: panel._children[4]._children[0] as any,
+            ingestBtn: panel._children[5]._children[0] as any,
         };
     };
 
@@ -767,7 +769,7 @@ describe("IngestModal Pick-files tab", () => {
         await flushPromises();
 
         expect(apiMock.ingest).toHaveBeenCalledTimes(1);
-        expect(apiMock.ingest).toHaveBeenCalledWith("/abs/raw_sources/a.pdf");
+        expect(apiMock.ingest).toHaveBeenCalledWith("/abs/raw_sources/a.pdf", undefined, false);
     });
 
     it("shows error and re-enables button when all queuing fails", async () => {
@@ -1668,10 +1670,10 @@ describe("LintReportModal", () => {
 // ── IngestModal URL tab ───────────────────────────────────────────────────────
 
 describe("IngestModal URL tab", () => {
-    // contentEl children: [0]=h3, [1]=tabBar, [2]=URL panel, [3]=All-sources panel, [4]=Pick-files panel
-    // URL panel: [0]=row([0]=input, [1]=btn), [1]=out
+    // contentEl children: [0]=h3, [1]=tabBar, [2]=WS panel, [3]=URL panel, [4]=All-sources panel, [5]=Pick-files panel
+    // URL panel: [0]=row([0]=input, [1]=btn), [1]=forceRow, [2]=out
     const getUrlTab = (modal: any) => {
-        const row = modal.contentEl._children[2]._children[0];
+        const row = modal.contentEl._children[3]._children[0];
         return { input: row._children[0] as any, btn: row._children[1] as any };
     };
 
@@ -1688,7 +1690,7 @@ describe("IngestModal URL tab", () => {
         await btn.onclick();
         await flushPromises();
 
-        expect(apiMock.ingest).toHaveBeenCalledWith("https://example.com/paper.pdf");
+        expect(apiMock.ingest).toHaveBeenCalledWith("https://example.com/paper.pdf", undefined, false);
     });
 
     it("shows error and re-enables button when api.ingest throws", async () => {
