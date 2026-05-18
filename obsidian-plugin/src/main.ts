@@ -537,7 +537,8 @@ class IngestModal extends Modal {
         const folderRow = panel.createEl("div");
         folderRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:8px";
         folderRow.createEl("label", { text: "Folder" }).style.cssText = "white-space:nowrap;font-size:13px";
-        let selectedFolder = "";
+        let selectedFolder = "";   // vault-relative (or "" for vault root)
+        let selectedAbsPath = "";  // full OS path — shown in display and used as guard
         const folderDisplay = folderRow.createEl("input") as HTMLInputElement;
         folderDisplay.type = "text";
         folderDisplay.readOnly = true;
@@ -554,11 +555,12 @@ class IngestModal extends Modal {
                 if (!result.canceled && result.filePaths?.[0]) {
                     const absPath: string = result.filePaths[0];
                     const basePath: string = (this.app.vault.adapter as any).getBasePath?.() ?? "";
-                    let rel = (basePath && absPath.toLowerCase().startsWith(basePath.toLowerCase()))
+                    const rel = (basePath && absPath.toLowerCase().startsWith(basePath.toLowerCase()))
                         ? absPath.slice(basePath.length).replace(/^[/\\]+/, "").replace(/\\/g, "/")
                         : absPath.replace(/\\/g, "/");
-                    selectedFolder = rel;
-                    folderDisplay.value = rel;
+                    selectedAbsPath = absPath;
+                    selectedFolder = rel;          // may be "" when vault root is selected
+                    folderDisplay.value = absPath; // always show the full OS path
                     folderDisplay.style.color = "var(--text-normal)";
                     scanBtn.disabled = false;
                 }
@@ -631,10 +633,11 @@ class IngestModal extends Modal {
         };
 
         const scan = () => {
+            if (!selectedAbsPath) return;  // Browse has not been used yet
             const folder = selectedFolder.trim().replace(/\/$/, "");
-            if (!folder) return;
+            // folder is "" when the vault root itself was selected — matches all vault files
             const files = (this.app.vault.getFiles() as any[]).filter((f: any) => {
-                if (!f.path.startsWith(folder + "/")) return false;
+                if (folder && !f.path.startsWith(folder + "/")) return false;
                 return SUPPORTED_EXTENSIONS.has((f.extension ?? "").toLowerCase());
             });
             renderFiles(files);
