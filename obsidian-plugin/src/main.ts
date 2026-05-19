@@ -1893,7 +1893,15 @@ class QueryModal extends Modal {
         input.style.cssText = "width:100%;min-height:72px;padding:6px 8px;resize:vertical;margin-bottom:8px;box-sizing:border-box";
 
         const row = contentEl.createEl("div");
-        row.style.cssText = "display:flex;justify-content:flex-end;margin-bottom:12px";
+        row.style.cssText = "display:flex;align-items:center;gap:8px;justify-content:flex-end;margin-bottom:12px";
+        const timeoutLabel = row.createEl("label", { text: "Timeout (s):" });
+        timeoutLabel.style.cssText = "font-size:12px;color:var(--text-muted);white-space:nowrap";
+        const timeoutInput = row.createEl("input", { type: "number" }) as HTMLInputElement;
+        timeoutInput.value = "60";
+        timeoutInput.min = "10";
+        timeoutInput.max = "300";
+        timeoutInput.step = "10";
+        timeoutInput.style.cssText = "width:60px;padding:4px 6px;font-size:12px";
         const btn = row.createEl("button", { text: "Ask" });
 
         const out = contentEl.createEl("div");
@@ -1919,7 +1927,8 @@ class QueryModal extends Modal {
             out.empty();
             out.createEl("p", { text: "Searching…", cls: "synthadoc-muted" });
             try {
-                const r = await api.query(input.value) as any;
+                const timeoutSecs = Math.min(300, Math.max(10, parseInt(timeoutInput.value) || 60));
+                const r = await api.query(input.value, timeoutSecs) as any;
                 out.empty();
                 await MarkdownRenderer.render(this.app, r.answer, out, "", this);
                 if (r.citations?.length) {

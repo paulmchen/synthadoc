@@ -22,7 +22,7 @@ def _format_gap_callout(suggested_searches: list[str], wiki: str) -> str:
         "> Your wiki doesn't have enough on this topic yet. Enrich it with a web search:\n"
         ">\n"
         "> **From Obsidian:** Open Command Palette (`Cmd+P` / `Ctrl+P`) "
-        "→ **Synthadoc: Ingest: web search**\n"
+        "→ **Synthadoc: Ingest...** → Web search tab\n"
         ">\n"
         "> **From the terminal:**\n"
         "> ```bash\n"

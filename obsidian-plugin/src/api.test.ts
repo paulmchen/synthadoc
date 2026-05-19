@@ -55,7 +55,7 @@ describe("api.status", () => {
 });
 
 describe("api.query", () => {
-    it("POSTs to /query with question in body", async () => {
+    it("POSTs to /query with question and default timeout in body", async () => {
         mockResponse({ answer: "AI is great", citations: ["ai-page"] });
         const result = await api.query("What is AI?") as any;
         expect(result.answer).toBe("AI is great");
@@ -63,7 +63,17 @@ describe("api.query", () => {
             expect.objectContaining({
                 url: "http://127.0.0.1:7070/query",
                 method: "POST",
-                body: JSON.stringify({ question: "What is AI?" }),
+                body: JSON.stringify({ question: "What is AI?", timeout_seconds: 60 }),
+            })
+        );
+    });
+
+    it("POSTs to /query with custom timeout", async () => {
+        mockResponse({ answer: "AI is great", citations: [] });
+        await api.query("What is AI?", 120);
+        expect(mockRequestUrl).toHaveBeenCalledWith(
+            expect.objectContaining({
+                body: JSON.stringify({ question: "What is AI?", timeout_seconds: 120 }),
             })
         );
     });

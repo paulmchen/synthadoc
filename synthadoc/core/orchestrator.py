@@ -377,14 +377,18 @@ class Orchestrator:
         except Exception:
             pass
 
-    async def query(self, question: str):
+    async def query(self, question: str, timeout_seconds: int = 60):
+        import asyncio
         from synthadoc.agents.query_agent import QueryAgent
         _provider = make_provider("query", self._cfg)
-        result = await QueryAgent(
-            provider=_provider,
-            store=self._store, search=self._search,
-            gap_score_threshold=self._cfg.query.gap_score_threshold,
-        ).query(question)
+        result = await asyncio.wait_for(
+            QueryAgent(
+                provider=_provider,
+                store=self._store, search=self._search,
+                gap_score_threshold=self._cfg.query.gap_score_threshold,
+            ).query(question),
+            timeout=timeout_seconds if timeout_seconds > 0 else None,
+        )
         _model = self._cfg.agents.resolve("query").model
         cost_usd = estimate_cost(
             _model,

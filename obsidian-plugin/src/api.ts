@@ -25,7 +25,7 @@ async function call(path: string, method = "GET", body?: object) {
 export const api = {
     health:       ()                          => call("/health"),
     status:       ()                          => call("/status"),
-    query:        (question: string)          => call("/query",           "POST", { question }),
+    query:        (question: string, timeoutSeconds = 60) => call("/query", "POST", { question, timeout_seconds: timeoutSeconds }),
     ingest:       (source: string, maxResults?: number, force?: boolean) => call("/jobs/ingest", "POST", { source, ...(maxResults != null ? { max_results: maxResults } : {}), ...(force ? { force: true } : {}) }),
     lint:         (scope = "all", autoResolve = false) => call("/jobs/lint", "POST", { scope, auto_resolve: autoResolve }),
     lintReport:   ()                          => call("/lint/report"),

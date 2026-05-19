@@ -146,6 +146,7 @@ class ContentSizeLimitMiddleware(BaseHTTPMiddleware):
 class QueryRequest(BaseModel):
     question: str
     save: bool = False
+    timeout_seconds: int = 60
 
     @field_validator("question")
     @classmethod
@@ -325,9 +326,11 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
             "jobs_total": len(jobs),
         }
 
-    async def _run_query(question: str) -> dict:
+    async def _run_query(question: str, timeout_seconds: int = 60) -> dict:
         try:
-            result = await app.state.orch.query(question)
+            result = await app.state.orch.query(question, timeout_seconds=timeout_seconds)
+        except TimeoutError as exc:
+            raise HTTPException(status_code=504, detail=f"Query timed out after {timeout_seconds}s") from exc
         except Exception as exc:
             known = _classify_llm_error(exc)
             if known:
@@ -346,14 +349,14 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
         }
 
     @app.get("/query")
-    async def query(q: str):
+    async def query(q: str, timeout_seconds: int = 60):
         if not q.strip():
             raise HTTPException(status_code=400, detail="q must not be empty")
-        return await _run_query(q)
+        return await _run_query(q, timeout_seconds=timeout_seconds)
 
     @app.post("/query")
     async def query_post(req: QueryRequest):
-        return await _run_query(req.question)
+        return await _run_query(req.question, timeout_seconds=req.timeout_seconds)
 
     @app.post("/analyse")
     async def analyse_source(req: AnalyseRequest):

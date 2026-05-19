@@ -65,7 +65,7 @@ def test_query_cli_gap_includes_command_palette_hint():
     }):
         result = runner.invoke(app, ["query", "Something?", "-w", "my-wiki"])
     assert "Command Palette" in result.output
-    assert "Synthadoc: Ingest: web search" in result.output
+    assert "Synthadoc: Ingest..." in result.output
 
 
 def test_query_cli_default_timeout_is_60():
