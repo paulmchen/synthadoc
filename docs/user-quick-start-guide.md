@@ -360,7 +360,7 @@ synthadoc jobs list --status pending
 synthadoc jobs list --status completed
 ```
 
-Or from Obsidian: Command Palette → `Synthadoc: Jobs: list...` → use the status-filter checkboxes. The table defaults to newest jobs first; click **Status**, **Operation**, or **Created** headers to re-sort.
+Or from Obsidian: Command Palette → `Synthadoc: Jobs...` → use the status-filter checkboxes. The table defaults to newest jobs first; click **Status**, **Operation**, or **Created** headers to re-sort.
 
 ![Obsidian Jobs list modal with status filter dropdown](png/synthadoc-jobs-modal.png)
 
@@ -1108,11 +1108,9 @@ All commands are accessible via the Command Palette (`Ctrl/Cmd+P` → type `Synt
 ### Jobs
 
 
-| Command                                         | What it does                                                                                                                                                                                                                                                                                                                                              |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Synthadoc: Jobs: list...`                      | Job table with status-filter checkboxes (pending, in_progress, completed, failed, skipped, dead, cancelled). Defaults to newest jobs first. Click **Status**, **Operation**, or **Created** column headers to sort — ▲ ascending, ▼ descending, ⇅ unsorted; click again to toggle direction. Supported operation types: `ingest`, `lint`. Auto-refreshes every 10 s (configurable). Paginated at 25 per page. Error details shown inline for failed/dead jobs. |
-| `Synthadoc: Jobs: retry failed or dead jobs...` | Multi-select table of all failed and dead jobs; all checkboxes pre-ticked. Polls progress live until all selected jobs settle.                                                                                                                                                                                                            |
-| `Synthadoc: Jobs: purge old completed/dead...`  | Removes completed and dead jobs older than N days (default: 7).                                                                                                                                                                                                                                                                          |
+| Command                | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Synthadoc: Jobs...`   | Job table with status-filter checkboxes (pending, in_progress, completed, failed, skipped, dead, cancelled). Defaults to newest jobs first. Click **Status**, **Operation**, or **Created** column headers to sort — ▲ ascending, ▼ descending, ⇅ unsorted; click again to toggle direction. Auto-refreshes every 10 s (configurable). Paginated at 25 per page. Error details shown inline for failed/dead/cancelled jobs. **Retry selected** button is enabled when one or more checked jobs are failed, dead, or cancelled — click to re-queue them. **Delete selected** removes checked terminal jobs. A **Purge old jobs** footer row lets you enter a day threshold and remove old completed/dead records in one click. |
 
 > **Tip — cancelling a bad batch:** `synthadoc jobs cancel -w <wiki> --yes` marks every
 > pending job as `skipped` immediately. Follow up with `synthadoc jobs purge` to remove

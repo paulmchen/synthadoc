@@ -268,8 +268,6 @@ describe("SynthadocPlugin command registration", () => {
             "synthadoc-jobs",
             "synthadoc-lint-report",
             "synthadoc-lint",
-            "synthadoc-jobs-retry-dead",
-            "synthadoc-jobs-purge",
             "synthadoc-scaffold",
             "synthadoc-audit",
             "synthadoc-routing",
@@ -291,7 +289,7 @@ describe("SynthadocPlugin command registration", () => {
         expect(names.some(n => n.startsWith("Query:"))).toBe(true);
         expect(names.some(n => n.startsWith("Ingest"))).toBe(true);
         expect(names.some(n => n.startsWith("Lint:"))).toBe(true);
-        expect(names.some(n => n.startsWith("Jobs:"))).toBe(true);
+        expect(names.some(n => n.startsWith("Jobs"))).toBe(true);
         expect(names.some(n => n.startsWith("Wiki:"))).toBe(true);
         expect(names.some(n => n.startsWith("Audit"))).toBe(true);
         expect(names.some(n => n.startsWith("Routing:"))).toBe(true);
@@ -341,22 +339,14 @@ describe("SynthadocPlugin lint commands", () => {
 });
 
 describe("SynthadocPlugin new commands registered", () => {
-    it("retry-dead command is registered with updated name", async () => {
+    it("jobs command is registered with consolidated name", async () => {
         const { default: SynthadocPlugin } = await import("./main");
         const plugin = new SynthadocPlugin();
         await plugin.onload();
         const cmds = (plugin.addCommand as any).mock.calls.map((c: any) => c[0]);
-        const retryCmd = cmds.find((c: any) => c.id === "synthadoc-jobs-retry-dead");
-        expect(retryCmd).toBeDefined();
-        expect(retryCmd.name).toBe("Jobs: retry failed or dead jobs...");
-    });
-
-    it("purge command is registered", async () => {
-        const { default: SynthadocPlugin } = await import("./main");
-        const plugin = new SynthadocPlugin();
-        await plugin.onload();
-        const ids = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].id);
-        expect(ids).toContain("synthadoc-jobs-purge");
+        const jobsCmd = cmds.find((c: any) => c.id === "synthadoc-jobs");
+        expect(jobsCmd).toBeDefined();
+        expect(jobsCmd.name).toBe("Jobs...");
     });
 
     it("scaffold command is registered", async () => {
@@ -803,70 +793,6 @@ describe("IngestModal Pick-files tab", () => {
     });
 });
 
-describe("RetryJobModal", () => {
-    it("loads both failed and dead jobs and shows them in a table", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-jobs-retry-dead");
-        apiMock.jobs
-            .mockResolvedValueOnce([{ id: "job-f1", status: "failed", operation: "ingest", payload: { source: "doc.pdf" }, error: "timeout" }])
-            .mockResolvedValueOnce([{ id: "job-d1", status: "dead", operation: "ingest", payload: { source: "page.md" }, error: "max retries" }]);
-
-        const modal = new ModalClass();
-        modal.onOpen();
-        await flushPromises();
-
-        expect(apiMock.jobs).toHaveBeenCalledWith("failed");
-        expect(apiMock.jobs).toHaveBeenCalledWith("dead");
-        expect(modal.contentEl.innerHTML).toContain("job-f1");
-        expect(modal.contentEl.innerHTML).toContain("job-d1");
-    });
-
-    it("shows empty message when no failed or dead jobs exist", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-jobs-retry-dead");
-        apiMock.jobs.mockResolvedValue([]);
-
-        const modal = new ModalClass();
-        modal.onOpen();
-        await flushPromises();
-
-        expect(modal.contentEl.innerHTML).toContain("No failed or dead jobs");
-    });
-
-    it("calls api.retryJob for each checked job when Retry selected is clicked", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-jobs-retry-dead");
-        apiMock.jobs
-            .mockResolvedValueOnce([{ id: "job-f1", status: "failed", operation: "ingest", payload: { source: "a.pdf" }, error: "err" }])
-            .mockResolvedValueOnce([])
-            .mockResolvedValue([]); // subsequent poll calls
-        apiMock.retryJob = vi.fn().mockResolvedValue(undefined);
-
-        const modal = new ModalClass();
-        modal.onOpen();
-        await flushPromises();
-
-        // Find the Retry selected button (inside the btnRow div)
-        const btnRow = modal.contentEl._children.find((c: any) =>
-            c._children?.some((b: any) => b._html === "Retry selected")
-        );
-        const retryBtn = btnRow?._children?.find((b: any) => b._html === "Retry selected");
-
-        expect(retryBtn).toBeDefined();
-        retryBtn.onclick();
-        await flushPromises();
-
-        expect(apiMock.retryJob).toHaveBeenCalledWith("job-f1");
-    });
-
-    it("shows server error message when jobs cannot be loaded", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-jobs-retry-dead");
-        apiMock.jobs.mockRejectedValue(new Error("network error"));
-
-        const modal = new ModalClass();
-        modal.onOpen();
-        await flushPromises();
-
-        expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
-    });
-});
 
 describe("ScaffoldModal", () => {
     it("calls api.scaffold with the domain value on button click", async () => {
@@ -1648,6 +1574,92 @@ describe("JobsModal", () => {
         // "ingest" < "lint" — job-ingest should appear first
         expect(html.indexOf("job-ingest")).toBeLessThan(html.indexOf("job-lint"));
     });
+
+    it("Retry selected button is disabled when no retryable jobs are checked", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-jobs");
+        apiMock.jobs.mockResolvedValueOnce([
+            { id: "job-c1", status: "completed", operation: "ingest", payload: { source: "a.pdf" }, created_at: null },
+        ]);
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        // Find the Retry selected button in the interval row
+        const intervalRow = modal.contentEl._children[2]; // h3[0], filterRow[1], intervalRow[2]
+        const retryBtn = intervalRow._children?.find((b: any) => b._html === "Retry selected");
+        expect(retryBtn).toBeDefined();
+        expect(retryBtn.disabled).toBe(true);
+    });
+
+    it("Retry selected calls api.retryJob for failed/dead/cancelled checked jobs", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-jobs");
+        // Default _selected = {pending, in_progress}. Clear filter via unchecking those two
+        // checkboxes so _selected becomes empty and all jobs pass through.
+        apiMock.jobs
+            .mockResolvedValueOnce([]) // initial load (pending+in_progress filter, no matches)
+            .mockResolvedValueOnce([]) // after unchecking pending (in_progress only, no matches)
+            .mockResolvedValueOnce([   // after unchecking in_progress (_selected={}, show all)
+                { id: "job-f1", status: "failed", operation: "ingest", payload: { source: "a.pdf" }, created_at: null, error: "err" },
+                { id: "job-c1", status: "cancelled", operation: "ingest", payload: { source: "b.pdf" }, created_at: null },
+            ])
+            .mockResolvedValue([]); // after retry refresh
+        apiMock.retryJob = vi.fn().mockResolvedValue(undefined);
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises(); // initial load done
+
+        // Clear the default status filter so all jobs are visible
+        const filterRow = modal.contentEl._children[1]; // h3[0], filterRow[1]
+        const pendingCb = filterRow._children[1]._children[0]; // "pending" label > checkbox
+        pendingCb.checked = false;
+        pendingCb.onchange();
+        await flushPromises();
+
+        const inProgressCb = filterRow._children[2]._children[0]; // "in_progress" label > checkbox
+        inProgressCb.checked = false;
+        inProgressCb.onchange();
+        await flushPromises(); // now _filteredJobs = [job-f1, job-c1]
+
+        // Select all terminal jobs via select-all checkbox in table header
+        const table = modal.contentEl._children[3]._children[0]; // tableEl[3] > table
+        const selectAllCb = table._children[0]._children[0]._children[0]._children[0]; // thead > tr > th > input
+        selectAllCb.checked = true;
+        selectAllCb.onchange();
+
+        const intervalRow = modal.contentEl._children[2]; // intervalRow[2]
+        const retryBtn = intervalRow._children?.find((b: any) => b._html === "Retry selected");
+        expect(retryBtn).toBeDefined();
+        retryBtn.onclick();
+        await flushPromises();
+
+        expect(apiMock.retryJob).toHaveBeenCalledWith("job-f1");
+        expect(apiMock.retryJob).toHaveBeenCalledWith("job-c1");
+    });
+
+    it("Purge old jobs calls api.purgeJobs with entered days", async () => {
+        const { ModalClass, apiMock } = await getModal("synthadoc-jobs");
+        apiMock.jobs.mockResolvedValueOnce([]);
+        apiMock.purgeJobs.mockResolvedValueOnce({ purged: 3 });
+        apiMock.jobs.mockResolvedValue([]); // after purge refresh
+
+        const modal = new ModalClass();
+        modal.onOpen();
+        await flushPromises();
+
+        const purgeRow = modal.contentEl._children[5]; // h3[0], filterRow[1], intervalRow[2], tableEl[3], pageRow[4], purgeRow[5]
+        const purgeDaysInput = purgeRow._children?.find((el: any) => el._tag === "input");
+        const purgeBtn = purgeRow._children?.find((el: any) => el._tag === "button");
+        expect(purgeBtn).toBeDefined();
+
+        if (purgeDaysInput) purgeDaysInput.value = "14";
+        await purgeBtn.onclick();
+        await flushPromises();
+
+        expect(apiMock.purgeJobs).toHaveBeenCalledWith(14);
+        expect(modal.contentEl.innerHTML).toContain("Purged 3 job(s)");
+    });
 });
 
 // ── LintReportModal ───────────────────────────────────────────────────────────
@@ -1773,54 +1785,6 @@ describe("IngestModal URL tab", () => {
     });
 });
 
-// ── PurgeJobsModal ────────────────────────────────────────────────────────────
-
-describe("PurgeJobsModal", () => {
-    it("calls api.purgeJobs with the entered days on Purge click", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-jobs-purge");
-        apiMock.purgeJobs.mockResolvedValueOnce({ purged: 3 });
-
-        const modal = new ModalClass();
-        modal.onOpen();
-
-        const input = modal.contentEl.querySelector("input") as any;
-        input.value = "14";
-        const btn = modal.contentEl.querySelector("button") as any;
-        await btn.onclick();
-        await flushPromises();
-
-        expect(apiMock.purgeJobs).toHaveBeenCalledWith(14);
-    });
-
-    it("shows purged count on success", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-jobs-purge");
-        apiMock.purgeJobs.mockResolvedValueOnce({ purged: 5 });
-
-        const modal = new ModalClass();
-        modal.onOpen();
-
-        const btn = modal.contentEl.querySelector("button") as any;
-        await btn.onclick();
-        await flushPromises();
-
-        expect(modal.contentEl.innerHTML).toContain("5 job(s)");
-    });
-
-    it("shows error and re-enables button when api.purgeJobs throws", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-jobs-purge");
-        apiMock.purgeJobs.mockRejectedValueOnce(new Error("refused"));
-
-        const modal = new ModalClass();
-        modal.onOpen();
-
-        const btn = modal.contentEl.querySelector("button") as any;
-        await btn.onclick();
-        await flushPromises();
-
-        expect(btn.disabled).toBe(false);
-        expect(modal.contentEl.innerHTML).toContain("synthadoc serve");
-    });
-});
 
 // ── AuditModal — Ingest history tab ───────────────────────────────────────────
 

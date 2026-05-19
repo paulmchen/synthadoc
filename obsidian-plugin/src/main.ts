@@ -46,20 +46,8 @@ export default class SynthadocPlugin extends Plugin {
 
         this.addCommand({
             id: "synthadoc-jobs",
-            name: "Jobs: list...",
+            name: "Jobs...",
             callback: () => new JobsModal(this.app).open(),
-        });
-
-        this.addCommand({
-            id: "synthadoc-jobs-retry-dead",
-            name: "Jobs: retry failed or dead jobs...",
-            callback: () => new RetryJobModal(this.app).open(),
-        });
-
-        this.addCommand({
-            id: "synthadoc-jobs-purge",
-            name: "Jobs: purge old completed/dead...",
-            callback: () => new PurgeJobsModal(this.app).open(),
         });
 
         this.addCommand({
@@ -845,6 +833,7 @@ class JobsModal extends Modal {
     private _countdownTimer: number | null = null;
     private _tableEl: HTMLElement | null = null;
     private _countdownEl: HTMLElement | null = null;
+    private _retryBtn: HTMLButtonElement | null = null;
     private _deleteBtn: HTMLButtonElement | null = null;
     private _checkedIds: Set<string> = new Set();
     private _page = 0;
@@ -903,10 +892,14 @@ class JobsModal extends Modal {
             this._resetAndLoad();
         };
 
-        // Delete button — right-aligned on the interval row, always visible
+        // Action buttons — right-aligned on the interval row
+        this._retryBtn = intervalRow.createEl("button", { text: "Retry selected" }) as HTMLButtonElement;
+        this._retryBtn.disabled = true;
+        this._retryBtn.style.cssText = "font-size:12px;margin-left:auto";
+        this._retryBtn.onclick = () => this._retrySelected();
         this._deleteBtn = intervalRow.createEl("button", { text: "Delete selected" }) as HTMLButtonElement;
         this._deleteBtn.disabled = true;
-        this._deleteBtn.style.cssText = "font-size:12px;margin-left:auto";
+        this._deleteBtn.style.cssText = "font-size:12px";
         this._deleteBtn.onclick = () => this._deleteSelected();
 
         // Table
@@ -921,6 +914,32 @@ class JobsModal extends Modal {
         this._nextBtn = this._pageRow.createEl("button", { text: "Next →" }) as HTMLButtonElement;
         this._prevBtn.onclick = () => { this._page--; this._renderTable(); };
         this._nextBtn.onclick = () => { this._page++; this._renderTable(); };
+
+        // Purge footer
+        const purgeRow = contentEl.createEl("div");
+        purgeRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--background-modifier-border);font-size:12px;color:var(--text-muted)";
+        purgeRow.createEl("span", { text: "Older than" });
+        const purgeDaysInput = purgeRow.createEl("input", { type: "number" }) as HTMLInputElement;
+        purgeDaysInput.value = "7";
+        purgeDaysInput.style.cssText = "width:50px;padding:2px 5px;font-size:12px";
+        purgeRow.createEl("span", { text: "days" });
+        const purgeBtn = purgeRow.createEl("button", { text: "Purge old jobs" });
+        purgeBtn.style.cssText = "font-size:12px";
+        const purgeStatusEl = purgeRow.createEl("span");
+        purgeStatusEl.style.cssText = "font-size:12px";
+        purgeBtn.onclick = async () => {
+            const days = parseInt(purgeDaysInput.value) || 7;
+            purgeBtn.disabled = true;
+            purgeStatusEl.setText("Purging…");
+            try {
+                const r = await api.purgeJobs(days) as any;
+                purgeStatusEl.setText(`Purged ${r.purged} job(s)`);
+                new Notice(`Synthadoc: purged ${r.purged} job(s)`);
+                this._load();
+            } catch {
+                purgeStatusEl.setText("Error: is synthadoc serve running?");
+            } finally { purgeBtn.disabled = false; }
+        };
 
         this._resetAndLoad();
     }
@@ -966,8 +985,31 @@ class JobsModal extends Modal {
         }
     }
 
-    private _updateDeleteBtn() {
+    private _hasRetryableChecked(): boolean {
+        const RETRYABLE = new Set(["failed", "dead", "cancelled"]);
+        return [...this._checkedIds].some(id => {
+            const job = this._filteredJobs.find((j: any) => j.id === id);
+            return job && RETRYABLE.has(job.status);
+        });
+    }
+
+    private _updateActionBtns() {
         if (this._deleteBtn) this._deleteBtn.disabled = this._checkedIds.size === 0;
+        if (this._retryBtn) this._retryBtn.disabled = !this._hasRetryableChecked();
+    }
+
+    private async _retrySelected() {
+        if (!this._retryBtn || !this._hasRetryableChecked()) return;
+        this._retryBtn.disabled = true;
+        if (this._deleteBtn) this._deleteBtn.disabled = true;
+        const RETRYABLE = new Set(["failed", "dead", "cancelled"]);
+        const ids = [...this._checkedIds].filter(id => {
+            const job = this._filteredJobs.find((j: any) => j.id === id);
+            return job && RETRYABLE.has(job.status);
+        });
+        await Promise.allSettled(ids.map(id => api.retryJob(id)));
+        this._checkedIds.clear();
+        this._load();
     }
 
     private async _deleteSelected() {
@@ -1010,7 +1052,7 @@ class JobsModal extends Modal {
         for (const id of this._checkedIds) {
             if (!allFilteredIds.has(id)) this._checkedIds.delete(id);
         }
-        this._updateDeleteBtn();
+        this._updateActionBtns();
 
         if (total === 0) {
             this._tableEl.createEl("p", { text: "No jobs match the selected filters.", cls: "synthadoc-muted" });
@@ -1094,7 +1136,7 @@ class JobsModal extends Modal {
                         selectAllCb.checked = terminalJobs.every((j: any) => this._checkedIds.has(j.id));
                         selectAllCb.indeterminate = !selectAllCb.checked && terminalJobs.some((j: any) => this._checkedIds.has(j.id));
                     }
-                    this._updateDeleteBtn();
+                    this._updateActionBtns();
                 };
                 rowCheckboxes.push(cb);
             }
@@ -1135,7 +1177,7 @@ class JobsModal extends Modal {
                     else this._checkedIds.delete(job.id);
                 }
                 for (const cb of rowCheckboxes) cb.checked = selectAllCb!.checked;
-                this._updateDeleteBtn();
+                this._updateActionBtns();
             };
         }
     }
@@ -1327,189 +1369,6 @@ class LintReportModal extends Modal {
             out.empty();
             out.createEl("p", { text: "Error: is synthadoc serve running?" });
         });
-    }
-    onClose() { this.contentEl.empty(); }
-}
-
-class RetryJobModal extends Modal {
-    private _pollTimer: number | null = null;
-
-    onOpen() {
-        this.modalEl.style.width = "clamp(560px, 70vw, 960px)";
-        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
-        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
-        const { contentEl } = this;
-        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Retry failed or dead jobs" });
-        makeDraggable(this.modalEl, titleEl);
-
-        const listEl = contentEl.createEl("div");
-        listEl.style.cssText = "max-height:40vh;overflow-y:auto;margin-bottom:12px";
-
-        const statusEl = contentEl.createEl("p");
-        statusEl.style.cssText = "font-size:12px;min-height:18px;margin-bottom:8px;-webkit-user-select:text;user-select:text";
-
-        const btnRow = contentEl.createEl("div");
-        btnRow.style.cssText = "display:flex;gap:8px;justify-content:flex-end";
-        const retryBtn = btnRow.createEl("button", { text: "Retry selected" });
-        const refreshBtn = btnRow.createEl("button", { text: "Refresh" });
-
-        // Track checkboxes: jobId → checkbox element
-        const checkboxMap = new Map<string, HTMLInputElement>();
-
-        const load = async () => {
-            listEl.empty();
-            checkboxMap.clear();
-            statusEl.setText("Loading…");
-            try {
-                const [failed, dead] = await Promise.all([
-                    api.jobs("failed") as Promise<any[]>,
-                    api.jobs("dead") as Promise<any[]>,
-                ]);
-                const jobs = [...failed, ...dead];
-                statusEl.setText("");
-
-                if (!jobs.length) {
-                    listEl.createEl("p", { text: "No failed or dead jobs." }).style.cssText = "color:var(--text-muted);font-size:13px";
-                    retryBtn.disabled = true;
-                    return;
-                }
-
-                retryBtn.disabled = false;
-                const table = listEl.createEl("table");
-                table.style.cssText = "width:100%;border-collapse:collapse;font-size:13px;-webkit-user-select:text;user-select:text";
-                const hrow = table.createEl("thead").createEl("tr");
-                for (const h of ["", "Status", "Job ID", "Operation", "Source", "Error"]) {
-                    const th = hrow.createEl("th", { text: h });
-                    th.style.cssText = "text-align:left;padding:4px 8px;border-bottom:1px solid var(--background-modifier-border)";
-                }
-                const tbody = table.createEl("tbody");
-                for (const job of jobs) {
-                    const tr = tbody.createEl("tr");
-                    const source = job.payload?.source
-                        ? job.payload.source.split(/[\\/]/).pop()
-                        : job.operation;
-                    const icon = STATUS_EMOJI[job.status] ?? "";
-
-                    // Checkbox
-                    const cbTd = tr.createEl("td");
-                    cbTd.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle)";
-                    const cb = cbTd.createEl("input", { type: "checkbox" }) as HTMLInputElement;
-                    cb.checked = true;
-                    checkboxMap.set(job.id, cb);
-
-                    for (const text of [`${icon} ${job.status}`, job.id, job.operation, source, job.error ?? "—"]) {
-                        const td = tr.createEl("td", { text });
-                        td.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle);font-size:12px";
-                    }
-                }
-            } catch {
-                listEl.empty();
-                listEl.createEl("p", { text: "Error: is synthadoc serve running?" }).style.cssText = "color:var(--text-error)";
-                retryBtn.disabled = true;
-            }
-        };
-
-        refreshBtn.onclick = load;
-
-        retryBtn.onclick = async () => {
-            const selected = [...checkboxMap.entries()]
-                .filter(([, cb]) => cb.checked)
-                .map(([id]) => id);
-            if (!selected.length) {
-                statusEl.setText("No jobs selected.");
-                return;
-            }
-
-            retryBtn.disabled = true;
-            refreshBtn.disabled = true;
-            statusEl.setText(`⏳ Re-queuing ${selected.length} job(s)…`);
-
-            // Re-queue all selected
-            let queued = 0;
-            for (const jobId of selected) {
-                try {
-                    await api.retryJob(jobId);
-                    queued++;
-                } catch { /* ignore individual failures — status will show */ }
-            }
-            statusEl.setText(`⏳ ${queued} job(s) re-queued — monitoring progress…`);
-
-            // Poll until all re-queued jobs have settled
-            const pending = new Set(selected);
-            this._pollTimer = window.setInterval(async () => {
-                try {
-                    const allJobs = await api.jobs() as any[];
-                    let inProgress = 0;
-                    let done = 0;
-                    for (const jobId of [...pending]) {
-                        const job = allJobs.find((j: any) => j.id === jobId);
-                        if (!job) { pending.delete(jobId); done++; continue; }
-                        if (["completed", "failed", "dead", "skipped"].includes(job.status)) {
-                            pending.delete(jobId);
-                            done++;
-                        } else {
-                            inProgress++;
-                        }
-                    }
-                    statusEl.setText(`⏳ ${inProgress} running, ${done} settled of ${selected.length}…`);
-                    if (pending.size === 0) {
-                        window.clearInterval(this._pollTimer!);
-                        this._pollTimer = null;
-                        statusEl.setText(`✅ All ${selected.length} job(s) settled. Refreshing list…`);
-                        retryBtn.disabled = false;
-                        refreshBtn.disabled = false;
-                        await load();
-                    }
-                } catch { /* server unreachable — keep polling */ }
-            }, 2000);
-        };
-
-        load();
-    }
-
-    onClose() {
-        if (this._pollTimer !== null) {
-            window.clearInterval(this._pollTimer);
-            this._pollTimer = null;
-        }
-        this.contentEl.empty();
-    }
-}
-
-class PurgeJobsModal extends Modal {
-    onOpen() {
-        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
-        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
-        const { contentEl } = this;
-        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Purge old jobs" });
-        makeDraggable(this.modalEl, titleEl);
-        contentEl.createEl("p", {
-            text: "Removes completed and dead jobs older than the specified number of days.",
-            cls: "synthadoc-muted",
-        }).style.cssText = "font-size:12px;margin-bottom:12px";
-
-        const row = contentEl.createEl("div");
-        row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px";
-        row.createEl("label", { text: "Older than (days):" });
-        const input = row.createEl("input", { type: "number" }) as HTMLInputElement;
-        input.value = "7";
-        input.style.cssText = "width:70px;padding:4px 8px";
-        const btn = row.createEl("button", { text: "Purge" });
-
-        const out = contentEl.createEl("p");
-
-        btn.onclick = async () => {
-            const days = parseInt(input.value) || 7;
-            btn.disabled = true;
-            out.setText("Purging…");
-            try {
-                const r = await api.purgeJobs(days) as any;
-                out.setText(`Purged ${r.purged} job(s) older than ${days} day(s).`);
-                new Notice(`Synthadoc: purged ${r.purged} job(s)`);
-            } catch {
-                out.setText("Error: is synthadoc serve running?");
-            } finally { btn.disabled = false; }
-        };
     }
     onClose() { this.contentEl.empty(); }
 }
