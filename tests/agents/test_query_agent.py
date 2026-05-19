@@ -1597,3 +1597,81 @@ def test_expand_aliases_case_insensitive(tmp_wiki):
     # Full capitalised alias
     result2 = qa._expand_aliases("What did LADY LOVELACE achieve?")
     assert "alan-turing" in result2
+
+
+# ── post-synthesis [GAP] sentinel ────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_gap_sentinel_overrides_no_gap_when_llm_returns_gap_marker(tmp_wiki):
+    """When pre-synthesis gap=False but the LLM prefixes its answer with [GAP],
+    knowledge_gap must be True, suggested_searches populated, and the [GAP]
+    marker stripped from the returned answer text."""
+    store = WikiStorage(tmp_wiki / "wiki")
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    provider = AsyncMock()
+    provider.complete.side_effect = [
+        # decompose call
+        CompletionResponse(text='["How did Moore\'s Law shape hardware?"]',
+                           input_tokens=5, output_tokens=5),
+        # synthesis returns [GAP] sentinel — wiki pages mention "moore" but don't cover the topic
+        CompletionResponse(text="[GAP]\nNone of the pages explain Moore's Law directly.",
+                           input_tokens=80, output_tokens=20),
+        # SearchDecomposeAgent call triggered by sentinel
+        CompletionResponse(text='["Moore\'s Law history", "hardware scaling trends"]',
+                           input_tokens=10, output_tokens=10),
+    ]
+
+    # Write pages with enough "moore" references to pass Guard B (no pre-synthesis gap)
+    reference_content = (
+        "Moore observed transistor density doubles every two years. "
+        "moore's prediction shaped the semiconductor roadmap. "
+        "Hardware engineers used moore as a guiding principle."
+    )
+    for i in range(8):
+        store.write_page(f"hw-{i}", WikiPage(
+            title=f"Hardware {i}", tags=[], content=reference_content,
+            status="active", confidence="high", sources=[],
+        ))
+
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.01)
+    all_slugs = [f"hw-{i}" for i in range(8)]
+    with patch.object(agent._search, "bm25_search",
+                      return_value=_fake_results(all_slugs, score=8.0)):
+        result = await agent.query("How did Moore's Law shape hardware design?")
+
+    assert result.knowledge_gap is True
+    assert len(result.suggested_searches) > 0
+    # [GAP] marker must be stripped from displayed answer
+    assert not result.answer.startswith("[GAP]")
+    assert "None of the pages" in result.answer
+
+
+@pytest.mark.asyncio
+async def test_gap_sentinel_not_triggered_when_llm_answers_normally(tmp_wiki):
+    """When the LLM synthesis does not start with [GAP], knowledge_gap stays False."""
+    store = WikiStorage(tmp_wiki / "wiki")
+    search = HybridSearch(store, tmp_wiki / ".synthadoc" / "embeddings.db")
+    provider = AsyncMock()
+    provider.complete.side_effect = [
+        CompletionResponse(text='["What is AI?"]', input_tokens=5, output_tokens=5),
+        CompletionResponse(text="AI stands for Artificial Intelligence [[ai-overview]].",
+                           input_tokens=80, output_tokens=20),
+    ]
+    for i in range(5):
+        store.write_page(f"ai-{i}", WikiPage(
+            title=f"AI Page {i}", tags=[], content="Artificial intelligence overview. " * 10,
+            status="active", confidence="high", sources=[],
+        ))
+
+    agent = QueryAgent(provider=provider, store=store, search=search,
+                       gap_score_threshold=0.0)
+    all_slugs = [f"ai-{i}" for i in range(5)]
+    with patch.object(agent._search, "bm25_search",
+                      return_value=_fake_results(all_slugs, score=5.0)):
+        result = await agent.query("What is AI?")
+
+    assert result.knowledge_gap is False
+    assert result.answer == "AI stands for Artificial Intelligence [[ai-overview]]."
+    # Only 2 provider calls: decompose + synthesis. No SearchDecomposeAgent call.
+    assert provider.complete.call_count == 2

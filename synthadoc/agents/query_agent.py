@@ -395,6 +395,8 @@ class QueryAgent:
         else:
             synthesis_prompt = (
                 f"Answer using ONLY these wiki pages. Cite with [[PageTitle]].\n\n"
+                f"If the pages do not contain enough information to answer the question, "
+                f"start your response with exactly '[GAP]' on its own line, then explain what's missing.\n\n"
                 f"Question: {question}\n\nPages:\n{context}"
             )
 
@@ -403,27 +405,20 @@ class QueryAgent:
             temperature=0.0,
         )
 
-        # Post-synthesis gap override: pre-synthesis guards can suppress gap detection
-        # (e.g. Guard B blocks when a term appears in ≥ ⌈n/3⌉ candidates as a reference
-        # word, even though no page actually covers the topic). If the LLM synthesis
-        # reports it cannot answer from the wiki, treat it as a gap and generate searches.
-        if not _gap:
-            _answer_lower = resp2.text.lower()
-            _no_answer_phrases = (
-                "cannot answer", "can't answer", "unable to answer",
-                "not mentioned in", "none of the provided",
-                "does not discuss", "does not mention",
-                "no information", "i cannot",
-            )
-            if any(p in _answer_lower for p in _no_answer_phrases):
-                _gap = True
-                _suggested = await SearchDecomposeAgent(self._provider).decompose(question)
+        # Post-synthesis gap override: the sentinel [GAP] in the answer means the LLM
+        # could not find enough in the wiki pages despite pre-synthesis gap detection
+        # saying no gap (Guard B false negative). Strip the marker before displaying.
+        answer_text = resp2.text
+        if not _gap and resp2.text.startswith("[GAP]"):
+            _gap = True
+            answer_text = resp2.text[len("[GAP]"):].lstrip("\n")
+            _suggested = await SearchDecomposeAgent(self._provider).decompose(question)
 
         logger.info("query answered — %d page(s) cited, %d tokens",
                     len(citations), resp2.total_tokens)
         return QueryResult(
             question=question,
-            answer=resp2.text,
+            answer=answer_text,
             citations=citations,
             tokens_used=resp2.total_tokens,
             input_tokens=resp2.input_tokens,
