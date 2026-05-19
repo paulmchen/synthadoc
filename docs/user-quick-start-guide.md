@@ -1127,13 +1127,9 @@ All commands are accessible via the Command Palette (`Ctrl/Cmd+P` → type `Synt
 
 ### Audit
 
-
-| Command                               | What it does                                                                                                                      |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `Synthadoc: Audit: ingest history...` | Table of recent ingest records — source, pages created/updated, tokens, cost, timestamp.                                         |
-| `Synthadoc: Audit: cost summary...`   | Token totals + USD cost with daily breakdown for the last N days.                                                                 |
-| `Synthadoc: Audit: query history...`  | Recent questions, sub-question counts, token usage, cost per query.                                                               |
-| `Synthadoc: Audit: events...`         | Table of system events — contradictions found, auto-resolutions, cost gate triggers. Customisable limit (default 100, max 1000). |
+| Command               | What it does                                                                                                                                                                                                                                                                                          |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Synthadoc: Audit...` | Tabbed modal with four views: **Query history** — recent questions, sub-question counts, tokens, cost per query. **Ingest history** — source file, wiki page slug, tokens, cost, timestamp. **Events** — contradictions found, auto-resolutions, cost gate triggers (max 1000). **Cost summary** — total tokens + USD with daily breakdown. |
 
 ### Routing
 

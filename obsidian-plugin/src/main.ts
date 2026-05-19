@@ -81,27 +81,9 @@ export default class SynthadocPlugin extends Plugin {
         });
 
         this.addCommand({
-            id: "synthadoc-audit-costs",
-            name: "Audit: cost summary...",
-            callback: () => new AuditCostsModal(this.app).open(),
-        });
-
-        this.addCommand({
-            id: "synthadoc-audit-queries",
-            name: "Audit: query history...",
-            callback: () => new QueryHistoryModal(this.app).open(),
-        });
-
-        this.addCommand({
-            id: "synthadoc-audit-events",
-            name: "Audit: events...",
-            callback: () => new AuditEventsModal(this.app).open(),
-        });
-
-        this.addCommand({
-            id: "synthadoc-audit-history",
-            name: "Audit: ingest history...",
-            callback: () => new AuditHistoryModal(this.app).open(),
+            id: "synthadoc-audit",
+            name: "Audit...",
+            callback: () => new AuditModal(this.app).open(),
         });
 
         this.addCommand({
@@ -1619,16 +1601,54 @@ class ScaffoldModal extends Modal {
     }
 }
 
-class AuditHistoryModal extends Modal {
+class AuditModal extends Modal {
     onOpen() {
-        this.modalEl.style.width = "clamp(520px, 65vw, 900px)";
+        this.modalEl.style.width = "clamp(560px, 70vw, 960px)";
         const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
         if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
         const { contentEl } = this;
-        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Ingest history" });
+        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Audit" });
         makeDraggable(this.modalEl, titleEl);
 
-        const row = contentEl.createEl("div");
+        const tabBar = contentEl.createEl("div");
+        tabBar.style.cssText = "display:flex;gap:0;margin-bottom:16px;border-bottom:1px solid var(--background-modifier-border)";
+
+        type TabName = "Query history" | "Ingest history" | "Events" | "Cost summary";
+        const tabNames: TabName[] = ["Query history", "Ingest history", "Events", "Cost summary"];
+        const panels: Record<TabName, HTMLElement> = {} as any;
+        const tabBtns: Record<TabName, HTMLElement> = {} as any;
+
+        tabNames.forEach(name => {
+            const btn = tabBar.createEl("div", { text: name });
+            btn.style.cssText = "padding:6px 14px;cursor:pointer;font-size:13px;border-bottom:2px solid transparent;margin-bottom:-1px;color:var(--text-muted)";
+            tabBtns[name] = btn;
+            const panel = contentEl.createEl("div");
+            panel.style.display = "none";
+            panels[name] = panel;
+        });
+
+        const switchTab = (name: TabName) => {
+            tabNames.forEach(t => {
+                panels[t].style.display = "none";
+                tabBtns[t].style.borderBottomColor = "transparent";
+                tabBtns[t].style.color = "var(--text-muted)";
+            });
+            panels[name].style.display = "";
+            tabBtns[name].style.borderBottomColor = "var(--interactive-accent)";
+            tabBtns[name].style.color = "var(--text-normal)";
+        };
+
+        tabNames.forEach(name => { tabBtns[name].onclick = () => switchTab(name); });
+
+        this._buildQueryHistoryTab(panels["Query history"]);
+        this._buildIngestHistoryTab(panels["Ingest history"]);
+        this._buildEventsTab(panels["Events"]);
+        this._buildCostSummaryTab(panels["Cost summary"]);
+        switchTab("Query history");
+    }
+
+    private _buildQueryHistoryTab(panel: HTMLElement) {
+        const row = panel.createEl("div");
         row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px";
         row.createEl("label", { text: "Last" });
         const input = row.createEl("input", { type: "number" }) as HTMLInputElement;
@@ -1637,7 +1657,60 @@ class AuditHistoryModal extends Modal {
         row.createEl("span", { text: "records" });
         const btn = row.createEl("button", { text: "Load" });
 
-        const tableEl = contentEl.createEl("div");
+        const tableEl = panel.createEl("div");
+
+        const load = async () => {
+            const limit = parseInt(input.value) || 50;
+            tableEl.setText("Loading…");
+            try {
+                const r = await api.queryHistory(limit) as any;
+                tableEl.empty();
+                if (!r.records.length) {
+                    tableEl.createEl("p", { text: "No queries recorded yet." });
+                    return;
+                }
+                const table = tableEl.createEl("table");
+                table.style.cssText = "width:100%;border-collapse:collapse;font-size:12px;-webkit-user-select:text;user-select:text";
+                const hrow = table.createEl("thead").createEl("tr");
+                for (const h of ["Question", "Sub-Qs", "Tokens", "Cost (USD)", "Asked at"]) {
+                    const th = hrow.createEl("th", { text: h });
+                    th.style.cssText = "text-align:left;padding:4px 8px;border-bottom:1px solid var(--background-modifier-border)";
+                }
+                const tbody = table.createEl("tbody");
+                for (const rec of r.records) {
+                    const tr = tbody.createEl("tr");
+                    const ts = rec.queried_at ? new Date(rec.queried_at).toLocaleString() : "—";
+                    for (const text of [
+                        rec.question.length > 80 ? rec.question.slice(0, 77) + "…" : rec.question,
+                        String(rec.sub_questions_count ?? 1),
+                        (rec.tokens ?? 0).toLocaleString(),
+                        `$${(rec.cost_usd ?? 0).toFixed(4)}`,
+                        ts,
+                    ]) {
+                        const td = tr.createEl("td", { text });
+                        td.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle)";
+                    }
+                }
+            } catch {
+                tableEl.setText("Error: is synthadoc serve running?");
+            }
+        };
+
+        btn.onclick = load;
+        load();
+    }
+
+    private _buildIngestHistoryTab(panel: HTMLElement) {
+        const row = panel.createEl("div");
+        row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px";
+        row.createEl("label", { text: "Last" });
+        const input = row.createEl("input", { type: "number" }) as HTMLInputElement;
+        input.value = "50";
+        input.style.cssText = "width:60px;padding:4px 8px";
+        row.createEl("span", { text: "records" });
+        const btn = row.createEl("button", { text: "Load" });
+
+        const tableEl = panel.createEl("div");
 
         const load = async () => {
             const limit = parseInt(input.value) || 50;
@@ -1660,9 +1733,7 @@ class AuditHistoryModal extends Modal {
                 for (const rec of r.records) {
                     const tr = tbody.createEl("tr");
                     const src = rec.source_path.split(/[\\/]/).pop() ?? rec.source_path;
-                    const ts = rec.ingested_at
-                        ? new Date(rec.ingested_at).toLocaleString()
-                        : "—";
+                    const ts = rec.ingested_at ? new Date(rec.ingested_at).toLocaleString() : "—";
                     for (const text of [
                         src,
                         rec.wiki_page,
@@ -1682,146 +1753,9 @@ class AuditHistoryModal extends Modal {
         btn.onclick = load;
         load();
     }
-    onClose() { this.contentEl.empty(); }
-}
 
-class AuditCostsModal extends Modal {
-    onOpen() {
-        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
-        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
-        const { contentEl } = this;
-        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Cost summary" });
-        makeDraggable(this.modalEl, titleEl);
-
-        const row = contentEl.createEl("div");
-        row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px";
-        row.createEl("label", { text: "Last" });
-        const input = row.createEl("input", { type: "number" }) as HTMLInputElement;
-        input.value = "30";
-        input.style.cssText = "width:60px;padding:4px 8px";
-        row.createEl("span", { text: "days" });
-        const btn = row.createEl("button", { text: "Load" });
-
-        const out = contentEl.createEl("div");
-
-        const load = async () => {
-            const days = parseInt(input.value) || 30;
-            out.setText("Loading…");
-            try {
-                const r = await api.auditCosts(days) as any;
-                out.empty();
-
-                const summary = out.createEl("div");
-                summary.style.cssText = "margin-bottom:16px";
-                summary.createEl("p", {
-                    text: `Total: ${(r.total_tokens ?? 0).toLocaleString()} tokens · $${(r.total_cost_usd ?? 0).toFixed(4)} USD`,
-                }).style.cssText = "font-weight:bold;-webkit-user-select:text;user-select:text";
-
-                if (r.daily?.length) {
-                    const table = out.createEl("table");
-                    table.style.cssText = "width:100%;border-collapse:collapse;font-size:13px;-webkit-user-select:text;user-select:text";
-                    const hrow = table.createEl("thead").createEl("tr");
-                    for (const h of ["Day", "Cost (USD)"]) {
-                        const th = hrow.createEl("th", { text: h });
-                        th.style.cssText = "text-align:left;padding:4px 8px;border-bottom:1px solid var(--background-modifier-border)";
-                    }
-                    const tbody = table.createEl("tbody");
-                    for (const d of r.daily) {
-                        const tr = tbody.createEl("tr");
-                        for (const text of [d.day, `$${(d.cost_usd ?? 0).toFixed(4)}`]) {
-                            const td = tr.createEl("td", { text });
-                            td.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle)";
-                        }
-                    }
-                } else {
-                    out.createEl("p", { text: "No cost data for this period.", cls: "synthadoc-muted" });
-                }
-            } catch {
-                out.setText("Error: is synthadoc serve running?");
-            }
-        };
-
-        btn.onclick = load;
-        load();
-    }
-    onClose() { this.contentEl.empty(); }
-}
-
-class QueryHistoryModal extends Modal {
-    onOpen() {
-        this.modalEl.style.width = "clamp(520px, 65vw, 900px)";
-        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
-        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
-        const { contentEl } = this;
-        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Query history" });
-        makeDraggable(this.modalEl, titleEl);
-
-        const row = contentEl.createEl("div");
-        row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px";
-        row.createEl("label", { text: "Last" });
-        const input = row.createEl("input", { type: "number" }) as HTMLInputElement;
-        input.value = "50";
-        input.style.cssText = "width:60px;padding:4px 8px";
-        row.createEl("span", { text: "records" });
-        const btn = row.createEl("button", { text: "Load" });
-
-        const tableEl = contentEl.createEl("div");
-
-        const load = async () => {
-            const limit = parseInt(input.value) || 50;
-            tableEl.setText("Loading…");
-            try {
-                const r = await api.queryHistory(limit) as any;
-                tableEl.empty();
-                if (!r.records.length) {
-                    tableEl.createEl("p", { text: "No queries recorded yet." });
-                    return;
-                }
-                const table = tableEl.createEl("table");
-                table.style.cssText = "width:100%;border-collapse:collapse;font-size:12px;-webkit-user-select:text;user-select:text";
-                const hrow = table.createEl("thead").createEl("tr");
-                for (const h of ["Question", "Sub-Qs", "Tokens", "Cost (USD)", "Asked at"]) {
-                    const th = hrow.createEl("th", { text: h });
-                    th.style.cssText = "text-align:left;padding:4px 8px;border-bottom:1px solid var(--background-modifier-border)";
-                }
-                const tbody = table.createEl("tbody");
-                for (const rec of r.records) {
-                    const tr = tbody.createEl("tr");
-                    const ts = rec.queried_at
-                        ? new Date(rec.queried_at).toLocaleString()
-                        : "—";
-                    for (const text of [
-                        rec.question.length > 80 ? rec.question.slice(0, 77) + "…" : rec.question,
-                        String(rec.sub_questions_count ?? 1),
-                        (rec.tokens ?? 0).toLocaleString(),
-                        `$${(rec.cost_usd ?? 0).toFixed(4)}`,
-                        ts,
-                    ]) {
-                        const td = tr.createEl("td", { text });
-                        td.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle)";
-                    }
-                }
-            } catch {
-                tableEl.setText("Error: is synthadoc serve running?");
-            }
-        };
-
-        btn.onclick = load;
-        load();
-    }
-    onClose() { this.contentEl.empty(); }
-}
-
-class AuditEventsModal extends Modal {
-    onOpen() {
-        this.modalEl.style.width = "clamp(560px, 70vw, 960px)";
-        const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
-        if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
-        const { contentEl } = this;
-        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Audit events" });
-        makeDraggable(this.modalEl, titleEl);
-
-        const row = contentEl.createEl("div");
+    private _buildEventsTab(panel: HTMLElement) {
+        const row = panel.createEl("div");
         row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px";
         row.createEl("label", { text: "Last" });
         const input = row.createEl("input", { type: "number" }) as HTMLInputElement;
@@ -1832,7 +1766,7 @@ class AuditEventsModal extends Modal {
         row.createEl("span", { text: "events (max 1000)" });
         const btn = row.createEl("button", { text: "Load" });
 
-        const tableEl = contentEl.createEl("div");
+        const tableEl = panel.createEl("div");
         tableEl.style.cssText = "max-height:60vh;overflow-y:auto";
 
         const load = async () => {
@@ -1874,6 +1808,60 @@ class AuditEventsModal extends Modal {
         input.addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
         load();
     }
+
+    private _buildCostSummaryTab(panel: HTMLElement) {
+        const row = panel.createEl("div");
+        row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:12px";
+        row.createEl("label", { text: "Last" });
+        const input = row.createEl("input", { type: "number" }) as HTMLInputElement;
+        input.value = "30";
+        input.style.cssText = "width:60px;padding:4px 8px";
+        row.createEl("span", { text: "days" });
+        const btn = row.createEl("button", { text: "Load" });
+
+        const out = panel.createEl("div");
+
+        const load = async () => {
+            const days = parseInt(input.value) || 30;
+            out.setText("Loading…");
+            try {
+                const r = await api.auditCosts(days) as any;
+                out.empty();
+
+                const summary = out.createEl("div");
+                summary.style.cssText = "margin-bottom:16px";
+                summary.createEl("p", {
+                    text: `Total: ${(r.total_tokens ?? 0).toLocaleString()} tokens · $${(r.total_cost_usd ?? 0).toFixed(4)} USD`,
+                }).style.cssText = "font-weight:bold;-webkit-user-select:text;user-select:text";
+
+                if (r.daily?.length) {
+                    const table = out.createEl("table");
+                    table.style.cssText = "width:100%;border-collapse:collapse;font-size:13px;-webkit-user-select:text;user-select:text";
+                    const hrow = table.createEl("thead").createEl("tr");
+                    for (const h of ["Day", "Cost (USD)"]) {
+                        const th = hrow.createEl("th", { text: h });
+                        th.style.cssText = "text-align:left;padding:4px 8px;border-bottom:1px solid var(--background-modifier-border)";
+                    }
+                    const tbody = table.createEl("tbody");
+                    for (const d of r.daily) {
+                        const tr = tbody.createEl("tr");
+                        for (const text of [d.day, `$${(d.cost_usd ?? 0).toFixed(4)}`]) {
+                            const td = tr.createEl("td", { text });
+                            td.style.cssText = "padding:4px 8px;border-bottom:1px solid var(--background-modifier-border-subtle)";
+                        }
+                    }
+                } else {
+                    out.createEl("p", { text: "No cost data for this period.", cls: "synthadoc-muted" });
+                }
+            } catch {
+                out.setText("Error: is synthadoc serve running?");
+            }
+        };
+
+        btn.onclick = load;
+        load();
+    }
+
     onClose() { this.contentEl.empty(); }
 }
 

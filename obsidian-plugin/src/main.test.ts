@@ -271,10 +271,7 @@ describe("SynthadocPlugin command registration", () => {
             "synthadoc-jobs-retry-dead",
             "synthadoc-jobs-purge",
             "synthadoc-scaffold",
-            "synthadoc-audit-history",
-            "synthadoc-audit-costs",
-            "synthadoc-audit-queries",
-            "synthadoc-audit-events",
+            "synthadoc-audit",
             "synthadoc-routing",
             "synthadoc-staging",
             "synthadoc-candidates",
@@ -296,7 +293,7 @@ describe("SynthadocPlugin command registration", () => {
         expect(names.some(n => n.startsWith("Lint:"))).toBe(true);
         expect(names.some(n => n.startsWith("Jobs:"))).toBe(true);
         expect(names.some(n => n.startsWith("Wiki:"))).toBe(true);
-        expect(names.some(n => n.startsWith("Audit:"))).toBe(true);
+        expect(names.some(n => n.startsWith("Audit"))).toBe(true);
         expect(names.some(n => n.startsWith("Routing:"))).toBe(true);
         expect(names.some(n => n.startsWith("Staging:"))).toBe(true);
         expect(names.some(n => n.startsWith("Candidates:"))).toBe(true);
@@ -370,28 +367,12 @@ describe("SynthadocPlugin new commands registered", () => {
         expect(ids).toContain("synthadoc-scaffold");
     });
 
-    it("audit-history command is registered", async () => {
+    it("audit command is registered", async () => {
         const { default: SynthadocPlugin } = await import("./main");
         const plugin = new SynthadocPlugin();
         await plugin.onload();
         const ids = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].id);
-        expect(ids).toContain("synthadoc-audit-history");
-    });
-
-    it("audit-costs command is registered", async () => {
-        const { default: SynthadocPlugin } = await import("./main");
-        const plugin = new SynthadocPlugin();
-        await plugin.onload();
-        const ids = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].id);
-        expect(ids).toContain("synthadoc-audit-costs");
-    });
-
-    it("audit-queries command is registered", async () => {
-        const { default: SynthadocPlugin } = await import("./main");
-        const plugin = new SynthadocPlugin();
-        await plugin.onload();
-        const ids = (plugin.addCommand as any).mock.calls.map((c: any) => c[0].id);
-        expect(ids).toContain("synthadoc-audit-queries");
+        expect(ids).toContain("synthadoc-audit");
     });
 });
 
@@ -974,19 +955,9 @@ describe("ScaffoldModal", () => {
     });
 });
 
-describe("AuditEventsModal", () => {
-    it("audit-events command is registered", async () => {
-        const { default: SynthadocPlugin } = await import("./main");
-        const plugin = new SynthadocPlugin();
-        await plugin.onload();
-        const cmds = (plugin.addCommand as any).mock.calls.map((c: any) => c[0]);
-        const cmd = cmds.find((c: any) => c.id === "synthadoc-audit-events");
-        expect(cmd).toBeDefined();
-        expect(cmd.name).toBe("Audit: events...");
-    });
-
+describe("AuditModal — Events tab", () => {
     it("loads events on open and renders a table", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-events");
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit");
         apiMock.auditEvents.mockResolvedValueOnce({
             records: [
                 { timestamp: "2026-05-01T10:23:45Z", job_id: "abcd1234efgh", event: "job_started", metadata: "ingest" },
@@ -1008,7 +979,7 @@ describe("AuditEventsModal", () => {
     });
 
     it("shows empty message when no events exist", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-events");
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit");
         apiMock.auditEvents.mockResolvedValueOnce({ records: [], count: 0 });
 
         const modal = new ModalClass();
@@ -1018,46 +989,8 @@ describe("AuditEventsModal", () => {
         expect(modal.contentEl.innerHTML).toContain("No audit events found");
     });
 
-    it("calls api.auditEvents with the user-specified limit on Load click", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-events");
-        apiMock.auditEvents
-            .mockResolvedValueOnce({ records: [], count: 0 })
-            .mockResolvedValueOnce({ records: [], count: 0 });
-
-        const modal = new ModalClass();
-        modal.onOpen();
-        await flushPromises();
-
-        const input = modal.contentEl.querySelector("input") as any;
-        input.value = "500";
-        const btn = modal.contentEl.querySelector("button") as any;
-        btn.onclick();
-        await flushPromises();
-
-        expect(apiMock.auditEvents).toHaveBeenCalledWith(500);
-    });
-
-    it("clamps limit to 1000 when user enters a value above the max", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-events");
-        apiMock.auditEvents
-            .mockResolvedValueOnce({ records: [], count: 0 })
-            .mockResolvedValueOnce({ records: [], count: 0 });
-
-        const modal = new ModalClass();
-        modal.onOpen();
-        await flushPromises();
-
-        const input = modal.contentEl.querySelector("input") as any;
-        input.value = "9999";
-        const btn = modal.contentEl.querySelector("button") as any;
-        btn.onclick();
-        await flushPromises();
-
-        expect(apiMock.auditEvents).toHaveBeenCalledWith(1000);
-    });
-
     it("shows server error when api.auditEvents throws", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-events");
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit");
         apiMock.auditEvents.mockRejectedValueOnce(new Error("network error"));
 
         const modal = new ModalClass();
@@ -1889,11 +1822,11 @@ describe("PurgeJobsModal", () => {
     });
 });
 
-// ── AuditHistoryModal ─────────────────────────────────────────────────────────
+// ── AuditModal — Ingest history tab ───────────────────────────────────────────
 
-describe("AuditHistoryModal", () => {
+describe("AuditModal — Ingest history tab", () => {
     it("calls api.auditHistory with default limit 50 on open", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-history");
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit");
         apiMock.auditHistory.mockResolvedValueOnce({ records: [], count: 0 });
 
         const modal = new ModalClass();
@@ -1904,7 +1837,7 @@ describe("AuditHistoryModal", () => {
     });
 
     it("shows 'No ingest records' when empty", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-history");
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit");
         apiMock.auditHistory.mockResolvedValueOnce({ records: [], count: 0 });
 
         const modal = new ModalClass();
@@ -1915,7 +1848,7 @@ describe("AuditHistoryModal", () => {
     });
 
     it("renders source filename and wiki_page", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-history");
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit");
         apiMock.auditHistory.mockResolvedValueOnce({
             records: [{
                 source_path: "raw_sources/paper.pdf",
@@ -1934,27 +1867,8 @@ describe("AuditHistoryModal", () => {
         expect(modal.contentEl.innerHTML).toContain("alan-turing");
     });
 
-    it("calls api.auditHistory with custom limit on Load click", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-history");
-        apiMock.auditHistory
-            .mockResolvedValueOnce({ records: [], count: 0 })
-            .mockResolvedValueOnce({ records: [], count: 0 });
-
-        const modal = new ModalClass();
-        modal.onOpen();
-        await flushPromises();
-
-        const input = modal.contentEl.querySelector("input") as any;
-        input.value = "100";
-        const btn = modal.contentEl.querySelector("button") as any;
-        await btn.onclick();
-        await flushPromises();
-
-        expect(apiMock.auditHistory).toHaveBeenCalledWith(100);
-    });
-
     it("shows error when api.auditHistory throws", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-history");
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit");
         apiMock.auditHistory.mockRejectedValueOnce(new Error("refused"));
 
         const modal = new ModalClass();
@@ -1965,11 +1879,11 @@ describe("AuditHistoryModal", () => {
     });
 });
 
-// ── AuditCostsModal ───────────────────────────────────────────────────────────
+// ── AuditModal — Cost summary tab ─────────────────────────────────────────────
 
-describe("AuditCostsModal", () => {
+describe("AuditModal — Cost summary tab", () => {
     it("calls api.auditCosts with default 30 days on open", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-costs");
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit");
         apiMock.auditCosts.mockResolvedValueOnce({ total_tokens: 0, total_cost_usd: 0, daily: [] });
 
         const modal = new ModalClass();
@@ -1980,7 +1894,7 @@ describe("AuditCostsModal", () => {
     });
 
     it("shows total cost in the summary line", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-costs");
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit");
         apiMock.auditCosts.mockResolvedValueOnce({
             total_tokens: 48200, total_cost_usd: 0.0571,
             daily: [{ day: "2026-05-01", cost_usd: 0.0571 }],
@@ -1994,7 +1908,7 @@ describe("AuditCostsModal", () => {
     });
 
     it("shows 'No cost data' when daily array is empty", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-costs");
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit");
         apiMock.auditCosts.mockResolvedValueOnce({ total_tokens: 0, total_cost_usd: 0, daily: [] });
 
         const modal = new ModalClass();
@@ -2005,7 +1919,7 @@ describe("AuditCostsModal", () => {
     });
 
     it("shows error when api.auditCosts throws", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-costs");
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit");
         apiMock.auditCosts.mockRejectedValueOnce(new Error("refused"));
 
         const modal = new ModalClass();
@@ -2016,11 +1930,11 @@ describe("AuditCostsModal", () => {
     });
 });
 
-// ── QueryHistoryModal ─────────────────────────────────────────────────────────
+// ── AuditModal — Query history tab ────────────────────────────────────────────
 
-describe("QueryHistoryModal", () => {
+describe("AuditModal — Query history tab", () => {
     it("calls api.queryHistory with default limit 50 on open", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-queries");
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit");
         apiMock.queryHistory.mockResolvedValueOnce({ records: [] });
 
         const modal = new ModalClass();
@@ -2031,7 +1945,7 @@ describe("QueryHistoryModal", () => {
     });
 
     it("shows 'No queries recorded' when empty", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-queries");
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit");
         apiMock.queryHistory.mockResolvedValueOnce({ records: [] });
 
         const modal = new ModalClass();
@@ -2042,7 +1956,7 @@ describe("QueryHistoryModal", () => {
     });
 
     it("renders question text and cost in the table", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-queries");
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit");
         apiMock.queryHistory.mockResolvedValueOnce({
             records: [{
                 question: "What is the Bank of Canada rate?",
@@ -2060,7 +1974,7 @@ describe("QueryHistoryModal", () => {
     });
 
     it("shows error when api.queryHistory throws", async () => {
-        const { ModalClass, apiMock } = await getModal("synthadoc-audit-queries");
+        const { ModalClass, apiMock } = await getModal("synthadoc-audit");
         apiMock.queryHistory.mockRejectedValueOnce(new Error("refused"));
 
         const modal = new ModalClass();
