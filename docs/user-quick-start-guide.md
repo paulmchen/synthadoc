@@ -527,6 +527,10 @@ synthadoc jobs list           # watch progress
 synthadoc lint report         # view results when complete
 ```
 
+The pre-built pages already contain the kinds of sweeping historical claims an adversarial
+reviewer will flag — no additional ingest is needed before this step, though running Step 6
+first gives the adversarial pass more content to work with.
+
 Sample output for the history-of-computing demo wiki:
 
 ```
@@ -535,27 +539,30 @@ Orphan pages (0)
 
 Adversarial warnings (3):
 
-  quantum-computing-primer
-    Claim:   "Quantum computers will render all classical encryption obsolete within a decade."
-    Concern: This is speculative — no peer-reviewed timeline supports a 10-year horizon;
-             NIST post-quantum standards are designed to coexist with classical systems.
-    Sources: wiki/quantum-computing-primer.md (raw_sources/quantum-intro.pdf)
-    Re-ingest: synthadoc ingest raw_sources/quantum-intro.pdf
+  alan-turing
+    Claim:   "Turing's work at Bletchley Park shortened the war by two to four years."
+    Concern: This figure is widely cited but historically contested — it is a counterfactual
+             estimate; different historians give figures ranging from one year to "possibly
+             none" depending on model assumptions.
+    Sources: raw_sources/turing-enigma-decryption.pdf
+    Re-ingest: synthadoc ingest raw_sources/turing-enigma-decryption.pdf
 
-  turing-machine
-    Claim:   "Alan Turing single-handedly invented the modern computer."
-    Concern: Overstates individual contribution — von Neumann, Zuse, Atanasoff, and Eckert
-             all made independent foundational contributions in the same era.
-    Sources: wiki/turing-machine.md (raw_sources/turing-biography.txt)
-    Re-ingest: synthadoc ingest raw_sources/turing-biography.txt
+  artificial-intelligence-history
+    Claim:   "These systems exhibit emergent capabilities that were not explicitly programmed."
+    Concern: "Emergence" in large language models is disputed — several researchers argue
+             that capability gains are smooth and predictable at scale, and that the label
+             "emergent" reflects measurement choices rather than a genuine phase transition.
+    Sources: public-domain/mccorduck-machines-who-think.txt
+    Re-ingest: synthadoc ingest "search for: emergent capabilities LLMs debate Schaeffer 2023"
 
-  grace-hopper
-    Claim:   "Grace Hopper invented the first compiler."
-    Concern: Disputed — her A-0 system (1952) automated subroutine linking rather than
-             code translation in the modern sense; FORTRAN (1957) is the more widely
-             cited first production compiler.
-    Sources: wiki/grace-hopper.md (raw_sources/first-compiler-controversy.pdf)
-    Re-ingest: synthadoc ingest raw_sources/first-compiler-controversy.pdf
+  personal-computer-revolution
+    Claim:   "IBM's decision to build the PC from off-the-shelf parts ... was the most
+             consequential business decision of the era."
+    Concern: An unsupported superlative — Microsoft's retention of the MS-DOS licence and
+             Intel's exclusive CPU supply deal were equally pivotal; "most consequential"
+             requires a comparison the text does not make.
+    Sources: public-domain/ceruzzi-history-modern-computing.txt
+    Re-ingest: synthadoc ingest "search for: IBM PC open architecture business impact history"
 ```
 
 ### What each warning means
@@ -581,15 +588,14 @@ are defensible with context the LLM does not have. Read each concern before deci
 
 ### Hands-on exercise
 
-The `turing-machine` warning above flags an overstatement. Fix it:
+The `alan-turing` warning flags a contested counterfactual. Fix it:
 
-1. Open `wiki/turing-machine.md` in Obsidian
-2. Find the sentence: *"Alan Turing single-handedly invented the modern computer."*
-3. Replace it with something like:
+1. Open `wiki/alan-turing.md` in Obsidian
+2. Find the sentence about shortening the war (in the **Wartime Contributions** section)
+3. Replace the specific estimate with qualified language:
    ```
-   Alan Turing's 1936 paper introducing the Turing machine is a foundational contribution
-   to the theory of computation, though the modern stored-program computer emerged from the
-   parallel work of von Neumann, Zuse, Atanasoff, and others in the 1940s.
+   Historians credit Turing's Bombe with dramatically accelerating Allied codebreaking,
+   though estimates of its effect on the war's duration vary widely.
    ```
 4. Save — the next lint run will re-evaluate the page and the warning will clear
 
@@ -600,7 +606,7 @@ synthadoc lint run
 synthadoc lint report
 ```
 
-The `turing-machine` adversarial warning should no longer appear.
+The `alan-turing` adversarial warning should no longer appear.
 
 ### View warnings in Obsidian
 
