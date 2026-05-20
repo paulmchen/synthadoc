@@ -479,6 +479,8 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
             except Exception:
                 continue
             warnings = fm.get("lint_warnings", []) or []
+            if not isinstance(warnings, list):
+                continue
             if not warnings:
                 continue
             sources = fm.get("sources", []) or []
