@@ -536,7 +536,8 @@ about — defensible or nuanced statements are skipped. The full history-of-comp
 wiki (10 pre-built pages plus pages created in Step 6) typically produces **10–15 warnings**,
 giving a meaningful but not overwhelming signal.
 
-Sample output for the history-of-computing demo wiki:
+Sample output for the history-of-computing demo wiki (after Step 6 batch ingest; exact
+wording varies by LLM):
 
 ```
 Contradicted pages (0)
@@ -545,20 +546,17 @@ Orphan pages (0)
 Adversarial warnings (3):
 
   alan-turing
-    Claim:   "Turing's work at Bletchley Park shortened the war by two to four years."
-    Concern: This figure is widely cited but historically contested — it is a counterfactual
-             estimate; different historians give figures ranging from one year to "possibly
-             none" depending on model assumptions.
-    Sources: raw_sources/turing-enigma-decryption.pdf
-    Re-ingest: synthadoc ingest raw_sources/turing-enigma-decryption.pdf
+    Claim:   "Saved over fourteen million lives."
+    Concern: This specific figure lacks scholarly consensus — historians dispute both any
+             precise death-count and the causal attribution of lives saved to Turing's
+             cryptanalysis alone. The claim conflates a speculative timeline reduction with
+             a precise casualty figure that is unsupported in academic literature.
 
   artificial-intelligence-history
     Claim:   "These systems exhibit emergent capabilities that were not explicitly programmed."
     Concern: "Emergence" in large language models is disputed — several researchers argue
              that capability gains are smooth and predictable at scale, and that the label
              "emergent" reflects measurement choices rather than a genuine phase transition.
-    Sources: public-domain/mccorduck-machines-who-think.txt
-    Re-ingest: synthadoc ingest "search for: emergent capabilities LLMs debate Schaeffer 2023"
 
   personal-computer-revolution
     Claim:   "IBM's decision to build the PC from off-the-shelf parts ... was the most
@@ -566,9 +564,11 @@ Adversarial warnings (3):
     Concern: An unsupported superlative — Microsoft's retention of the MS-DOS licence and
              Intel's exclusive CPU supply deal were equally pivotal; "most consequential"
              requires a comparison the text does not make.
-    Sources: public-domain/ceruzzi-history-modern-computing.txt
-    Re-ingest: synthadoc ingest "search for: IBM PC open architecture business impact history"
 ```
+
+> **Note:** Re-ingest suggestions only appear for pages whose sources were ingested from local
+> files (absolute paths) or URLs. Pre-built demo pages use placeholder source references,
+> so no re-ingest command is shown — use `synthadoc ingest <source>` manually if needed.
 
 ### What each warning means
 
@@ -593,14 +593,16 @@ are defensible with context the LLM does not have. Read each concern before deci
 
 ### Hands-on exercise
 
-The `alan-turing` warning flags a contested counterfactual. Fix it:
+The `alan-turing` warning flags the "fourteen million lives" figure as lacking scholarly
+consensus. Fix it:
 
 1. Open `wiki/alan-turing.md` in Obsidian
-2. Find the sentence about shortening the war (in the **Wartime Contributions** section)
-3. Replace the specific estimate with qualified language:
+2. Find the sentence in the **Wartime Contributions** section that mentions lives saved
+   (added when you ingested `turing-enigma-decryption.pdf` in Step 6)
+3. Remove the specific casualty figure and replace with qualified language:
    ```
    Historians credit Turing's Bombe with dramatically accelerating Allied codebreaking,
-   though estimates of its effect on the war's duration vary widely.
+   though estimates of the war's duration and lives affected vary widely across sources.
    ```
 4. Save — the next lint run will re-evaluate the page and the warning will clear
 
