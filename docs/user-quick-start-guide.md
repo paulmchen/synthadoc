@@ -629,10 +629,20 @@ glance without reading every line.
 > `Synthadoc: Lint: run...` and tick **Skip adversarial review**. This also clears any
 > existing `lint_warnings` from frontmatter so stale warnings do not linger.
 
-### Optional — configure a dedicated adversarial model
+### Optional — tune the adversarial pass
 
-By default the adversarial pass uses the same model as the rest of lint. For large wikis,
-point it at a faster or cheaper model to keep costs down:
+**Adjust the warning cap per page** — the default is 2, set in your wiki's `config.toml`:
+
+```toml
+# config.toml
+[lint]
+adversarial_max_per_page = 2  # raise to 3–5 for a deeper review; lower to 1 for less noise
+```
+
+If `[lint]` is absent from `config.toml`, Synthadoc defaults to 2 — no file change needed.
+
+**Use a dedicated model** — by default the adversarial pass shares the lint model. Point it
+at a faster or cheaper model to keep costs down on large wikis:
 
 ```toml
 # config.toml
