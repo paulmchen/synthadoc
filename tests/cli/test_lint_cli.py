@@ -268,7 +268,7 @@ def test_lint_report_shows_adversarial_warnings_section(tmp_path, monkeypatch):
     assert "Adversarial" in result.output
     assert "Claim A was the first." in result.output
     assert "Overstated" in result.output
-    assert "papers/study.pdf" in result.output  # suggested re-ingest
+    assert 'synthadoc ingest "papers/study.pdf" -w mywiki' in result.output  # suggested re-ingest
 
 
 def test_lint_report_no_adversarial_section_when_clean(tmp_path, monkeypatch):

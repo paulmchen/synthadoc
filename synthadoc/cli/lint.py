@@ -130,12 +130,32 @@ def lint_report(
     }
     orphans = find_orphan_slugs(page_bodies)
 
+    # --- Adversarial warnings (read lint_warnings from frontmatter) ---
+    adv_pages = []
+    for stem, text in page_texts.items():
+        if stem in LINT_SKIP_SLUGS:
+            continue
+        fm = _parse_frontmatter(text)
+        warnings = fm.get("lint_warnings", []) or []
+        if not isinstance(warnings, list):
+            continue
+        if not warnings:
+            continue
+        sources = fm.get("sources", []) or []
+        suggested_reingests = [
+            f'synthadoc ingest "{s["file"]}" -w {wiki}'
+            for s in sources
+            if isinstance(s, dict) and s.get("file")
+        ]
+        adv_pages.append({"slug": stem, "warnings": warnings,
+                           "suggested_reingests": suggested_reingests})
+
     # --- Report ---
-    has_issues = contradicted or orphans
+    has_issues = contradicted or orphans or adv_pages
     if not has_issues:
         # Still sync frontmatter to clear stale orphan: true flags from previous runs.
         _sync_orphan_frontmatter(wiki_dir, page_texts, set())
-        typer.echo("All clear — no contradictions or orphan pages found.")
+        typer.echo("All clear — no contradictions, orphan pages, or adversarial warnings found.")
         return
 
     if contradicted:
@@ -159,26 +179,6 @@ def lint_report(
             typer.echo(f"    -> Add [[{slug}]] to a related content page, e.g.:")
             typer.echo(f"         {suggestion}")
 
-    # --- Adversarial warnings (read lint_warnings from frontmatter) ---
-    adv_pages = []
-    for stem, text in page_texts.items():
-        if stem in LINT_SKIP_SLUGS:
-            continue
-        fm = _parse_frontmatter(text)
-        warnings = fm.get("lint_warnings", []) or []
-        if not isinstance(warnings, list):
-            continue
-        if not warnings:
-            continue
-        sources = fm.get("sources", []) or []
-        suggested_reingests = [
-            f'synthadoc ingest "{s["file"]}" -w {wiki}'
-            for s in sources
-            if isinstance(s, dict) and s.get("file")
-        ]
-        adv_pages.append({"slug": stem, "warnings": warnings,
-                           "suggested_reingests": suggested_reingests})
-
     if adv_pages:
         total_warnings = sum(len(p["warnings"]) for p in adv_pages)
         typer.echo(f"\n\U0001f50d Adversarial Warnings ({total_warnings} across {len(adv_pages)} pages):\n")
@@ -187,7 +187,8 @@ def lint_report(
             for w in entry["warnings"]:
                 if w.get("claim"):
                     typer.echo(f"    ⚠ \"{w['claim']}\"")
-                typer.echo(f"       Concern: {w['concern']}")
+                concern = w.get("concern") or "(no concern text)"
+                typer.echo(f"       Concern: {concern}")
             if entry["suggested_reingests"]:
                 typer.echo("    \U0001f4a1 Re-ingest sources to update this page:")
                 for cmd in entry["suggested_reingests"]:
@@ -197,7 +198,7 @@ def lint_report(
     # query (WHERE orphan = true) reflects the same result as this report.
     _sync_orphan_frontmatter(wiki_dir, page_texts, set(orphans))
 
-    adv_count = sum(len(p["warnings"]) for p in adv_pages) if adv_pages else 0
+    adv_count = sum(len(p["warnings"]) for p in adv_pages)
     typer.echo(
         f"\n{len(contradicted)} contradiction(s), {len(orphans)} orphan(s), "
         f"{adv_count} adversarial warning(s)."
