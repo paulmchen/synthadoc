@@ -2,6 +2,8 @@
 # Copyright (C) 2026 Paul Chen / axoviq.com
 from __future__ import annotations
 
+import asyncio
+import json as _json
 import re
 from dataclasses import dataclass, field
 
@@ -18,6 +20,7 @@ class LintReport:
     orphan_slugs: list[str] = field(default_factory=list)
     dangling_links_removed: int = 0
     tokens_used: int = 0
+    adversarial_warnings: list[dict] = field(default_factory=list)
 
 
 _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
@@ -91,15 +94,35 @@ def find_orphan_slugs(
     return [s for s in page_texts if s not in referenced and s not in skip]
 
 
+def _parse_adversarial_response(text: str) -> list[dict]:
+    """Parse LLM adversarial response into list of {claim, concern} dicts."""
+    raw = text.strip()
+    raw = re.sub(r"^```(?:json)?\s*\n?", "", raw)
+    raw = re.sub(r"\n?```\s*$", "", raw).strip()
+    try:
+        parsed = _json.loads(raw)
+        if isinstance(parsed, list):
+            return [
+                {"claim": item.get("claim"), "concern": item.get("concern")}
+                for item in parsed
+                if isinstance(item, dict) and item.get("concern")
+            ]
+    except Exception:
+        pass
+    return []
+
+
 class LintAgent:
     def __init__(self, provider: LLMProvider, store: WikiStorage,
                  log_writer: LogWriter, confidence_threshold: float = 0.85,
-                 audit_db: AuditDB | None = None) -> None:
+                 audit_db: AuditDB | None = None,
+                 adversarial_provider: LLMProvider | None = None) -> None:
         self._provider = provider
         self._store = store
         self._log = log_writer
         self._threshold = confidence_threshold
         self._audit = audit_db
+        self._adversarial_provider = adversarial_provider or provider
 
     def _find_orphans(self, slugs: list[str]) -> list[str]:
         page_texts = {}
@@ -122,8 +145,65 @@ class LintAgent:
                 fixed += 1
         return fixed
 
+    async def _adversarial_single(self, slug: str, content: str) -> tuple[list[dict], int]:
+        """Adversarially review one page. Always returns; never raises (rate-limits are caught)."""
+        prompt = (
+            "You are a skeptical editor reviewing a wiki page compiled from source documents.\n\n"
+            "List up to 5 claims in this page that are likely overstated, unsupported,\n"
+            "missing key caveats, or contradict known facts.\n\n"
+            "For each claim:\n"
+            "1. Quote the exact claim (one sentence or phrase)\n"
+            "2. Explain the specific concern concisely\n\n"
+            "If you find no issues, return an empty JSON array: []\n\n"
+            "Return ONLY a JSON array, no markdown fences:\n"
+            '[{"claim": "...", "concern": "..."}, ...]\n\n'
+            f"--- PAGE CONTENT ---\n{content[:3000]}"
+        )
+        try:
+            resp = await self._adversarial_provider.complete(
+                messages=[Message(role="user", content=prompt)],
+                temperature=0.0,
+            )
+            return _parse_adversarial_response(resp.text), resp.total_tokens
+        except Exception as exc:
+            err = str(exc).lower()
+            if "429" in str(exc) or "rate limit" in err or "rate_limit" in err or "too many" in err:
+                return [{"claim": None,
+                         "concern": "adversarial-pass-skipped: rate limit — consider a paid model or a higher rate-limit tier"}], 0
+            return [], 0
+
+    async def _run_adversarial_pass(self, slugs: list[str]) -> tuple[list[dict], int]:
+        """Concurrent adversarial review of all non-skip pages.
+
+        Returns (adversarial_warnings_list, total_tokens).
+        adversarial_warnings_list: [{slug, warnings}] for pages with at least one warning.
+        """
+        scan = [
+            (s, self._store.read_page(s))
+            for s in slugs
+            if s not in LINT_SKIP_SLUGS
+        ]
+        scan = [(s, p) for s, p in scan if p is not None]
+        if not scan:
+            return [], 0
+
+        results = await asyncio.gather(
+            *(self._adversarial_single(s, p.content) for s, p in scan)
+        )
+
+        all_warnings: list[dict] = []
+        total_tokens = 0
+        for (slug, page), (warnings, tokens) in zip(scan, results):
+            total_tokens += tokens
+            page.lint_warnings = warnings
+            self._store.write_page(slug, page)
+            if warnings:
+                all_warnings.append({"slug": slug, "warnings": warnings})
+
+        return all_warnings, total_tokens
+
     async def lint(self, scope: str = "all", auto_resolve: bool = False,
-                   job_id: str = "system") -> LintReport:
+                   adversarial: bool = True, job_id: str = "system") -> LintReport:
         report = LintReport()
         slugs = self._store.list_pages()
 
@@ -160,7 +240,6 @@ class LintAgent:
                         )
                         report.tokens_used += resp.total_tokens
                         try:
-                            import json as _json
                             raw = resp.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
                             decision = _json.loads(raw)
                         except Exception:
@@ -198,6 +277,20 @@ class LintAgent:
                 if page and page.orphan != (slug in orphan_set):
                     page.orphan = slug in orphan_set
                     self._store.write_page(slug, page)
+
+        # adversarial pass — runs only on full scope; default on
+        if scope == "all":
+            if adversarial:
+                adv_warnings, adv_tokens = await self._run_adversarial_pass(slugs)
+                report.adversarial_warnings = adv_warnings
+                report.tokens_used += adv_tokens
+            else:
+                # --no-adversarial: clear stale lint_warnings from all pages
+                for slug in [s for s in slugs if s not in LINT_SKIP_SLUGS]:
+                    page = self._store.read_page(slug)
+                    if page and page.lint_warnings:
+                        page.lint_warnings = []
+                        self._store.write_page(slug, page)
 
         self._log.log_lint(resolved=report.contradictions_resolved,
                            flagged=report.contradictions_found - report.contradictions_resolved,

@@ -299,3 +299,165 @@ async def test_lint_removes_dangling_links(tmp_wiki):
     updated = store.read_page("index")
     assert "[[crashcourse-computer-science]]" not in updated.content
     assert "[[alan-turing]]" in updated.content
+
+
+# ── Adversarial pass ──────────────────────────────────────────────────────────
+
+from synthadoc.agents.lint_agent import _parse_adversarial_response
+
+
+def test_parse_adversarial_response_valid_json():
+    result = _parse_adversarial_response('[{"claim": "X was the first.", "concern": "Overstated"}]')
+    assert result == [{"claim": "X was the first.", "concern": "Overstated"}]
+
+
+def test_parse_adversarial_response_markdown_fenced():
+    result = _parse_adversarial_response(
+        '```json\n[{"claim": "X", "concern": "Y"}]\n```'
+    )
+    assert result == [{"claim": "X", "concern": "Y"}]
+
+
+def test_parse_adversarial_response_empty_list():
+    assert _parse_adversarial_response("[]") == []
+
+
+def test_parse_adversarial_response_invalid_returns_empty():
+    assert _parse_adversarial_response("not valid json") == []
+
+
+def test_parse_adversarial_response_skips_entries_without_concern():
+    result = _parse_adversarial_response('[{"claim": "X", "concern": ""}, {"claim": "Y", "concern": "Valid"}]')
+    assert len(result) == 1
+    assert result[0]["claim"] == "Y"
+
+
+@pytest.mark.asyncio
+async def test_adversarial_pass_stores_warnings(tmp_wiki):
+    store = WikiStorage(tmp_wiki / "wiki")
+    store.write_page("ai-page", WikiPage(
+        title="AI", tags=[], content="Transformers replaced RNNs entirely by 2020.",
+        status="active", confidence="high", sources=[]))
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    adv_provider = AsyncMock()
+    adv_provider.complete.return_value = CompletionResponse(
+        text='[{"claim": "Transformers replaced RNNs entirely by 2020.", "concern": "Overstated"}]',
+        input_tokens=100, output_tokens=50,
+    )
+    agent = LintAgent(
+        provider=AsyncMock(), store=store, log_writer=log,
+        adversarial_provider=adv_provider,
+    )
+    report = await agent.lint(adversarial=True)
+    page = store.read_page("ai-page")
+    assert len(page.lint_warnings) == 1
+    assert page.lint_warnings[0]["claim"] == "Transformers replaced RNNs entirely by 2020."
+    assert len(report.adversarial_warnings) == 1
+    assert report.adversarial_warnings[0]["slug"] == "ai-page"
+
+
+@pytest.mark.asyncio
+async def test_adversarial_pass_no_warnings_on_clean_page(tmp_wiki):
+    store = WikiStorage(tmp_wiki / "wiki")
+    store.write_page("clean", WikiPage(
+        title="Clean", tags=[], content="Well-cited facts.",
+        status="active", confidence="high", sources=[]))
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    adv_provider = AsyncMock()
+    adv_provider.complete.return_value = CompletionResponse(
+        text="[]", input_tokens=10, output_tokens=2,
+    )
+    agent = LintAgent(
+        provider=AsyncMock(), store=store, log_writer=log,
+        adversarial_provider=adv_provider,
+    )
+    report = await agent.lint(adversarial=True)
+    assert store.read_page("clean").lint_warnings == []
+    assert report.adversarial_warnings == []
+
+
+@pytest.mark.asyncio
+async def test_adversarial_pass_rate_limit_is_non_fatal(tmp_wiki):
+    store = WikiStorage(tmp_wiki / "wiki")
+    store.write_page("p1", WikiPage(
+        title="P1", tags=[], content="Claim one.",
+        status="active", confidence="high", sources=[]))
+    store.write_page("p2", WikiPage(
+        title="P2", tags=[], content="Claim two.",
+        status="active", confidence="high", sources=[]))
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    adv_provider = AsyncMock()
+    adv_provider.complete.side_effect = [
+        Exception("429 Too Many Requests"),
+        CompletionResponse(
+            text='[{"claim": "Claim two.", "concern": "Unsupported"}]',
+            input_tokens=50, output_tokens=20,
+        ),
+    ]
+    agent = LintAgent(
+        provider=AsyncMock(), store=store, log_writer=log,
+        adversarial_provider=adv_provider,
+    )
+    report = await agent.lint(adversarial=True)
+    p1 = store.read_page("p1")
+    p2 = store.read_page("p2")
+    assert p1.lint_warnings[0]["claim"] is None
+    assert "rate limit" in p1.lint_warnings[0]["concern"]
+    assert p2.lint_warnings[0]["claim"] == "Claim two."
+
+
+@pytest.mark.asyncio
+async def test_no_adversarial_clears_existing_warnings(tmp_wiki):
+    store = WikiStorage(tmp_wiki / "wiki")
+    page = WikiPage(
+        title="P", tags=[], content="Content.", status="active", confidence="high",
+        sources=[], lint_warnings=[{"claim": "Old claim", "concern": "Old concern"}],
+    )
+    store.write_page("p", page)
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    agent = LintAgent(provider=AsyncMock(), store=store, log_writer=log)
+    await agent.lint(adversarial=False)
+    assert store.read_page("p").lint_warnings == []
+
+
+@pytest.mark.asyncio
+async def test_adversarial_pass_uses_adversarial_provider(tmp_wiki):
+    """When adversarial_provider is set, it is used for adversarial calls, not self._provider."""
+    store = WikiStorage(tmp_wiki / "wiki")
+    store.write_page("p", WikiPage(
+        title="P", tags=[], content="Some content.",
+        status="active", confidence="high", sources=[]))
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    lint_provider = AsyncMock()
+    adv_provider = AsyncMock()
+    adv_provider.complete.return_value = CompletionResponse(
+        text="[]", input_tokens=5, output_tokens=1,
+    )
+    agent = LintAgent(
+        provider=lint_provider, store=store, log_writer=log,
+        adversarial_provider=adv_provider,
+    )
+    await agent.lint(adversarial=True)
+    # adv_provider called; lint_provider not called (no contradictions, no auto-resolve)
+    adv_provider.complete.assert_called_once()
+    lint_provider.complete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_adversarial_pass_skip_slugs_not_evaluated(tmp_wiki):
+    """LINT_SKIP_SLUGS pages (index, log, dashboard) are never adversarially reviewed."""
+    store = WikiStorage(tmp_wiki / "wiki")
+    store.write_page("index", WikiPage(
+        title="Index", tags=[], content="# Index", status="active", confidence="high", sources=[]))
+    store.write_page("real-page", WikiPage(
+        title="Real", tags=[], content="Real content.", status="active", confidence="high", sources=[]))
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    adv_provider = AsyncMock()
+    adv_provider.complete.return_value = CompletionResponse(text="[]", input_tokens=5, output_tokens=1)
+    agent = LintAgent(
+        provider=AsyncMock(), store=store, log_writer=log,
+        adversarial_provider=adv_provider,
+    )
+    await agent.lint(adversarial=True)
+    # Only real-page evaluated (1 call), not index
+    assert adv_provider.complete.call_count == 1
