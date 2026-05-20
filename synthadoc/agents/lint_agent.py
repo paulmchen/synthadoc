@@ -149,12 +149,13 @@ class LintAgent:
         """Adversarially review one page. Always returns; never raises (rate-limits are caught)."""
         prompt = (
             "You are a skeptical editor reviewing a wiki page compiled from source documents.\n\n"
-            "List up to 5 claims in this page that are likely overstated, unsupported,\n"
-            "missing key caveats, or contradict known facts.\n\n"
+            "List up to 2 claims in this page that are clearly overstated or directly\n"
+            "contradict well-established facts. Only flag issues you are highly confident\n"
+            "about — if a claim is defensible or nuanced, skip it.\n\n"
             "For each claim:\n"
             "1. Quote the exact claim (one sentence or phrase)\n"
             "2. Explain the specific concern concisely\n\n"
-            "If you find no issues, return an empty JSON array: []\n\n"
+            "If you find no such issues, return an empty JSON array: []\n\n"
             "Return ONLY a JSON array, no markdown fences:\n"
             '[{"claim": "...", "concern": "..."}, ...]\n\n'
             f"--- PAGE CONTENT ---\n{content[:3000]}"

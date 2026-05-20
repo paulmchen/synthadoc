@@ -1393,8 +1393,12 @@ class LintReportModal extends Modal {
                     li.createEl("code", { text: slug });
                     li.appendText(" — open the page, resolve the conflict, set status: active");
                     if (contradiction_note) {
-                        const n = li.createEl("div", { text: `Why flagged: ${contradiction_note}` });
-                        n.style.cssText = "font-size:11px;color:var(--text-muted);margin-top:2px";
+                        const n = li.createEl("div");
+                        n.style.cssText = "font-size:11px;margin-top:2px";
+                        const wfl = n.createEl("span", { text: "Why flagged: " });
+                        wfl.style.cssText = "color:var(--color-orange,#f59e0b);font-weight:600";
+                        n.createEl("span", { text: contradiction_note })
+                            .style.cssText = "color:var(--text-muted)";
                     }
                     if (unresolved_note) {
                         const n = li.createEl("div", { text: `⚠ Auto-resolve failed: ${unresolved_note}` });
@@ -1413,8 +1417,9 @@ class LintReportModal extends Modal {
                     li.createEl("code", { text: slug });
                     li.appendText(" — no inbound links");
                     const sug = li.createEl("div");
-                    sug.style.cssText = "font-size:11px;color:var(--text-muted);margin-top:2px";
-                    sug.appendText("Suggested index entry: ");
+                    sug.style.cssText = "font-size:11px;margin-top:2px";
+                    const sugLbl = sug.createEl("span", { text: "Suggested index entry: " });
+                    sugLbl.style.cssText = "color:var(--interactive-accent);font-weight:600";
                     sug.createEl("code", { text: index_suggestion });
                 });
             }
@@ -1432,10 +1437,14 @@ class LintReportModal extends Modal {
                         const li = warnList.createEl("li");
                         if (claim) {
                             const claimEl = li.createEl("div", { text: `⚠ "${claim}"` });
-                            claimEl.style.cssText = "font-size:12px;font-style:italic";
+                            claimEl.style.cssText = "font-size:12px;font-style:italic;color:var(--color-orange,#f59e0b)";
                         }
-                        const concernEl = li.createEl("div", { text: `Concern: ${concern ?? "(no concern text)"}` });
-                        concernEl.style.cssText = "font-size:11px;color:var(--text-muted);margin-top:2px";
+                        const concernEl = li.createEl("div");
+                        concernEl.style.cssText = "font-size:11px;margin-top:2px";
+                        const lbl = concernEl.createEl("span", { text: "Concern: " });
+                        lbl.style.cssText = "color:var(--color-orange,#f59e0b);font-weight:600";
+                        concernEl.createEl("span", { text: concern ?? "(no concern text)" })
+                            .style.cssText = "color:var(--text-muted)";
                     });
                     if ((suggested_reingests as string[])?.length > 0) {
                         const reingestDiv = block.createEl("div");
