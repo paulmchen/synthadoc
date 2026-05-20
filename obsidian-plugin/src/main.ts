@@ -1334,6 +1334,7 @@ class LintReportModal extends Modal {
         if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
         const { contentEl } = this;
         const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Lint report" });
+        this.modalEl.style.width = "clamp(680px, 75vw, 1060px)";
         makeDraggable(this.modalEl, titleEl);
         const out = contentEl.createEl("div");
         out.style.cssText = "-webkit-user-select:text;user-select:text";
