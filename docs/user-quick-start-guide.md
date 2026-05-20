@@ -531,6 +531,11 @@ The pre-built pages already contain the kinds of sweeping historical claims an a
 reviewer will flag — no additional ingest is needed before this step, though running Step 6
 first gives the adversarial pass more content to work with.
 
+The reviewer flags **up to 2 issues per page** and only flags claims it is highly confident
+about — defensible or nuanced statements are skipped. The full history-of-computing demo
+wiki (10 pre-built pages plus pages created in Step 6) typically produces **10–15 warnings**,
+giving a meaningful but not overwhelming signal.
+
 Sample output for the history-of-computing demo wiki:
 
 ```
@@ -611,8 +616,14 @@ The `alan-turing` adversarial warning should no longer appear.
 ### View warnings in Obsidian
 
 Open the Command Palette (`Ctrl/Cmd+P`) → `Synthadoc: Lint: report` → click the
-**Adversarial** tab. Each warning shows the flagged claim, the concern, and a suggested
-re-ingest command derived from the page's source files.
+**Adversarial** tab. Flagged claims and the **⚠** icon appear in **orange** so warnings
+stand out immediately. The **Concern:** label is also orange; the concern text itself is
+muted for readability. Suggested re-ingest commands appear below each entry.
+
+The same label-coloring convention applies across all tabs: **Why flagged:** in the
+Contradictions tab uses orange, and **Suggested index entry:** in the Orphans tab uses
+accent blue (it is a suggestion, not a warning), so you can scan the full report at a
+glance without reading every line.
 
 > **Skip the adversarial pass:** If you want a fast structural-only lint, open
 > `Synthadoc: Lint: run...` and tick **Skip adversarial review**. This also clears any

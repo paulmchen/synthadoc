@@ -115,15 +115,19 @@ RAG chunks are isolated. Synthadoc builds `[[wikilinks]]` between related pages 
 
 Pages that exist but are referenced by nothing are surfaced by the lint system, with ready-to-paste index entries so you can quickly integrate them.
 
-### 4. Re-synthesis is expensive; Synthadoc caches it
+### 4. LLM-compiled content can be overconfident; Synthadoc audits it
+
+An LLM synthesising source documents naturally produces confident prose — but may overstate claims, omit caveats, or accept a source's framing uncritically. The **adversarial lint pass** runs a concurrent second-LLM review of every page: it plays devil's advocate to surface issues the primary model accepted too readily — contested estimates, unsupported superlatives, and claims that contradict well-established facts. Warnings are stored in page frontmatter and surfaced in both the CLI report and the Obsidian lint modal. The reviewer is calibrated to flag only high-confidence issues, producing a useful signal without noise.
+
+### 5. Re-synthesis is expensive; Synthadoc caches it
 
 A 3-layer cache (embedding, LLM response, provider prompt cache) means repeated lint runs on unchanged pages cost near-zero tokens.
 
-### 5. Knowledge is locked in tools; Synthadoc escapes it
+### 6. Knowledge is locked in tools; Synthadoc escapes it
 
 Every page is a plain Markdown file with YAML frontmatter. No proprietary format. Open the folder in any editor, put it in git, sync it with any cloud drive.
 
-### 6. Wiki structure decays as content grows; Synthadoc regenerates it
+### 7. Wiki structure decays as content grows; Synthadoc regenerates it
 
 As the wiki accumulates pages the `index.md` table of contents, domain scope (`purpose.md`), and LLM behaviour guidelines (`AGENTS.md`) can drift out of sync with actual content. The `scaffold` command re-generates all three from the current wiki state using the LLM — creating category-aware index entries, refreshed scope boundaries, and updated terminology guidelines — without touching pages already linked in the index. Run it once after initial install to get a rich scaffold, then schedule it weekly as the wiki grows.
 
@@ -150,6 +154,7 @@ As the wiki accumulates pages the `index.md` table of contents, domain scope (`p
 | Ingest-time synthesis        | **Yes**                                                               | No          | Partial    | No        |
 | Contradiction detection      | **Yes**                                                               | No          | No         | No        |
 | Orphan page detection        | **Yes**                                                               | No          | No         | No        |
+| Adversarial claim review     | **Yes** (concurrent second-LLM pass — flags overstated claims and unsupported assertions per page) | No | No | No |
 | Persistent wikilink graph    | **Yes**                                                               | No          | No         | No        |
 | Local-first (no cloud data)  | **Yes**                                                               | Varies      | No         | No        |
 | Custom skill plugins         | **Yes**                                                               | Limited     | No         | No        |
@@ -383,14 +388,15 @@ The guide covers:
 6. Batch ingest all demo source files
 7. Resolve a contradiction
 8. Fix an orphan page
-9. Web search ingestion with automatic decomposition
-10. Ingest a YouTube video
-11. Enrich the wiki with scaffold (regenerate/update index, purpose, AGENTS.md)
-12. Audit features (token cost, history, events)
-13. Schedule recurring operations
-14. Set up query-scoped routing with ROUTING.md
-15. Stage and review candidate pages before promoting them
-16. Build a context pack for grounded LLM prompts
+9. Run the adversarial lint pass — flag overstated claims across all pages
+10. Web search ingestion with automatic decomposition
+11. Ingest a YouTube video
+12. Enrich the wiki with scaffold (regenerate/update index, purpose, AGENTS.md)
+13. Audit features (token cost, history, events)
+14. Schedule recurring operations
+15. Set up query-scoped routing with ROUTING.md
+16. Stage and review candidate pages before promoting them
+17. Build a context pack for grounded LLM prompts
 
 ---
 
@@ -670,6 +676,9 @@ synthadoc lint run --scope contradictions -w my-wiki
 
 # Auto-apply high-confidence resolutions
 synthadoc lint run --auto-resolve -w my-wiki
+
+# Skip adversarial review (structural checks only; also clears existing warnings)
+synthadoc lint run --no-adversarial -w my-wiki
 
 # Instant report (reads wiki files directly, no server needed)
 synthadoc lint report -w my-wiki
