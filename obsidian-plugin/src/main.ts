@@ -1341,7 +1341,7 @@ class LintReportModal extends Modal {
         runBtn.style.cssText = "font-size:12px;padding:3px 10px;cursor:pointer";
         runBtn.onclick = () => { this.close(); new LintRunModal(this.app).open(); };
         this.modalEl.style.width = "clamp(680px, 75vw, 1060px)";
-        makeDraggable(this.modalEl, titleEl);
+        makeDraggable(this.modalEl, header);
         const out = contentEl.createEl("div");
         out.style.cssText = "-webkit-user-select:text;user-select:text";
         out.createEl("p", { text: "Loading…", cls: "synthadoc-muted" });
