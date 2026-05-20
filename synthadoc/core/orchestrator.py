@@ -454,6 +454,7 @@ class Orchestrator:
                 store=self._store, log_writer=self._log,
                 confidence_threshold=self._cfg.cost.auto_resolve_confidence_threshold,
                 audit_db=self._audit,
+                adversarial_max_per_page=self._cfg.lint.adversarial_max_per_page,
             ).lint(scope=scope, auto_resolve=auto_resolve, adversarial=adversarial, job_id=job_id)
             await self._queue.complete(job_id, result={
                 "contradictions_found": report.contradictions_found,

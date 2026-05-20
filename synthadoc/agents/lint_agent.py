@@ -116,13 +116,15 @@ class LintAgent:
     def __init__(self, provider: LLMProvider, store: WikiStorage,
                  log_writer: LogWriter, confidence_threshold: float = 0.85,
                  audit_db: AuditDB | None = None,
-                 adversarial_provider: LLMProvider | None = None) -> None:
+                 adversarial_provider: LLMProvider | None = None,
+                 adversarial_max_per_page: int = 2) -> None:
         self._provider = provider
         self._store = store
         self._log = log_writer
         self._threshold = confidence_threshold
         self._audit = audit_db
         self._adversarial_provider = adversarial_provider or provider
+        self._adversarial_max_per_page = adversarial_max_per_page
 
     def _find_orphans(self, slugs: list[str]) -> list[str]:
         page_texts = {}
@@ -147,9 +149,10 @@ class LintAgent:
 
     async def _adversarial_single(self, slug: str, content: str) -> tuple[list[dict], int]:
         """Adversarially review one page. Always returns; never raises (rate-limits are caught)."""
+        n = self._adversarial_max_per_page
         prompt = (
             "You are a skeptical editor reviewing a wiki page compiled from source documents.\n\n"
-            "List up to 2 claims in this page that are clearly overstated or directly\n"
+            f"List up to {n} claim{'s' if n != 1 else ''} in this page that are clearly overstated or directly\n"
             "contradict well-established facts. Only flag issues you are highly confident\n"
             "about — if a claim is defensible or nuanced, skip it.\n\n"
             "For each claim:\n"

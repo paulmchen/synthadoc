@@ -66,6 +66,11 @@ level = "INFO"
 max_file_mb  = 5
 backup_count = 5
 
+[lint]
+# Maximum number of adversarial concerns flagged per page (default: 2).
+# Raise to 3-5 for a more thorough review; lower to 1 for a tighter signal-to-noise ratio.
+adversarial_max_per_page = 2
+
 [search]
 vector = false             # set to true to enable semantic re-ranking (downloads ~130 MB model once)
 vector_top_candidates = 20
