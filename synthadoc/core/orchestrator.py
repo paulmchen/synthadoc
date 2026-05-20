@@ -437,21 +437,31 @@ class Orchestrator:
             await self._queue.fail(job_id, str(e))
             raise
 
-    async def _run_lint(self, job_id: str, scope: str = "all", auto_resolve: bool = False) -> None:
+    async def _run_lint(self, job_id: str, scope: str = "all", auto_resolve: bool = False,
+                        adversarial: bool = True) -> None:
         from synthadoc.agents.lint_agent import LintAgent
         try:
+            adv_provider = make_provider("adversarial", self._cfg)
+            if adversarial and self._cfg.agents.adversarial is None:
+                logger.info(
+                    "No [agents].adversarial configured — adversarial pass using default model "
+                    f"({self._cfg.agents.default.model}). "
+                    "Tip: set [agents].adversarial in config.toml to use a faster/cheaper dedicated model."
+                )
             report = await LintAgent(
                 provider=make_provider("lint", self._cfg),
+                adversarial_provider=adv_provider,
                 store=self._store, log_writer=self._log,
                 confidence_threshold=self._cfg.cost.auto_resolve_confidence_threshold,
                 audit_db=self._audit,
-            ).lint(scope=scope, auto_resolve=auto_resolve, job_id=job_id)
+            ).lint(scope=scope, auto_resolve=auto_resolve, adversarial=adversarial, job_id=job_id)
             await self._queue.complete(job_id, result={
                 "contradictions_found": report.contradictions_found,
                 "contradictions_resolved": report.contradictions_resolved,
                 "contradictions_unresolved": report.contradictions_unresolved,
                 "orphans": report.orphan_slugs,
                 "dangling_links_removed": report.dangling_links_removed,
+                "adversarial_warnings": len(report.adversarial_warnings),
                 "tokens_used": report.tokens_used,
             })
             self._hooks.fire("on_lint_complete", {

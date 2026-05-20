@@ -377,3 +377,36 @@ async def test_vector_migration_noop_when_vector_disabled(tmp_wiki):
         await orch._run_vector_migration()
 
     assert embed_calls == []
+
+
+@pytest.mark.asyncio
+async def test_run_lint_passes_adversarial_false(tmp_wiki):
+    """_run_lint() passes adversarial=False to LintAgent.lint() when requested."""
+    from synthadoc.config import load_config
+    from synthadoc.core.orchestrator import Orchestrator
+    from synthadoc.agents.lint_agent import LintReport
+
+    cfg = load_config()
+    orch = Orchestrator(wiki_root=tmp_wiki, config=cfg)
+
+    # Create a LintReport-like object with all required fields
+    lint_report = LintReport(
+        adversarial_warnings=[],
+    )
+
+    captured_kwargs = {}
+
+    async def fake_lint(self, **kwargs):
+        captured_kwargs.update(kwargs)
+        return lint_report
+
+    # Mock LintAgent.lint, make_provider, and queue methods
+    with patch("synthadoc.agents.lint_agent.LintAgent.lint", new=fake_lint), \
+         patch("synthadoc.core.orchestrator.make_provider", return_value=MagicMock()), \
+         patch.object(orch, "_queue") as mock_queue:
+        mock_queue.complete = AsyncMock()
+        mock_queue.fail = AsyncMock()
+        mock_queue.fail_permanent = AsyncMock()
+        await orch._run_lint("job-1", adversarial=False)
+
+    assert captured_kwargs.get("adversarial") is False
