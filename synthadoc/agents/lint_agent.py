@@ -281,6 +281,7 @@ class LintAgent:
         # adversarial pass — runs only on full scope; default on
         if scope == "all":
             if adversarial:
+                # slugs was re-read after dangling-link cleanup — use the up-to-date list
                 adv_warnings, adv_tokens = await self._run_adversarial_pass(slugs)
                 report.adversarial_warnings = adv_warnings
                 report.tokens_used += adv_tokens

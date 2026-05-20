@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Paul Chen / axoviq.com
 import pytest
 from unittest.mock import AsyncMock
-from synthadoc.agents.lint_agent import LintAgent, LintReport, find_orphan_slugs, _fix_dangling_wikilinks, LINT_SKIP_SLUGS, LINT_SKIP_SOURCE_SLUGS
+from synthadoc.agents.lint_agent import LintAgent, LintReport, find_orphan_slugs, _fix_dangling_wikilinks, LINT_SKIP_SLUGS, LINT_SKIP_SOURCE_SLUGS, _parse_adversarial_response
 from synthadoc.providers.base import CompletionResponse
 from synthadoc.storage.wiki import WikiStorage, WikiPage
 from synthadoc.storage.log import LogWriter, AuditDB
@@ -303,8 +303,6 @@ async def test_lint_removes_dangling_links(tmp_wiki):
 
 # ── Adversarial pass ──────────────────────────────────────────────────────────
 
-from synthadoc.agents.lint_agent import _parse_adversarial_response
-
 
 def test_parse_adversarial_response_valid_json():
     result = _parse_adversarial_response('[{"claim": "X was the first.", "concern": "Overstated"}]')
@@ -461,3 +459,23 @@ async def test_adversarial_pass_skip_slugs_not_evaluated(tmp_wiki):
     await agent.lint(adversarial=True)
     # Only real-page evaluated (1 call), not index
     assert adv_provider.complete.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_adversarial_pass_skipped_on_non_all_scope(tmp_wiki):
+    """Adversarial pass does not run when scope != 'all' even if adversarial=True."""
+    store = WikiStorage(tmp_wiki / "wiki")
+    store.write_page("p", WikiPage(
+        title="P", tags=[], content="Some content.",
+        status="active", confidence="high", sources=[]))
+    log = LogWriter(tmp_wiki / "wiki" / "log.md")
+    adv_provider = AsyncMock()
+    adv_provider.complete.return_value = CompletionResponse(
+        text="[]", input_tokens=5, output_tokens=1,
+    )
+    agent = LintAgent(
+        provider=AsyncMock(), store=store, log_writer=log,
+        adversarial_provider=adv_provider,
+    )
+    await agent.lint(scope="contradictions", adversarial=True)
+    adv_provider.complete.assert_not_called()
