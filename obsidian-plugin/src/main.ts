@@ -1333,7 +1333,13 @@ class LintReportModal extends Modal {
         const bg = this.containerEl.querySelector(".modal-bg") as HTMLElement | null;
         if (bg) bg.addEventListener("click", (e) => e.stopImmediatePropagation(), { capture: true });
         const { contentEl } = this;
-        const titleEl = contentEl.createEl("h3", { text: "Synthadoc: Lint report" });
+        const header = contentEl.createEl("div");
+        header.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:4px";
+        const titleEl = header.createEl("h3", { text: "Synthadoc: Lint report" });
+        titleEl.style.cssText = "margin:0";
+        const runBtn = header.createEl("button", { text: "▶ Run lint" });
+        runBtn.style.cssText = "font-size:12px;padding:3px 10px;cursor:pointer";
+        runBtn.onclick = () => { this.close(); new LintRunModal(this.app).open(); };
         this.modalEl.style.width = "clamp(680px, 75vw, 1060px)";
         makeDraggable(this.modalEl, titleEl);
         const out = contentEl.createEl("div");
