@@ -648,8 +648,10 @@ adversarial_max_per_page = 2  # raise to 3–5 for a deeper review; lower to 1 f
 
 If `[lint]` is absent from `config.toml`, Synthadoc defaults to 2 — no file change needed.
 
-**Use a dedicated model** — by default the adversarial pass shares the lint model. Point it
-at a faster or cheaper model to keep costs down on large wikis:
+**Use a dedicated judge model** — by default the adversarial pass shares the lint model. For
+the most effective adversarial review, point it at a *different* model: a second opinion
+from a distinct model family is far more likely to surface blind spots and challenge
+assumptions than the same model reviewing its own output:
 
 ```toml
 # config.toml

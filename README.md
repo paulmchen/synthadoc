@@ -117,7 +117,7 @@ Pages that exist but are referenced by nothing are surfaced by the lint system, 
 
 ### 4. LLM-compiled content can be overconfident; Synthadoc audits it
 
-An LLM synthesising source documents naturally produces confident prose — but may overstate claims, omit caveats, or accept a source's framing uncritically. The **adversarial lint pass** runs a concurrent second-LLM review of every page: it plays devil's advocate to surface issues the primary model accepted too readily — contested estimates, unsupported superlatives, and claims that contradict well-established facts. Warnings are stored in page frontmatter and surfaced in both the CLI report and the Obsidian lint modal. The reviewer is calibrated to flag only high-confidence issues, producing a useful signal without noise.
+An LLM synthesising source documents naturally produces confident prose — but may overstate claims, omit caveats, or accept a source's framing uncritically. The **adversarial lint pass** runs a concurrent second-LLM review of every page: it plays devil's advocate to surface issues the primary model accepted too readily — contested estimates, unsupported superlatives, and claims that contradict well-established facts. Warnings are stored in page frontmatter and surfaced in both the CLI report and the Obsidian lint modal. The reviewer is calibrated to flag only high-confidence issues, producing a useful signal without noise. For the strongest signal, point the adversarial pass at a *different* model family: a distinct model is far more likely to challenge assumptions than the same model reviewing its own output.
 
 ### 5. Re-synthesis is expensive; Synthadoc caches it
 
