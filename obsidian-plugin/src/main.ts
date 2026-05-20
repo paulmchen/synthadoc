@@ -1353,6 +1353,8 @@ class LintReportModal extends Modal {
             const orphanDetails: any[] = r.orphan_details ??
                 (r.orphans ?? []).map((s: string) => ({ slug: s, index_suggestion: `- [[${s}]]` }));
             const adversarialWarnings: any[] = r.adversarial_warnings ?? [];
+            const totalAdvWarnings = adversarialWarnings.reduce(
+                (sum: number, p: any) => sum + ((p.warnings as any[])?.length ?? 0), 0);
 
             // Tab bar
             const tabBar = out.createEl("div");
@@ -1363,7 +1365,7 @@ class LintReportModal extends Modal {
             const tabLabels: Record<TabName, string> = {
                 "Contradictions": `❗ Contradictions (${details.length})`,
                 "Orphans": `🔗 Orphans (${orphanDetails.length})`,
-                "Adversarial": `🔍 Adversarial (${adversarialWarnings.length})`,
+                "Adversarial": `🔍 Adversarial (${totalAdvWarnings})`,
             };
             const panels: Record<TabName, HTMLElement> = {} as any;
             const tabBtns: Record<TabName, HTMLElement> = {} as any;

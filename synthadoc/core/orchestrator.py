@@ -462,7 +462,7 @@ class Orchestrator:
                 "contradictions_unresolved": report.contradictions_unresolved,
                 "orphans": report.orphan_slugs,
                 "dangling_links_removed": report.dangling_links_removed,
-                "adversarial_warnings": len(report.adversarial_warnings),
+                "adversarial_warnings": sum(len(w["warnings"]) for w in report.adversarial_warnings),
                 "tokens_used": report.tokens_used,
             })
             self._hooks.fire("on_lint_complete", {
