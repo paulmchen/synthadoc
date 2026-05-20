@@ -441,7 +441,7 @@ class Orchestrator:
                         adversarial: bool = True) -> None:
         from synthadoc.agents.lint_agent import LintAgent
         try:
-            adv_provider = make_provider("adversarial", self._cfg)
+            adv_provider = make_provider("adversarial", self._cfg) if adversarial else None
             if adversarial and self._cfg.agents.adversarial is None:
                 logger.info(
                     "No [agents].adversarial configured — adversarial pass using default model "
