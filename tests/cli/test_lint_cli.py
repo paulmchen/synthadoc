@@ -247,11 +247,14 @@ def test_lint_report_self_link_does_not_rescue_from_orphan(tmp_path, monkeypatch
 def test_lint_report_shows_adversarial_warnings_section(tmp_path, monkeypatch):
     """lint report shows adversarial warnings when lint_warnings exist in frontmatter."""
     import synthadoc.cli.install as install_mod
+    # Real ingest stores absolute paths; relative paths are placeholder entries
+    # that should be filtered out.  Use an absolute path to test the positive case.
+    abs_source = str(tmp_path / "raw_sources" / "study.pdf")
     flagged_page = (
         "---\n"
         "status: active\n"
         "sources:\n"
-        "  - {file: 'papers/study.pdf', hash: 'abc', size: 1000, ingested: '2026-05-01'}\n"
+        f"  - {{file: '{abs_source}', hash: 'abc', size: 1000, ingested: '2026-05-01'}}\n"
         "lint_warnings:\n"
         "  - claim: 'Claim A was the first.'\n"
         "    concern: 'Overstated — prior work existed'\n"
@@ -268,7 +271,32 @@ def test_lint_report_shows_adversarial_warnings_section(tmp_path, monkeypatch):
     assert "Adversarial" in result.output
     assert "Claim A was the first." in result.output
     assert "Overstated" in result.output
-    assert 'synthadoc ingest "papers/study.pdf" -w mywiki' in result.output  # suggested re-ingest
+    assert "study.pdf" in result.output  # re-ingest suggestion references the source file
+
+
+def test_lint_report_relative_source_no_reingest_suggestion(tmp_path, monkeypatch):
+    """Relative source paths (placeholder/demo entries) must not generate re-ingest suggestions."""
+    import synthadoc.cli.install as install_mod
+    flagged_page = (
+        "---\n"
+        "status: active\n"
+        "sources:\n"
+        "  - {file: 'papers/study.pdf', hash: 'placeholder', size: 0, ingested: '2026-05-01'}\n"
+        "lint_warnings:\n"
+        "  - claim: 'Some claim.'\n"
+        "    concern: 'Some concern'\n"
+        "---\n\n# Flagged Page\n"
+    )
+    wiki_dir, root = _make_wiki(tmp_path, {
+        "index": "# Index\n",
+        "flagged-page": flagged_page,
+    })
+    monkeypatch.setattr(install_mod, "_read_registry",
+                        lambda: {"mywiki": {"path": str(tmp_path)}})
+    result = runner.invoke(app, ["lint", "report", "-w", "mywiki"])
+    assert result.exit_code == 0, result.output
+    assert "Adversarial" in result.output   # warning still shown
+    assert "Re-ingest" not in result.output  # but no re-ingest command for a relative path
 
 
 def test_lint_report_no_adversarial_section_when_clean(tmp_path, monkeypatch):

@@ -419,11 +419,14 @@ def test_lint_report_includes_adversarial_warnings(tmp_wiki):
     """GET /lint/report returns adversarial_warnings from page lint_warnings frontmatter."""
     wiki_dir = tmp_wiki / "wiki"
     wiki_dir.mkdir(exist_ok=True)
+    # Real ingest always stores absolute paths; relative paths are placeholder entries
+    # that _is_reingestable() filters out.  Use an absolute path to test the positive case.
+    abs_source = str(tmp_wiki / "raw_sources" / "study.pdf")
     (wiki_dir / "flagged-page.md").write_text(
         "---\n"
         "status: active\n"
         "sources:\n"
-        "  - {file: 'papers/study.pdf', hash: 'abc', size: 1000, ingested: '2026-05-01'}\n"
+        f"  - {{file: '{abs_source}', hash: 'abc', size: 1000, ingested: '2026-05-01'}}\n"
         "lint_warnings:\n"
         "  - claim: 'Claim A'\n"
         "    concern: 'Overstated'\n"
@@ -441,4 +444,4 @@ def test_lint_report_includes_adversarial_warnings(tmp_wiki):
     assert entry["slug"] == "flagged-page"
     assert entry["warnings"][0]["claim"] == "Claim A"
     assert len(entry["suggested_reingests"]) == 1
-    assert "papers/study.pdf" in entry["suggested_reingests"][0]
+    assert "study.pdf" in entry["suggested_reingests"][0]
