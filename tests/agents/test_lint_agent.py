@@ -397,11 +397,17 @@ async def test_adversarial_pass_rate_limit_is_non_fatal(tmp_wiki):
         adversarial_provider=adv_provider,
     )
     report = await agent.lint(adversarial=True)
-    p1 = store.read_page("p1")
-    p2 = store.read_page("p2")
-    assert p1.lint_warnings[0]["claim"] is None
-    assert "rate limit" in p1.lint_warnings[0]["concern"]
-    assert p2.lint_warnings[0]["claim"] == "Claim two."
+    all_warnings = [
+        w
+        for slug in ["p1", "p2"]
+        for w in (store.read_page(slug).lint_warnings or [])
+    ]
+    claims = {w["claim"] for w in all_warnings}
+    # list_pages() order is filesystem-dependent (inode order on macOS), so assert
+    # on the set of outcomes rather than which slug got which call.
+    assert None in claims
+    assert any("rate limit" in (w["concern"] or "") for w in all_warnings)
+    assert "Claim two." in claims
 
 
 @pytest.mark.asyncio
