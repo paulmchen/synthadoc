@@ -203,9 +203,9 @@ def lint_report(
                 concern = w.get("concern") or "(no concern text)"
                 typer.echo(f"       Concern: {concern}")
             if entry["suggested_reingests"]:
-                typer.echo("    \U0001f4a1 Re-ingest sources to update this page:")
+                typer.echo("    \U0001f4a1 If the source has updated content, re-ingest with --force to refresh:")
                 for cmd in entry["suggested_reingests"]:
-                    typer.echo(f"       {cmd}")
+                    typer.echo(f"       {cmd} --force")
 
     # Sync orphan: true/false frontmatter so the Obsidian dashboard Dataview
     # query (WHERE orphan = true) reflects the same result as this report.

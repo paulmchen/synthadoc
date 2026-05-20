@@ -588,8 +588,13 @@ are defensible with context the LLM does not have. Read each concern before deci
 |---|---|
 | Claim is accurate, concern is addressed by other pages | Do nothing — the wiki is fine |
 | Claim is a genuine overstatement | Edit the page in Obsidian and soften the language |
-| Claim needs better sourcing | Re-ingest the original source: `synthadoc ingest <file>` |
+| Source has been updated since last ingest | Re-ingest with `--force` to bypass dedup: `synthadoc ingest <file> --force` |
+| Claim needs a counterbalancing perspective | Ingest a different source: `synthadoc ingest <other-source>` |
 | Page quality is poor overall | Delete the page and re-ingest: `synthadoc ingest <new-source>` |
+
+> **Re-ingesting the same unchanged source won't fix an overstatement.** The LLM will read
+> the same text and likely produce the same claim. For overstatements, edit the page directly
+> in Obsidian. Use `--force` only when the source document itself has new or updated content.
 
 ### Hands-on exercise
 

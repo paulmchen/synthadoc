@@ -1458,11 +1458,11 @@ class LintReportModal extends Modal {
                     if ((suggested_reingests as string[])?.length > 0) {
                         const reingestDiv = block.createEl("div");
                         reingestDiv.style.cssText = "margin-top:6px";
-                        reingestDiv.createEl("div", { text: "💡 Re-ingest sources to update this page:" })
+                        reingestDiv.createEl("div", { text: "💡 If the source has updated content, re-ingest with --force to refresh this page:" })
                             .style.cssText = "font-size:11px;color:var(--text-muted)";
                         (suggested_reingests as string[]).forEach(cmd => {
                             const p = reingestDiv.createEl("div");
-                            p.createEl("code", { text: cmd })
+                            p.createEl("code", { text: cmd + " --force" })
                                 .style.cssText = "font-size:11px;-webkit-user-select:text;user-select:text";
                         });
                     }
