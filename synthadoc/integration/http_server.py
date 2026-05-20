@@ -466,33 +466,25 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
                 "index_suggestion": f"- [[{slug}]] — {hint}",
             })
 
-        # Build adversarial_warnings from lint_warnings frontmatter
+        # Build adversarial_warnings via WikiStorage.read_page() — same parse path
+        # as LintAgent._run_adversarial_pass() which writes the warnings.
+        orch = app.state.orch
+        wiki_name = wiki_root.name
         adversarial_warnings = []
-        for stem, text in page_texts.items():
-            if stem in LINT_SKIP_SLUGS:
+        for slug in page_texts:
+            if slug in LINT_SKIP_SLUGS:
                 continue
-            fm_m = _FM_RE.match(text)
-            if not fm_m:
+            page = orch._store.read_page(slug)
+            if not page or not page.lint_warnings:
                 continue
-            try:
-                fm = _yaml.safe_load(fm_m.group(1)) or {}
-            except Exception:
-                continue
-            warnings = fm.get("lint_warnings", []) or []
-            if not isinstance(warnings, list):
-                continue
-            if not warnings:
-                continue
-            sources = fm.get("sources", []) or []
-            wiki_name = wiki_root.name
             suggested_reingests = [
-                f'synthadoc ingest "{s["file"]}" -w {wiki_name}'
-                for s in sources
-                if isinstance(s, dict) and s.get("file")
+                f'synthadoc ingest "{s.file}" -w {wiki_name}'
+                for s in page.sources
+                if s.file
             ]
             adversarial_warnings.append({
-                "slug": stem,
-                "warnings": warnings,
+                "slug": slug,
+                "warnings": page.lint_warnings,
                 "suggested_reingests": suggested_reingests,
             })
 
