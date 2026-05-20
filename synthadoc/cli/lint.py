@@ -16,6 +16,19 @@ _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
 from synthadoc.agents.lint_agent import find_orphan_slugs, LINT_SKIP_SLUGS, LINT_SKIP_SOURCE_SLUGS
 
 
+def _is_reingestable(file: str) -> bool:
+    """True only for sources the CLI can actually re-ingest: absolute paths or URLs.
+
+    Relative paths are placeholder entries (e.g. in demo wiki pages) and cannot
+    be resolved without knowing the wiki's raw_sources directory.
+    """
+    if not file:
+        return False
+    if file.startswith(("http://", "https://")):
+        return True
+    return Path(file).is_absolute()
+
+
 def _parse_frontmatter(text: str) -> dict:
     m = _FRONTMATTER_RE.match(text)
     if not m:
@@ -145,7 +158,7 @@ def lint_report(
         suggested_reingests = [
             f'synthadoc ingest "{s["file"]}" -w {wiki}'
             for s in sources
-            if isinstance(s, dict) and s.get("file")
+            if isinstance(s, dict) and _is_reingestable(s.get("file", ""))
         ]
         adv_pages.append({"slug": stem, "warnings": warnings,
                            "suggested_reingests": suggested_reingests})

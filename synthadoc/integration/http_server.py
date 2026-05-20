@@ -419,6 +419,7 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
     async def lint_report():
         import yaml as _yaml
         from synthadoc.agents.lint_agent import find_orphan_slugs, LINT_SKIP_SLUGS
+        from synthadoc.cli.lint import _is_reingestable
         wiki_dir = wiki_root / "wiki"
         pages = list(wiki_dir.glob("*.md"))
 
@@ -480,7 +481,7 @@ def create_app(wiki_root: Path, max_body_bytes: int = _MAX_BODY_BYTES) -> FastAP
             suggested_reingests = [
                 f'synthadoc ingest "{s.file}" -w {wiki_name}'
                 for s in page.sources
-                if s.file
+                if s.file and _is_reingestable(s.file)
             ]
             adversarial_warnings.append({
                 "slug": slug,
