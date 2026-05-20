@@ -147,7 +147,7 @@ class Orchestrator:
 
     def _log_agent_config(self) -> None:
         """Log the effective provider/model for each named agent slot at startup."""
-        slots = ["default", "ingest", "query", "lint", "skill"]
+        slots = ["default", "ingest", "query", "lint", "skill", "adversarial"]
         parts = []
         seen: dict[str, str] = {}
         for slot in slots:
@@ -442,12 +442,19 @@ class Orchestrator:
         from synthadoc.agents.lint_agent import LintAgent
         try:
             adv_provider = make_provider("adversarial", self._cfg) if adversarial else None
-            if adversarial and self._cfg.agents.adversarial is None:
-                logger.info(
-                    "No [agents].adversarial configured — adversarial pass using default model "
-                    f"({self._cfg.agents.default.model}). "
-                    "Tip: set [agents].adversarial in config.toml to use a faster/cheaper dedicated model."
-                )
+            if adversarial:
+                adv_cfg = self._cfg.agents.resolve("adversarial")
+                if self._cfg.agents.adversarial is None:
+                    logger.info(
+                        "Adversarial pass: %s/%s (default — tip: set [agents].adversarial in "
+                        "config.toml to use a dedicated judge model)",
+                        adv_cfg.provider, adv_cfg.model,
+                    )
+                else:
+                    logger.info(
+                        "Adversarial pass: %s/%s (dedicated judge)",
+                        adv_cfg.provider, adv_cfg.model,
+                    )
             report = await LintAgent(
                 provider=make_provider("lint", self._cfg),
                 adversarial_provider=adv_provider,
