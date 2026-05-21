@@ -540,7 +540,7 @@ The pre-built pages already contain the kinds of sweeping historical claims an a
 reviewer will flag — no additional ingest is needed before this step, though running Step 6
 first gives the adversarial pass more content to work with.
 
-The reviewer flags **up to 2 issues per page** and only flags claims it is highly confident
+The reviewer flags **up to 2 issues per page by default** (configurable via `adversarial_max_per_page` in `config.toml`) and only flags claims it is highly confident
 about — defensible or nuanced statements are skipped. The full history-of-computing demo
 wiki (10 pre-built pages plus pages created in Step 6) typically produces **10–15 warnings**,
 giving a meaningful but not overwhelming signal.
