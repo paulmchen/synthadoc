@@ -44,6 +44,7 @@ major engine feature. No setup beyond following the steps below is required.
 
 ---
 
+<a name="verify-server"></a>
 ## Step 1 — Verify the demo server has started
 
 If you ran `synthadoc serve -w history-of-computing` or
@@ -108,6 +109,7 @@ synthadoc use
 
 ---
 
+<a name="install-plugin"></a>
 ## Step 2 — Install the Synthadoc plugin
 
 The plugin ships pre-built — no build step required. Run this command before opening
@@ -124,6 +126,7 @@ That's it for the CLI steps. Now open Obsidian.
 
 ---
 
+<a name="open-vault"></a>
 ## Step 3 — Open the vault in Obsidian
 
 **Obsidian must already be installed** — download from **[obsidian.md](https://obsidian.md)** if not.
@@ -171,6 +174,7 @@ type `Synthadoc`).
 
 ---
 
+<a name="wiki-structure"></a>
 ## Step 4 — Review the wiki structure and key files
 
 Open the vault explorer. The key files and folders:
@@ -212,6 +216,7 @@ nodes. `index` and `dashboard` connect to everything; topic pages cluster by cro
 
 ---
 
+<a name="query-wiki"></a>
 ## Step 5 — Query the pre-built wiki (CLI + Obsidian)
 
 ### CLI queries
@@ -322,6 +327,7 @@ an alias and one is a longer substring of the query, the longer one takes preced
 
 ---
 
+<a name="batch-ingest"></a>
 ## Step 6 — Batch ingest all demo sources
 
 The six source files in `raw_sources/` are designed to demonstrate every ingest scenario:
@@ -382,6 +388,7 @@ synthadoc query "What did Konrad Zuse contribute to computing history?"
 
 ---
 
+<a name="resolve-contradiction"></a>
 ## Step 7 — Resolve a contradiction
 
 After `first-compiler-controversy.pdf` is processed, `wiki/grace-hopper.md` will have:
@@ -439,6 +446,7 @@ Or from Obsidian: Command Palette → `Synthadoc: Lint: run with auto-resolve`.
 
 ---
 
+<a name="fix-orphan"></a>
 ## Step 8 — Fix an orphan page
 
 The pre-built demo wiki includes `wiki/ada-lovelace.md`, but no other page links to it.
@@ -509,6 +517,7 @@ The number of pages cleaned up is shown in the lint output and recorded in `log.
 
 ---
 
+<a name="adversarial-lint"></a>
 ## Step 9 — Run the adversarial lint pass
 
 The standard lint checks (contradictions, orphans, dangling links) catch structural problems.
@@ -665,6 +674,7 @@ self-serving bias that occurs when a model reviews its own output.
 
 ---
 
+<a name="web-search-ingest"></a>
 ## Step 10 — Web search ingestion
 
 > **Requires `TAVILY_API_KEY`** — see [Appendix D](#appendix-d--tavily-web-search-key).
@@ -764,6 +774,7 @@ The modal prepends `search for:` automatically — just type the topic, no prefi
 
 ---
 
+<a name="youtube-ingest"></a>
 ## Step 11 — Ingest a YouTube video
 
 Pass any YouTube URL directly — the transcript is extracted automatically from the
@@ -801,6 +812,7 @@ synthadoc jobs list
 
 ---
 
+<a name="scaffold"></a>
 ## Step 12 — Enrich the wiki with scaffold
 
 After batch ingest, the wiki has grown from 10 pre-built pages to 12 or more. **Scaffold**
@@ -871,6 +883,7 @@ the whole file as before.
 
 ---
 
+<a name="audit"></a>
 ## Step 13 — Audit features
 
 The `synthadoc audit` commands query the append-only `audit.db` — no `sqlite3` required.
@@ -934,6 +947,7 @@ Records every contradiction detection, auto-resolution, and cost gate trigger.
 
 ---
 
+<a name="scheduling"></a>
 ## Step 14 — Scheduling recurring operations
 
 Hooks react to events that already happened. The scheduler goes the other direction —
@@ -988,6 +1002,7 @@ synthadoc schedule remove sched-c9f3e201
 
 ---
 
+<a name="routing"></a>
 ## Step 15 — Set up ROUTING.md — scoped search
 
 As your wiki grows, BM25 searches the full corpus for every query. **ROUTING.md** groups pages
@@ -1058,6 +1073,7 @@ New pages created by ingest are auto-placed into the most appropriate branch.
 
 ---
 
+<a name="staging"></a>
 ## Step 16 — Configure candidates staging
 
 By default, every ingested source that produces a new page writes it directly to `wiki/`.
@@ -1138,6 +1154,7 @@ Or from Obsidian: `Synthadoc: Staging: manage staging policy...` → select **Of
 
 ---
 
+<a name="context-pack"></a>
 ## Step 17 — Build a context pack
 
 A **context pack** is a token-bounded evidence bundle assembled from the wiki. It decomposes your goal into sub-questions, runs parallel BM25 searches across the wiki, and packs the highest-scoring excerpts into a single cited Markdown document within a token budget.
